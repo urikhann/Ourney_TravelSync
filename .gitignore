@@ -1,0 +1,14 @@
+# VS Code
+.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment variables / secrets
+.env
+.env.*
+
+# DVCLive experiment outputs
+dvclive/

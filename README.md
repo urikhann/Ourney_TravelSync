@@ -45,6 +45,37 @@ TravelSync는 친구들의 날짜, 예산, 여행 취향과 필수 조건을 모
 
 ---
 
+## Setup (Windows PowerShell)
+
+Use Python **3.13.14**. From the project root, create and activate a virtual environment:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the project dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Verify the installations:
+
+```powershell
+python --version
+dvc --version
+mlflow --version
+```
+
+To start the local MLflow server:
+
+```powershell
+mlflow server
+```
+
+---
+
 ## Recommender System
 
 현재 추천 시스템의 **최종 알고리즘은 아직 결정하지 않았습니다.**
