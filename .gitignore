@@ -12,3 +12,9 @@ __pycache__/
 
 # DVCLive experiment outputs
 dvclive/
+
+# Local MLflow data
+/mlflow.db
+/mlflow.db-*
+/mlartifacts/
+/mlruns/
