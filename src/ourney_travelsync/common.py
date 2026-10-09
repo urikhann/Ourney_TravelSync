@@ -6,6 +6,8 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from .features import validate_features
+
 FloatArray = NDArray[np.float64]
 
 
@@ -13,13 +15,13 @@ FloatArray = NDArray[np.float64]
 class GroupInput:
     """One group and its eligible POIs, in a fixed row/column order.
 
-    user_features: [members, user_feature_dim].
-    poi_features: [candidates, poi_feature_dim].
+    user_features: [members, 10], survey values in [1, 5].
+    poi_features: [candidates, 10], independent binary values, at least one 1.
+    Both follow features.FEATURE_NAMES order.
     individual_scores: optional [members, candidates], required by AWM/GFAR.
     AWM assumes calibrated ratings (e.g. 1–5); GFAR uses their ordering only.
     FeatureAGREE uses features directly and ignores individual_scores.
     IDs identify outputs only; they are never learned embedding-table indices.
-    TODO: freeze feature order, categorical encoding, and training-only scaling.
     """
 
     user_ids: tuple[str, ...]
@@ -44,6 +46,9 @@ class GroupInput:
                 raise ValueError("Features must be 2-D with aligned rows and positive width.")
             if not np.isfinite(features).all():
                 raise ValueError("Features must contain finite numeric values.")
+
+        validate_features(self.user_features, preferences=True)
+        validate_features(self.poi_features, preferences=False)
             
         if require_scores and self.individual_scores is None:
             raise ValueError("This model requires individual preference scores.")

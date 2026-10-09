@@ -7,7 +7,7 @@ authors = [
     { name = "Urikhan Purevjav", email = "140320983+urikhann@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = ["numpy>=2.1"]
 
 [project.scripts]
 ourney-travelsync = "ourney_travelsync:main"

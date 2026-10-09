@@ -78,95 +78,73 @@ mlflow server
 
 ## Recommender System
 
-현재 추천 시스템의 **최종 알고리즘은 아직 결정하지 않았습니다.**
-
-### 기본 구조
+The current implementation is a rule-based, content-based baseline:
 
 ```text
-User Preferences
-       ↓
-Hard Constraint Filtering
-       ↓
-Individual Preference Model
-       ↓
-Group Aggregation
-       ↓
-Ranking
-       ↓
-Top-N POIs
+User 10D Preference (1-5)
+       -> POI 10D Binary Features
+       -> Individual Scoring
+       -> Candidate Generation (union of each member's top-N)
+       -> Group Aggregation / GFAR
+       -> Top-K POIs
 ```
 
-Hard Constraint는 추천 모델과 별도로 처리합니다.
-
-예:
-
-- 등산 불가
-- 특정 활동 제외
-- 예산 초과
-- 이동 거리 제한
-
-이 조건들은 다른 사용자의 높은 선호도로 상쇄되지 않습니다.
-
-### Algorithm Decision
-
-5주차까지는 다음 방식을 초기 설계로 사용했습니다.
+Both vectors use this exact feature order:
 
 ```text
-Content-Based Recommendation
-        +
-Average Without Misery
+food, cafe, nature, history, art, shopping, activity, entertainment, relax, festival
 ```
 
-Average Without Misery는 특정 사용자의 만족도가 임계값보다 낮은 장소를 제거한 뒤  
-나머지 사용자의 점수를 평균내는 방식입니다.
+POI features are independent binary labels. A POI can have several labels and
+must have at least one. The raw binary vectors are retained. Individual scores
+are `dot(user_preferences, poi_features) / sum(poi_features)`: the mean survey
+preference over active labels, on the original 1-5 scale. This avoids a label-count
+bonus and lets Average Without Misery use a threshold on the same scale.
+No survey rescaling or soft feature inference is applied.
 
-하지만 **최종 추천 시스템으로 사용하기에는 비교적 단순한 방법이라는 피드백을 받아**  
-현재 더 발전된 추천 알고리즘을 조사하고 있습니다.
+Candidates are the union of each member's top-N results (default 100 per member).
+All member scores remain aligned for every candidate. Ties preserve CSV row order.
+GFAR is the default group aggregator; its Borda relevance depth is separately
+configured (default 20). `AverageWithoutMisery` remains the comparison baseline.
+GFAR is a starter implementation that still needs validation against the authors'
+implementation. `FeatureAGREE` is an untrained experimental skeleton; its code,
+package export, and test are commented out pending further model work.
+GFAR scores are marginal gains;
+AWM scores are mean preferences, so scores cannot be compared across models.
 
-현재 후보:
+```python
+from ourney_travelsync import FEATURE_NAMES, load_places, AverageWithoutMisery
+from ourney_travelsync.RecSys import recommend_group
 
-| 후보 | 핵심 아이디어 | 상태 |
-| --- | --- | --- |
-| Content-Based + Group Aggregation | 사용자/POI 특징 직접 비교 | Baseline |
-| Matrix Factorization / SVD | 사용자–장소 latent factor 학습 | 검토 중 |
-| Autoencoder | 비선형 preference representation 학습 | 검토 중 |
-| Context-Aware Recommender | 시간, 여행 상황 등 context 반영 | 검토 중 |
-| Transformer | interaction sequence / context 학습 | 검토 중 |
-| GNN | 사용자–POI–그룹 관계 그래프 학습 | 검토 중 |
-| Reinforcement Learning | 피드백을 이용한 정책 개선 | 검토 중 |
+places = load_places()  # package-relative travelsync_final_places.csv
+users = {
+    "alice": dict(zip(FEATURE_NAMES, [5, 4, 3, 2, 4, 2, 3, 3, 4, 1])),
+    "bob": dict(zip(FEATURE_NAMES, [3, 2, 5, 4, 3, 2, 4, 2, 5, 3])),
+}
+results = recommend_group(places, users, top_k=10, individual_top_n=100)
+# Comparison baseline:
+awm = recommend_group(places, users, recommender=AverageWithoutMisery(2.5))
+metadata = {row["place_id"]: row for row in places.records}
+for result in results:
+    print(metadata[result.poi_id]["place_name"], result.score)
+```
 
-최종 알고리즘은 다음을 비교한 뒤 팀에서 결정합니다.
+Explicit `excluded_place_ids` and externally determined `eligible_place_ids` are
+applied before scoring and candidate generation. Budget, dates, movement limits
+and mandatory exclusions are separate hard constraints, never vector dimensions.
+Price/opening-hour/date availability filtering is deferred until those fields
+exist. The current pipeline does not infer them from categories or names.
 
-- 필요한 데이터 양
-- 그룹 추천 문제와의 적합성
-- 구현 난이도
-- 설명 가능성
-- 평가 가능성
-- 한 학기 내 구현 가능 여부
+Run regression checks from the repository root after dependency installation:
 
-**Selected Algorithm: `TBD`**
+```powershell
+$env:PYTHONPATH = "src"
+python -m unittest discover -s tests -v
+```
 
-> Average Without Misery는 삭제하지 않고  
-> 새로운 모델과 비교하기 위한 **baseline**으로 유지할 수 있습니다.
-
----
-
-## 추천 시스템 평가
-
-추천 알고리즘 비교 시 동일한 사용자·POI 데이터에서 평가합니다.
-
-주요 지표:
-
-- `Precision@K`
-- `NDCG@K`
-- 그룹 평균 만족도
-- 그룹 내 최저 만족도
-- 사용자 간 만족도 차이
-- Hard Constraint 위반율
-- 추천 수락률 / 수정률
-
-최종 모델은 단순히 정확도만 비교하지 않고  
-**추천 품질 + 그룹 공정성 + 실제 사용성**을 함께 평가합니다.
+Evaluation should compare individual ranking, group mean/minimum satisfaction,
+between-member satisfaction gaps and hard-constraint violations. Ground-truth
+Precision@K/NDCG@K need collected relevance labels or feedback.
 
 ---
 
@@ -214,29 +192,27 @@ flowchart LR
 
 ## Data
 
-POI(Point of Interest) 데이터는 현재 다음 출처를 중심으로 수집하고 있습니다.
+The final Busan POI dataset is
+`src/ourney_travelsync/travelsync_final_places.csv`: **3,591 POIs**, consisting of
+3,101 Kakao, 367 TourAPI, and 123 merged TourAPI+Kakao records.
 
-- 한국관광공사 TourAPI
-- Kakao Local API
+The core inputs are `place_id`, `place_name`, `category_name`, `latitude`,
+`longitude` and the ten binary features. Rule-based mapping uses TourAPI
+`contenttypeid`/`cat1`/`cat2`/`cat3`, Kakao `category_name`, and auxiliary place-name
+keywords. This final CSV exposes the TourAPI content type as `category`.
+`feature_rules` preserves classification provenance and is retained as metadata,
+not used as an embedding input. The loader validates the supplied labels instead
+of regenerating them.
 
-전처리 과정에서는 각 장소를 공통 여행 취향 feature로 변환합니다.
+The final dataset already uses conservative deduplication based on normalized
+names, coordinate distance, name similarity and category compatibility. Ambiguous
+pairs remain separate; the recommendation loader does not merge them again.
 
-예:
-
-```text
-Food
-Cafe
-Nature
-History
-Culture
-Shopping
-Activity
-Entertainment
-Relaxation
-Festival
-```
-
-API 원본 데이터, 전처리 규칙, 추천 실험 데이터는 가능한 한 버전을 구분하여 관리합니다.
+Description/overview, opening hours, closing days, prices and expected dwell
+times are currently unavailable. Sentence Transformer is deferred. After checking
+TourAPI overview coverage, future experiments can compare the rule-based baseline,
+Sentence Transformer soft features and hybrid features, and add constraints for
+newly collected operational data.
 
 ---
 

@@ -2,14 +2,17 @@
 
 from importlib import import_module
 from .common import GroupInput, GroupRecommender, Recommendation
+from .features import FEATURE_NAMES
+from .places import PlaceDataset, load_places
 
-__all__ = ["AverageWithoutMisery", "GFAR", "FeatureAGREE", "GroupInput",
-           "GroupRecommender", "Recommendation"]
+# "FeatureAGREE" is disabled until model work resumes.
+__all__ = ["AverageWithoutMisery", "GFAR", "GroupInput",
+           "GroupRecommender", "Recommendation", "FEATURE_NAMES", "PlaceDataset", "load_places"]
 
 _RECOMMENDER_MODULES = {
     "AverageWithoutMisery": ".RecSys.AvgWithoutMisery",
     "GFAR": ".RecSys.GFAR",
-    "FeatureAGREE": ".RecSys.AGREE",
+    # "FeatureAGREE": ".RecSys.AGREE",
 }
 
 
