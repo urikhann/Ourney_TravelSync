@@ -47,32 +47,35 @@ TravelSync는 친구들의 날짜, 예산, 여행 취향과 필수 조건을 모
 
 ## Setup (Windows PowerShell)
 
-Use Python **3.13.14**. From the project root, create and activate a virtual environment:
+Use Python **3.13 or newer**. Open a terminal in the repository root (the folder
+containing `pyproject.toml`) and create the environment:
 
 ```powershell
 py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install ipykernel
 ```
 
-Install the project dependencies:
+The editable installation makes `ourney_travelsync` importable and installs the
+NumPy dependency. `ipykernel` lets VS Code run the notebook in this environment.
+These commands use the environment's Python directly, so activation is optional.
+
+For the additional data and experiment tools (DVC, MLflow, pandas and
+scikit-learn), install:
 
 ```powershell
-python -m pip install -r requirements.txt
-```
-
-Verify the installations:
-
-```powershell
-python --version
-dvc --version
-mlflow --version
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\dvc.exe --version
+.\.venv\Scripts\mlflow.exe --version
 ```
 
 To start the local MLflow server:
 
 ```powershell
-mlflow server
+.\.venv\Scripts\mlflow.exe server
 ```
+
+MLflow and DVC are optional for running the recommendation notebook.
 
 ---
 
@@ -106,28 +109,103 @@ Candidates are the union of each member's top-N results (default 100 per member)
 All member scores remain aligned for every candidate. Ties preserve CSV row order.
 GFAR is the default group aggregator; its Borda relevance depth is separately
 configured (default 20). `AverageWithoutMisery` remains the comparison baseline.
-GFAR is a starter implementation that still needs validation against the authors'
-implementation. `FeatureAGREE` is an untrained experimental skeleton; its code,
-package export, and test are commented out pending further model work.
-GFAR scores are marginal gains;
-AWM scores are mean preferences, so scores cannot be compared across models.
+The current algorithms are **GFAR** and **Average Without Misery (AWM)**.
+AWM rejects a POI if any member's score is below its threshold (default 2.5),
+then ranks the remaining POIs by mean preference. GFAR balances relevance across
+members as it builds the list. GFAR does not apply AWM's veto threshold.
+
+### Run recommendations in VS Code
+
+1. Complete the setup above and open the repository folder in VS Code.
+2. Install the **Python** and **Jupyter** VS Code extensions if they are missing.
+3. Open [test.ipynb](src/ourney_travelsync/RecSys/test.ipynb).
+4. Click **Select Kernel** at the top right, then **Python Environments**, and
+   select `.venv` (`.venv/Scripts/python.exe`).
+5. Click **Run All** in the notebook toolbar.
+
+The notebook loads the included POI CSV, creates example user preferences,
+prints recommendations, and compares AWM with GFAR. No API keys or live data
+collection are needed for this example.
+
+To try your own group, edit the `user` and `users` definitions. Each member needs
+all ten feature values in the order above, with preferences between 1 and 5.
+In the comparison cell, adjust `comparison_top_k` (requested list size) and
+`comparison_candidate_top_n` (candidate depth per member), then run the notebook
+again. Change `AverageWithoutMisery(2.5)` to experiment with the veto threshold.
+
+### Compare AWM and GFAR
+
+The **AWM vs GFAR: shared satisfaction evaluation** section runs both algorithms
+on the same scored candidate pool with the same requested top-K. It evaluates
+selected POIs using the original member-POI preference scores:
+
+| Metric | Calculation | Interpretation |
+| --- | --- | --- |
+| Mean satisfaction | Average of all members' average scores across returned POIs | Overall predicted preference; higher is better |
+| Minimum member satisfaction | Lowest member average across returned POIs | Predicted preference of the least-satisfied member; higher is better |
+| Returned POIs | Number of selected POIs | AWM may return fewer than the requested top-K |
+
+The notebook also prints each member's average. Empty recommendation lists show
+`N/A` for satisfaction. Minimum member satisfaction is the lowest **member
+average**, not the lowest score for a single place.
+
+For the included example (100 candidates per member, top-K 10), the comparison is:
+
+| Algorithm | Returned POIs | Mean satisfaction | Minimum member satisfaction |
+| --- | ---: | ---: | ---: |
+| AWM | 10 | 4.500 | 4.000 |
+| GFAR | 10 | 3.875 | 3.500 |
+
+These results describe this example under the current category-based scoring
+assumptions. Actual recommendation quality needs user feedback. AWM's output
+score is a mean preference; GFAR's output score is a marginal gain. Compare the
+shared satisfaction metrics instead of comparing or rescaling those raw outputs.
+
+### Run recommendations from a Python script
+
+Save the following as `recommend.py` in the repository root:
 
 ```python
-from ourney_travelsync import FEATURE_NAMES, load_places, AverageWithoutMisery
-from ourney_travelsync.RecSys import recommend_group
+from ourney_travelsync import FEATURE_NAMES, load_places, AverageWithoutMisery, GFAR
+from ourney_travelsync.RecSys import prepare_group
 
-places = load_places()  # package-relative travelsync_final_places.csv
+places = load_places()
 users = {
-    "alice": dict(zip(FEATURE_NAMES, [5, 4, 3, 2, 4, 2, 3, 3, 4, 1])),
+    "alice": dict(zip(FEATURE_NAMES, [4, 5, 3, 2, 2, 3, 3, 3, 4, 1])),
     "bob": dict(zip(FEATURE_NAMES, [3, 2, 5, 4, 3, 2, 4, 2, 5, 3])),
 }
-results = recommend_group(places, users, top_k=10, individual_top_n=100)
-# Comparison baseline:
-awm = recommend_group(places, users, recommender=AverageWithoutMisery(2.5))
+group = prepare_group(places, users, individual_top_n=100)
 metadata = {row["place_id"]: row for row in places.records}
-for result in results:
-    print(metadata[result.poi_id]["place_name"], result.score)
+
+for name, model in {"AWM": AverageWithoutMisery(2.5), "GFAR": GFAR()}.items():
+    results = model.recommend(group, top_k=10)
+    print(f"\n{name}: {len(results)} POIs")
+    for result in results:
+        print(result.poi_id, metadata[result.poi_id]["place_name"])
 ```
+
+Run it from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe recommend.py
+```
+
+Use package imports as shown above. Running a library file such as
+`RecSys/IndividualScoring.py` directly causes
+`ImportError: attempted relative import with no known parent package`.
+The library files define functions and models; the notebook or your script calls
+them to generate recommendations.
+
+### Import and environment troubleshooting
+
+- **`ModuleNotFoundError: ourney_travelsync` or `numpy`:** rerun the editable
+  installation command with `.venv/Scripts/python.exe` and select the same
+  environment as the notebook kernel. Restart the kernel and click **Run All**.
+- **The `.venv` kernel is missing:** install `ipykernel` using the setup command,
+  then select `.venv/Scripts/python.exe` through the kernel picker.
+- **An existing environment is missing `.venv/pyvenv.cfg`:** recreate its
+  configuration with `py -3.13 -m venv .venv`, then rerun the setup installation
+  commands and restart the notebook kernel.
 
 Explicit `excluded_place_ids` and externally determined `eligible_place_ids` are
 applied before scoring and candidate generation. Budget, dates, movement limits
@@ -135,11 +213,12 @@ and mandatory exclusions are separate hard constraints, never vector dimensions.
 Price/opening-hour/date availability filtering is deferred until those fields
 exist. The current pipeline does not infer them from categories or names.
 
-Run regression checks from the repository root after dependency installation:
+### Run regression checks
+
+From the repository root after the editable installation:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 Evaluation should compare individual ranking, group mean/minimum satisfaction,
