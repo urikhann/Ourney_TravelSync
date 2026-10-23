@@ -1,0 +1,9 @@
+{
+  "reply": "Found Busan Museum of Art: indoor, low walking, group score 3.5. Your dinner booking stays.",
+  "tool_calls": [{"name": "call_recommender", "summary": "7 indoor candidates"}],
+  "proposal": {
+    "date": "2026-10-10",
+    "remove_item_ids": ["item_41", "item_42"],
+    "add": [{"poi_id": "bmoa", "start": "15:00"}, {"poi_id": "jeonpo", "start": "17:00"}]
+  }
+}

@@ -18,3 +18,10 @@ dvclive/
 /mlflow.db-*
 /mlartifacts/
 /mlruns/
+
+# Web app + backend (Bat)
+node_modules/
+dist/
+*.db
+.DS_Store
+!.env.example

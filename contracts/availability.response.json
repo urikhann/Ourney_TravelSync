@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "poi_id": "gamcheon",
+      "available": false,
+      "reason": "Visit ends 17:45, after closing 17:30",
+      "open": "09:00",
+      "close": "17:30",
+      "next_available": "2026-10-11",
+      "confidence": 0.9,
+      "source": "tourapi",
+      "last_updated": "2026-09-20"
+    }
+  ]
+}

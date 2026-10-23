@@ -1,0 +1,1815 @@
+{
+ "source": "Hand-made sample of 28 Busan places (English names) for tests and offline demos. Real data: data/places/travelsync_final_places.csv",
+ "pois": [
+  {
+   "id": "haeundae",
+   "name": "Haeundae Beach",
+   "city": "busan",
+   "area": "Haeundae",
+   "kind": "activity",
+   "category": "beach",
+   "lat": 35.154,
+   "lng": 129.174,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 1,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 1,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 2,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 3,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 4,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 5,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 6,
+     "open": "00:00",
+     "close": "24:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.25
+  },
+  {
+   "id": "gwangalli",
+   "name": "Gwangalli Beach",
+   "city": "busan",
+   "area": "Suyeong",
+   "kind": "activity",
+   "category": "beach",
+   "lat": 35.136,
+   "lng": 129.1355,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 1,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 1,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 2,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 3,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 4,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 5,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 6,
+     "open": "00:00",
+     "close": "24:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "gamcheon",
+   "name": "Gamcheon art tour",
+   "city": "busan",
+   "area": "Saha",
+   "kind": "activity",
+   "category": "culture_village",
+   "lat": 35.1135,
+   "lng": 129.0288,
+   "indoor": false,
+   "avg_cost_krw": 3000,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 1,
+    "art": 1,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "17:30"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "17:30"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.38
+  },
+  {
+   "id": "bmoa",
+   "name": "Busan Museum of Art",
+   "city": "busan",
+   "area": "Haeundae",
+   "kind": "activity",
+   "category": "museum",
+   "lat": 35.163,
+   "lng": 129.1575,
+   "indoor": true,
+   "avg_cost_krw": 0,
+   "duration_min": 100,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 1,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "bmuseum",
+   "name": "Busan Museum",
+   "city": "busan",
+   "area": "Nam-gu",
+   "kind": "activity",
+   "category": "museum",
+   "lat": 35.1315,
+   "lng": 129.108,
+   "indoor": true,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 1,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "18:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.12
+  },
+  {
+   "id": "jeonpo",
+   "name": "Jeonpo Café Street",
+   "city": "busan",
+   "area": "Seomyeon",
+   "kind": "activity",
+   "category": "cafe_street",
+   "lat": 35.154,
+   "lng": 129.0915,
+   "indoor": true,
+   "avg_cost_krw": 12000,
+   "duration_min": 75,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 1,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "11:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "skywalk",
+   "name": "Songdo Skywalk",
+   "city": "busan",
+   "area": "Seo-gu",
+   "kind": "activity",
+   "category": "viewpoint",
+   "lat": 35.1,
+   "lng": 129.0233,
+   "indoor": false,
+   "avg_cost_krw": 17000,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 1,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.38
+  },
+  {
+   "id": "yonggungsa",
+   "name": "Haedong Yonggungsa",
+   "city": "busan",
+   "area": "Gijang",
+   "kind": "activity",
+   "category": "museum",
+   "lat": 35.181,
+   "lng": 129.229,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 1,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 1,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 2,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 3,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 4,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 5,
+     "open": "05:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 6,
+     "open": "05:00",
+     "close": "19:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.38
+  },
+  {
+   "id": "igidae",
+   "name": "Igidae Coastal Trail",
+   "city": "busan",
+   "area": "Nam-gu",
+   "kind": "activity",
+   "category": "hiking",
+   "lat": 35.118,
+   "lng": 129.119,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 150,
+   "tags": [
+    "hiking"
+   ],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 1,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 1,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 2,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 3,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 4,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 5,
+     "open": "06:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 6,
+     "open": "06:00",
+     "close": "18:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 1.0
+  },
+  {
+   "id": "taejongdae",
+   "name": "Taejongdae Cliffs",
+   "city": "busan",
+   "area": "Yeongdo",
+   "kind": "activity",
+   "category": "hiking",
+   "lat": 35.073,
+   "lng": 129.064,
+   "indoor": false,
+   "avg_cost_krw": 3000,
+   "duration_min": 120,
+   "tags": [
+    "hiking"
+   ],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 1,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "18:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.75
+  },
+  {
+   "id": "aquarium",
+   "name": "SEA LIFE Aquarium",
+   "city": "busan",
+   "area": "Haeundae",
+   "kind": "activity",
+   "category": "aquarium",
+   "lat": 35.1558,
+   "lng": 129.1762,
+   "indoor": true,
+   "avg_cost_krw": 32000,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 1,
+    "entertainment": 1,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "19:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "spaland",
+   "name": "Spa Land Centum",
+   "city": "busan",
+   "area": "Centum",
+   "kind": "activity",
+   "category": "spa",
+   "lat": 35.1657,
+   "lng": 129.152,
+   "indoor": true,
+   "avg_cost_krw": 23000,
+   "duration_min": 120,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 1,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "20:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "20:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "shinsegae",
+   "name": "Shinsegae Centum City",
+   "city": "busan",
+   "area": "Centum",
+   "kind": "activity",
+   "category": "shopping",
+   "lat": 35.1648,
+   "lng": 129.1531,
+   "indoor": true,
+   "avg_cost_krw": 0,
+   "duration_min": 100,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 1,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:30",
+     "close": "20:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:30",
+     "close": "20:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "gukje",
+   "name": "Gukje Market",
+   "city": "busan",
+   "area": "Nampo",
+   "kind": "activity",
+   "category": "market",
+   "lat": 35.1108,
+   "lng": 129.0442,
+   "indoor": false,
+   "avg_cost_krw": 10000,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 1,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "19:00"
+    }
+   ],
+   "closed_on_public_holidays": true,
+   "walking_level": 0.25
+  },
+  {
+   "id": "yacht",
+   "name": "Gwangalli sunset yacht",
+   "city": "busan",
+   "area": "Suyeong",
+   "kind": "activity",
+   "category": "tour",
+   "lat": 35.1378,
+   "lng": 129.1388,
+   "indoor": false,
+   "avg_cost_krw": 60000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 1,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "16:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "16:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "xsky",
+   "name": "BUSAN X the SKY",
+   "city": "busan",
+   "area": "Haeundae",
+   "kind": "activity",
+   "category": "observatory",
+   "lat": 35.1567,
+   "lng": 129.1828,
+   "indoor": true,
+   "avg_cost_krw": 27000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 1,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "21:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "cinema",
+   "name": "Busan Cinema Center",
+   "city": "busan",
+   "area": "Centum",
+   "kind": "activity",
+   "category": "cinema",
+   "lat": 35.1639,
+   "lng": 129.1553,
+   "indoor": true,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 1,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "19:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "19:00"
+    }
+   ],
+   "closed_on_public_holidays": true,
+   "walking_level": 0.0
+  },
+  {
+   "id": "huinnyeoul",
+   "name": "Huinnyeoul Village",
+   "city": "busan",
+   "area": "Yeongdo",
+   "kind": "activity",
+   "category": "village",
+   "lat": 35.091,
+   "lng": 129.0475,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 1,
+    "nature": 1,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 1,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 1,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 2,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 3,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 4,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 5,
+     "open": "00:00",
+     "close": "24:00"
+    },
+    {
+     "dow": 6,
+     "open": "00:00",
+     "close": "24:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.5
+  },
+  {
+   "id": "gukbap",
+   "name": "Pork gukbap alley",
+   "city": "busan",
+   "area": "Seomyeon",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.1522,
+   "lng": 129.0882,
+   "indoor": true,
+   "avg_cost_krw": 10000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "09:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "milmyeon",
+   "name": "Milmyeon noodle house",
+   "city": "busan",
+   "area": "Busanjin",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.145,
+   "lng": 129.097,
+   "indoor": true,
+   "avg_cost_krw": 9000,
+   "duration_min": 45,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:30",
+     "close": "21:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:30",
+     "close": "21:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "biff",
+   "name": "BIFF Square street food",
+   "city": "busan",
+   "area": "Nampo",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.1126,
+   "lng": 129.042,
+   "indoor": false,
+   "avg_cost_krw": 8000,
+   "duration_min": 45,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.25
+  },
+  {
+   "id": "haeundaemkt",
+   "name": "Haeundae Market",
+   "city": "busan",
+   "area": "Haeundae",
+   "kind": "food",
+   "category": "market",
+   "lat": 35.1594,
+   "lng": 129.1773,
+   "indoor": true,
+   "avg_cost_krw": 15000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 1,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "23:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "bbq",
+   "name": "Seomyeon BBQ street",
+   "city": "busan",
+   "area": "Seomyeon",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.1549,
+   "lng": 129.0871,
+   "indoor": true,
+   "avg_cost_krw": 30000,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 1,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 2,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 3,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 4,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 5,
+     "open": "17:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 6,
+     "open": "17:00",
+     "close": "23:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "jagalchi",
+   "name": "Jagalchi Fish Market",
+   "city": "busan",
+   "area": "Nampo",
+   "kind": "food",
+   "category": "aquarium",
+   "lat": 35.1072,
+   "lng": 129.0398,
+   "indoor": false,
+   "avg_cost_krw": 30000,
+   "duration_min": 75,
+   "tags": [
+    "raw_fish"
+   ],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "08:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "08:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "millak",
+   "name": "Millak raw fish center",
+   "city": "busan",
+   "area": "Suyeong",
+   "kind": "food",
+   "category": "aquarium",
+   "lat": 35.1432,
+   "lng": 129.141,
+   "indoor": true,
+   "avg_cost_krw": 40000,
+   "duration_min": 90,
+   "tags": [
+    "raw_fish"
+   ],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 1,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 2,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 3,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 4,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 5,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "dow": 6,
+     "open": "11:00",
+     "close": "23:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "stew",
+   "name": "Nampo seafood stew",
+   "city": "busan",
+   "area": "Nampo",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.1144,
+   "lng": 129.0464,
+   "indoor": true,
+   "avg_cost_krw": 18000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 1,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 2,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 3,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 4,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 5,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "dow": 6,
+     "open": "10:00",
+     "close": "21:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "pajeon",
+   "name": "Dongnae pajeon house",
+   "city": "busan",
+   "area": "Dongnae",
+   "kind": "food",
+   "category": "restaurant",
+   "lat": 35.199,
+   "lng": 129.108,
+   "indoor": true,
+   "avg_cost_krw": 16000,
+   "duration_min": 60,
+   "tags": [],
+   "features": {
+    "food": 1,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 0
+   },
+   "hours": [
+    {
+     "dow": 0,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 1,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 2,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 3,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 4,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 5,
+     "open": "11:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "11:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false,
+   "walking_level": 0.0
+  },
+  {
+   "id": "festival_sample",
+   "name": "Sample: Seomyeon street festival",
+   "city": "busan",
+   "area": "Seomyeon",
+   "kind": "activity",
+   "category": "festival",
+   "lat": 35.157,
+   "lng": 129.059,
+   "indoor": false,
+   "avg_cost_krw": 0,
+   "duration_min": 90,
+   "tags": [],
+   "features": {
+    "food": 0,
+    "cafe": 0,
+    "nature": 0,
+    "history": 0,
+    "art": 0,
+    "shopping": 0,
+    "activity": 0,
+    "entertainment": 0,
+    "relax": 0,
+    "festival": 1
+   },
+   "walking_level": 0.3,
+   "hours": [
+    {
+     "dow": 5,
+     "open": "15:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 6,
+     "open": "15:00",
+     "close": "22:00"
+    },
+    {
+     "dow": 0,
+     "open": "15:00",
+     "close": "22:00"
+    }
+   ],
+   "closed_on_public_holidays": false
+  }
+ ],
+ "categories": [
+  "food",
+  "cafe",
+  "nature",
+  "history",
+  "art",
+  "shopping",
+  "activity",
+  "entertainment",
+  "relax",
+  "festival"
+ ]
+}

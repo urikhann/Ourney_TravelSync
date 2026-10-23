@@ -1,0 +1,48 @@
+# One command starts everything:  docker compose up --build
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-travelsync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travelsync}
+      POSTGRES_DB: ${POSTGRES_DB:-travelsync}
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-travelsync}"]
+      interval: 3s
+      retries: 20
+
+  api:  # Bat — backend
+    build: ./api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
+      WEB_ORIGIN: http://localhost:5173
+      PLACES_CSV: /data/places/travelsync_final_places.csv   # imported into an empty database on first start
+    ports: ["8000:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+    volumes: ["./api/app:/code/app", "./data:/data:ro"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  mocks:  # fake versions of the teammates' services (recommender, optimizer, availability, agent)
+    build: ./services/mocks
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
+    ports: ["8001:8001"]
+    depends_on:
+      db: {condition: service_healthy}
+    volumes: ["./services/mocks:/code"]
+
+  web:  # Bat — web app
+    image: node:22
+    working_dir: /web
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports: ["5173:5173"]
+    volumes: ["./web:/web", "/web/node_modules"]
+
+volumes:
+  pgdata:
