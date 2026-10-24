@@ -3,13 +3,15 @@
 import csv
 from dataclasses import dataclass
 from pathlib import Path
+from importlib.resources import files
 
 import numpy as np
 
 from .common import FloatArray
 from .features import FEATURE_NAMES, validate_features
 
-DEFAULT_PLACES_PATH = Path(__file__).with_name("travelsync_final_places.csv")
+OFFICIAL_FILENAME = "travelsync_final_places_v2.csv"
+OFFICIAL_SHA256 = "5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15"
 
 
 @dataclass(frozen=True)
@@ -22,19 +24,24 @@ class PlaceDataset:
     coordinates: FloatArray  # latitude, longitude
 
 
-def load_places(path: str | Path = DEFAULT_PLACES_PATH) -> PlaceDataset:
+def load_places(path: str | Path | None = None) -> PlaceDataset:
     """Validate core fields and preserve source/feature_rules as metadata.
 
     No description, price, opening hours or dwell-time fields are required.
     Do not merge again: the input already contains the final merged POIs.
     """
     required = {"place_id", "place_name", "category_name", "latitude", "longitude", *FEATURE_NAMES}
-    with Path(path).open(encoding="utf-8-sig", newline="") as handle:
+    resource = files("ourney_travelsync").joinpath("data", OFFICIAL_FILENAME) if path is None else Path(path)
+    with resource.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
+        if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)):
+            raise ValueError("CSV header must contain unique column names.")
         missing = required - set(reader.fieldnames or ())
         if missing:
             raise ValueError(f"Missing CSV columns: {sorted(missing)}")
         records = tuple(reader)
+    if any(None in row or any(value is None for value in row.values()) for row in records):
+        raise ValueError("CSV rows must match the header width.")
     ids = tuple(row["place_id"] for row in records)
     if any(not value.strip() for value in ids) or len(set(ids)) != len(ids):
         raise ValueError("CSV place_id values must be nonempty and unique.")

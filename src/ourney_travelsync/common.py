@@ -20,7 +20,6 @@ class GroupInput:
     Both follow features.FEATURE_NAMES order.
     individual_scores: optional [members, candidates], required by AWM/GFAR.
     AWM assumes calibrated ratings (e.g. 1–5); GFAR uses their ordering only.
-    FeatureAGREE uses features directly and ignores individual_scores.
     IDs identify outputs only; they are never learned embedding-table indices.
     """
 
@@ -64,7 +63,7 @@ class GroupInput:
 class Recommendation:
     """A POI in selection order, with a model-specific diagnostic score.
 
-    AWM: mean rating. GFAR: marginal gain at selection. AGREE: raw utility.
+    AWM: mean rating. GFAR: marginal gain at selection.
     Scores are not comparable across models; evaluate the ranked POI IDs.
     """
 

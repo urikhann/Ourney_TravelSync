@@ -1,0 +1,40 @@
+name: Python checks
+on: [push, pull_request]
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked
+      - run: uv run --locked pytest -q
+      - run: uv sync --locked --extra ingestion --extra postgres --extra viewer
+      - run: uv run --locked --extra ingestion --extra postgres --extra viewer pytest -q
+      - run: uv build
+      - run: uv venv .wheel-test --python 3.13
+      - run: uv pip install --python .wheel-test/bin/python dist/*.whl
+      - run: .wheel-test/bin/python scripts/verify_installed.py
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: travelsync_test
+          POSTGRES_USER: travelsync_test
+          POSTGRES_PASSWORD: local-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      TRAVELSYNC_TEST_DATABASE_URL: postgresql://travelsync_test:local-ci-only@localhost:5432/travelsync_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked --extra postgres
+      - run: uv run --locked --extra postgres pytest -q integration_tests

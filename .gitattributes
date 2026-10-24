@@ -1,0 +1,2 @@
+# Preserve the authoritative snapshot byte-for-byte on every platform.
+src/ourney_travelsync/data/travelsync_final_places_v2.csv -text
