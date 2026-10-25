@@ -1,0 +1,71 @@
+{
+  "rows": 3570,
+  "distinct_feature_vectors": 21,
+  "seed": 0,
+  "candidate_top_n": 100,
+  "scenarios": {
+    "equal": {
+      "members": [
+        {
+          "unique_scores": 1,
+          "tied_rows": 3570,
+          "cutoff_score": 3.0,
+          "cutoff_tied_rows": 3570
+        },
+        {
+          "unique_scores": 1,
+          "tied_rows": 3570,
+          "cutoff_score": 3.0,
+          "cutoff_tied_rows": 3570
+        }
+      ],
+      "before": {
+        "candidates": 100,
+        "sources": {
+          "TOUR_API": 77,
+          "TOUR_API+KAKAO": 23
+        }
+      },
+      "after": {
+        "candidates": 100,
+        "sources": {
+          "KAKAO": 84,
+          "TOUR_API": 13,
+          "TOUR_API+KAKAO": 3
+        }
+      }
+    },
+    "varied": {
+      "members": [
+        {
+          "unique_scores": 9,
+          "tied_rows": 3569,
+          "cutoff_score": 5.0,
+          "cutoff_tied_rows": 797
+        },
+        {
+          "unique_scores": 8,
+          "tied_rows": 3570,
+          "cutoff_score": 5.0,
+          "cutoff_tied_rows": 649
+        }
+      ],
+      "before": {
+        "candidates": 200,
+        "sources": {
+          "KAKAO": 88,
+          "TOUR_API": 74,
+          "TOUR_API+KAKAO": 38
+        }
+      },
+      "after": {
+        "candidates": 200,
+        "sources": {
+          "KAKAO": 186,
+          "TOUR_API": 10,
+          "TOUR_API+KAKAO": 4
+        }
+      }
+    }
+  }
+}

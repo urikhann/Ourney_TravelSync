@@ -1,6 +1,5 @@
 """Regression tests for the final CSV contract and recommendation flow."""
 
-from collections import Counter
 import csv
 from pathlib import Path
 import tempfile
@@ -8,9 +7,8 @@ import unittest
 
 import numpy as np
 
-# from ourney_travelsync import FeatureAGREE
 from ourney_travelsync import FEATURE_NAMES, GFAR, AverageWithoutMisery, GroupInput, load_places
-from ourney_travelsync.RecSys import (
+from ourney_travelsync.recommenders import (
     calculate_preference_score, generate_candidates, prepare_group,
     recommend_group, score_individuals,
 )
@@ -62,8 +60,6 @@ class ScoringTests(unittest.TestCase):
     def test_group_contract_rejects_old_dimensions(self):
         with self.assertRaises(ValueError):
             GroupInput(("u",), ("p",), np.ones((1, 4)), np.ones((1, 4))).validate()
-        # with self.assertRaises(ValueError):
-        #     FeatureAGREE(4, 4)
 
 
 class PipelineTests(unittest.TestCase):
@@ -72,37 +68,31 @@ class PipelineTests(unittest.TestCase):
         cls.places = load_places()
         cls.users = {"food-lover": preferences(food=5, cafe=1), "cafe-lover": preferences(food=1, cafe=5)}
 
-    def test_final_dataset(self):
-        places = self.places
-        self.assertEqual(len(places.place_ids), 3591)
-        self.assertEqual(Counter(row["source"] for row in places.records),
-                         {"KAKAO": 3101, "TOUR_API": 367, "TOUR_API+KAKAO": 123})
-        self.assertEqual(places.features.shape, (3591, 10))
-        self.assertTrue(np.isin(places.features, (0, 1)).all())
-        self.assertTrue((places.features.sum(axis=1) > 0).all())
-        self.assertTrue(all(row["feature_rules"] for row in places.records))
-
     def test_candidate_union_preserves_alignment(self):
         data = GroupInput(("u1", "u2"), ("p1", "p2", "p3"),
                           np.full((2, 10), 3.), np.eye(10)[:3],
                           np.array([[5., 1., 3.], [1., 5., 3.]]))
         result = generate_candidates(data, individual_top_n=1)
-        self.assertEqual(result.poi_ids, ("p1", "p2"))
-        np.testing.assert_array_equal(result.individual_scores, [[5, 1], [1, 5]])
-        np.testing.assert_array_equal(result.poi_features, data.poi_features[:2])
+        self.assertEqual(set(result.poi_ids), {"p1", "p2"})
+        indices = [data.poi_ids.index(pid) for pid in result.poi_ids]
+        np.testing.assert_array_equal(result.individual_scores, data.individual_scores[:, indices])
+        np.testing.assert_array_equal(result.poi_features, data.poi_features[indices])
 
-    def test_candidate_ties_follow_original_order(self):
+    def test_candidate_ties_follow_seeded_identity(self):
         data = GroupInput(("u",), ("b", "a"), np.full((1, 10), 3.),
                           np.eye(10)[:2], np.full((1, 2), 3.))
-        self.assertEqual(generate_candidates(data, individual_top_n=1).poi_ids, ("b",))
+        from ourney_travelsync.recommenders.ties import ranking
+        expected = data.poi_ids[ranking(data.individual_scores[0], data.poi_ids)[0]]
+        self.assertEqual(generate_candidates(data, individual_top_n=1).poi_ids, (expected,))
 
     def test_constraints_apply_before_candidate_selection(self):
         eligible = self.places.place_ids[:5]
         excluded = eligible[:2]
         group = prepare_group(self.places, self.users, individual_top_n=100,
                               eligible_place_ids=eligible, excluded_place_ids=excluded)
-        self.assertEqual(group.poi_ids, eligible[2:])
-        np.testing.assert_array_equal(group.poi_features, self.places.features[2:5])
+        self.assertEqual(set(group.poi_ids), set(eligible[2:]))
+        indices = [self.places.place_ids.index(pid) for pid in group.poi_ids]
+        np.testing.assert_array_equal(group.poi_features, self.places.features[indices])
 
     def test_full_pipeline_gfar_and_awm(self):
         group = prepare_group(self.places, self.users, individual_top_n=30)

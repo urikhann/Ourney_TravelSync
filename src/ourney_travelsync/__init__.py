@@ -5,14 +5,12 @@ from .common import GroupInput, GroupRecommender, Recommendation
 from .features import FEATURE_NAMES
 from .places import PlaceDataset, load_places
 
-# "FeatureAGREE" is disabled until model work resumes.
 __all__ = ["AverageWithoutMisery", "GFAR", "GroupInput",
            "GroupRecommender", "Recommendation", "FEATURE_NAMES", "PlaceDataset", "load_places"]
 
 _RECOMMENDER_MODULES = {
-    "AverageWithoutMisery": ".RecSys.AvgWithoutMisery",
-    "GFAR": ".RecSys.GFAR",
-    # "FeatureAGREE": ".RecSys.AGREE",
+    "AverageWithoutMisery": ".recommenders.average_without_misery",
+    "GFAR": ".recommenders.gfar",
 }
 
 
@@ -26,7 +24,3 @@ def __getattr__(name: str):
     globals()[name] = recommender
     
     return recommender
-
-
-def main() -> None:
-    print("Hello from ourney-travelsync!")

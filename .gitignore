@@ -9,6 +9,25 @@ __pycache__/
 # Environment variables / secrets
 .env
 .env.*
+.envrc
+
+# Local credentials and private keys (templates must contain placeholders only)
+.aws/
+.secrets/
+secrets/
+credentials/
+.streamlit/secrets.toml
+secrets.toml
+secrets.json
+secrets.yaml
+secrets.yml
+*credentials*.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
 
 # DVCLive experiment outputs
 dvclive/
@@ -19,10 +38,24 @@ dvclive/
 /mlartifacts/
 /mlruns/
 
+# Build and generated collection artifacts (recommender / data)
+/dist/
+/build/
+*.egg-info/
+/.uv-cache/
+/data/
+/output/
+/.dvc/
+.pytest_cache/
+.venv-review/
+.venv-wheel-review/
+
 # Web app + backend (Bat)
 node_modules/
 dist/
 *.db
 .DS_Store
-!.env.example
 *.tsbuildinfo
+
+# Templates are allowed (must contain placeholders only)
+!.env.example

@@ -7,15 +7,16 @@ import numpy as np
 from ..common import GroupInput, GroupRecommender, Recommendation, validate_top_k
 from ..features import feature_vector
 from ..places import PlaceDataset
-from .GFAR import GFAR
-from .IndividualScoring import score_individuals
+from .gfar import GFAR
+from .individual_scoring import score_individuals
+from .ties import ranking, tie_keys
 
 
-def generate_candidates(data: GroupInput, *, individual_top_n: int = 100) -> GroupInput:
-    """Union each member's top-N POIs, preserving original POI order.
+def generate_candidates(data: GroupInput, *, individual_top_n: int = 100, tie_seed: int = 0) -> GroupInput:
+    """Union each member's top-N POIs with identity-based seeded tie ordering.
 
     Every member's score is retained for every selected candidate, including
-    POIs nominated by other members. Ties follow the input order.
+    POIs nominated by other members. Output rows use the same seeded identity order.
     """
     validate_top_k(individual_top_n)
     data.validate(require_scores=True)
@@ -23,14 +24,17 @@ def generate_candidates(data: GroupInput, *, individual_top_n: int = 100) -> Gro
 
     selected = np.zeros(len(data.poi_ids), dtype=bool)
     for ratings in data.individual_scores:
-        selected[np.argsort(-ratings, kind="stable")[:individual_top_n]] = True
+        selected[ranking(ratings, data.poi_ids, tie_seed)[:individual_top_n]] = True
+
+    keys = tie_keys(data.poi_ids, tie_seed)
+    indices = sorted(np.flatnonzero(selected), key=lambda i: (keys[i], data.poi_ids[i]))
 
     return GroupInput(
         data.user_ids,
-        tuple(poi_id for poi_id, keep in zip(data.poi_ids, selected) if keep),
+        tuple(data.poi_ids[i] for i in indices),
         data.user_features,
-        data.poi_features[selected],
-        data.individual_scores[:, selected],
+        data.poi_features[indices],
+        data.individual_scores[:, indices],
     )
 
 
@@ -39,6 +43,7 @@ def prepare_group(
     user_preferences: Mapping[str, Mapping[str, float]],
     *,
     individual_top_n: int = 100,
+    tie_seed: int = 0,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
 ) -> GroupInput:
@@ -66,7 +71,7 @@ def prepare_group(
         tuple(poi_id for poi_id, keep in zip(places.place_ids, mask) if keep),
         users, pois, score_individuals(users, pois),
     )
-    return generate_candidates(data, individual_top_n=individual_top_n)
+    return generate_candidates(data, individual_top_n=individual_top_n, tie_seed=tie_seed)
 
 
 def recommend_group(
@@ -75,6 +80,7 @@ def recommend_group(
     *,
     top_k: int = 10,
     individual_top_n: int = 100,
+    tie_seed: int = 0,
     recommender: GroupRecommender | None = None,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
@@ -83,7 +89,7 @@ def recommend_group(
 
     validate_top_k(top_k)
     data = prepare_group(
-        places, user_preferences, individual_top_n=individual_top_n,
+        places, user_preferences, individual_top_n=individual_top_n, tie_seed=tie_seed,
         excluded_place_ids=excluded_place_ids, eligible_place_ids=eligible_place_ids,
     )
 
