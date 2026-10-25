@@ -40,13 +40,13 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
               <div style={{ font: "800 18px var(--display)" }}>{p.name}</div>
               <div className="muted small">{[p.area, won(p.avg_cost_krw), `~${p.duration_min} min`, p.indoor == null ? null : p.indoor ? "indoor" : "outdoor"].filter(Boolean).join(" · ")}</div>
             </div>
-            {rec && <div className="score" style={{ fontSize: 18 }}>{pct(rec.mean_score)}</div>}
+            {rec && <div className="score" style={{ fontSize: 18 }}>{pct(rec.fit)}</div>}
           </div>
 
           {rec && names && (
             <>
               <div className="h2" style={{ margin: "6px 2px 0" }}>How well it fits each person <small>group pick #{rec.group_rank}</small></div>
-              <MemberScores scores={rec.member_scores} names={names} />
+              <MemberScores scores={rec.member_fit} names={names} />
               <div className="chips">{rec.reasons.map((r) => <span key={r.code + r.text} className="chip green">{r.text}</span>)}</div>
             </>
           )}

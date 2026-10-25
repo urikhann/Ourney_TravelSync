@@ -115,7 +115,8 @@ button, input, select, textarea { font-family: var(--font); }
 .thumb img { border-radius: inherit; }
 
 /* hero blocks: flat ink, no gradient, no decorative circles */
-.hero, .place-hero { background: var(--ink) !important; border-radius: 24px; }
+.hero { background: var(--ink) !important; border-radius: 24px; }
+.place-hero { border-radius: 24px; }  /* white card; only its cover keeps the category colour */
 .hero > [style*="border-radius:50%"][style*="position:absolute"],
 .hero > [style*="border-radius: 50%"][style*="position: absolute"] { display: none; }
 

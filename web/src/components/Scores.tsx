@@ -1,6 +1,6 @@
 import { Avatar } from "./Avatar";
 
-/** Circular group fit: the mean of everyone's 0–1 score, shown as a percentage. */
+/** Circular group fit: 0–1 "fit" from the backend (1–5 scores are converted there), shown as a percentage. */
 export function ScoreRing({ score, bad }: { score: number; bad?: boolean }) {
   const pct = Math.max(0, Math.min(100, score * 100));
   const col = bad ? "#E11D48" : "#0F9F6E";
@@ -13,7 +13,7 @@ export function ScoreRing({ score, bad }: { score: number; bad?: boolean }) {
   );
 }
 
-/** Each member's 0–1 fit as a small bar (SDD: P(u,i) = sum of weight × feature). Optional AWM threshold turns bars red. */
+/** Each member's 0–1 fit as a small bar. Optional threshold (same 0–1 scale) turns bars red. */
 export function MemberScores({ scores, names, threshold }: { scores: Record<string, number>; names: Record<string, string>; threshold?: number | null }) {
   const ids = Object.keys(scores);
   const max = Math.max(0.5, ...ids.map((u) => scores[u]));  // scale bars so small differences are visible

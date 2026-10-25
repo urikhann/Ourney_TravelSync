@@ -169,7 +169,7 @@ def plans(req: dict):
                         break
             days.append({"date": d, "items": items})
         all_items = [it for dd in days for it in dd["items"]]
-        fit = {r["poi_id"]: r["mean_score"] for r in ranked}
+        fit = {r["poi_id"]: r.get("fit", r["mean_score"]) for r in ranked}  # 0–1 fit (backend converts 1–5)
         costs = [pois[i["poi_id"]]["avg_cost_krw"] for i in all_items]
         out.append({"variant": variant, "days": days, "stats": {
             "group_fit": round(sum(fit.get(i["poi_id"], 0) for i in all_items) / (len(all_items) or 1), 4),

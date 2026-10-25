@@ -19,7 +19,9 @@ const FILTERS: { key: Filter; label: string; has: string[] }[] = [
   { key: "culture", label: "Culture", has: ["history", "art", "festival"] },
   { key: "nature", label: "Nature", has: ["nature", "relax"] },
 ];
-const METHODS: { key: Method; label: string }[] = [{ key: "gfar", label: "Fair (GFAR)" }, { key: "average", label: "Plain average" }];
+const METHODS: { key: Method; label: string }[] = [
+  { key: "gfar", label: "Fair (GFAR)" }, { key: "awm", label: "No misery (AWM)" }, { key: "average", label: "Average" },
+];
 
 const tripDates = (t?: Trip) => {
   if (!t) return [];
@@ -73,10 +75,12 @@ export default function Places() {
               <div className="grow">
                 {r.method === "gfar"
                   ? <><b>Fair for everyone.</b> Each pick goes to whoever is least served so far.</>
-                  : <><b>Plain average.</b> For comparison: the most popular places, no turn-taking.</>}
+                  : r.method === "awm"
+                    ? <><b>No one unhappy.</b> Places anyone would score too low are removed, then the best average wins.</>
+                    : <><b>Plain average.</b> For comparison: the most popular places, no turn-taking.</>}
               </div>
             </div>
-            <div className="seg" style={{ gridTemplateColumns: "1fr 1fr", marginBottom: 10 }}>
+            <div className="seg" style={{ gridTemplateColumns: `repeat(${METHODS.length}, 1fr)`, marginBottom: 10 }}>
               {METHODS.map((m) => (
                 <button key={m.key} type="button" className={r.method === m.key ? "on" : ""} disabled={rerun.isPending}
                   onClick={() => r.method !== m.key && rerun.mutate(m.key)}>{m.label}</button>
@@ -103,12 +107,12 @@ export default function Places() {
                       <div className="cover" style={{ background: p?.image_url ? `center / cover url("${p.image_url}"), ${gradient(p?.features)}` : gradient(p?.features) }}>
                         <span className="chip"><Icon size={13} /> {p?.area}</span>
                         <span className="lbl">#{x.group_rank} GROUP PICK</span>
-                        <ScoreRing score={x.mean_score} />
+                        <ScoreRing score={x.fit} />
                       </div>
                       <div className="body">
                         <div className="pname">{p?.name ?? x.poi_id}</div>
                         <div className="muted small" style={{ marginTop: 2 }}>{p ? `${won(p.avg_cost_krw)} · ~${p.duration_min} min${p.indoor ? " · indoor" : ""}` : ""}</div>
-                        <div style={{ margin: "12px 0" }}><MemberScores scores={x.member_scores} names={r.members} /></div>
+                        <div style={{ margin: "12px 0" }}><MemberScores scores={x.member_fit} names={r.members} /></div>
                         <div className="eyebrow muted" style={{ marginBottom: 7 }}>Why this place</div>
                         <div className="chips">{x.reasons.map((re) => <span key={re.code + re.text} className="chip green">{re.text}</span>)}</div>
                       </div>
@@ -122,14 +126,14 @@ export default function Places() {
                       <div className="b" style={{ fontSize: 14 }}>{p?.name ?? x.poi_id}</div>
                       <div className="muted tiny" style={{ marginTop: 2 }}>{x.reasons.slice(0, 2).map((re) => re.text).join(" · ")}</div>
                     </div>
-                    <div className="score" style={{ fontSize: 13 }}>{pct(x.mean_score)}</div>
+                    <div className="score" style={{ fontSize: 13 }}>{pct(x.fit)}</div>
                   </button>
                 );
               })}
             </div>
 
             <button className="row muted small" style={{ gap: 6, margin: "14px 2px 0" }} onClick={() => setShowRemoved(true)}>
-              <Info size={14} /> {r.removed.length} places removed by personal rules — see why
+              <Info size={14} /> {r.removed.length} places removed — see why
             </button>
             <p className="muted tiny center" style={{ marginTop: 12 }}>
               Model {r.model_version} · data {r.dataset_version} · run #{r.run_id}
@@ -144,7 +148,7 @@ export default function Places() {
 
       <Sheet open={showRemoved} onClose={() => setShowRemoved(false)} label="Removed places">
         <div style={{ font: "800 18px var(--display)" }}>Why places were removed</div>
-        <p className="muted small">Before scoring, places that break someone's "never take me to" rule are removed (step E1).</p>
+        <p className="muted small">Before scoring, places that break someone's "never take me to" rule are removed (step E1). With AWM, places someone would score too low are removed too.</p>
         <div className="card list">
           {r?.removed.length === 0 && <div className="list-row muted small">Nothing was removed.</div>}
           {r?.removed.map((x) => (
@@ -153,7 +157,7 @@ export default function Places() {
               <div className="grow">
                 <div className="b" style={{ fontWeight: 600 }}>{x.place?.name ?? x.poi_id}</div>
                 <div className="tiny" style={{ color: "var(--rose)" }}>
-                  {x.rule === "misery" ? "Someone would score it too low" : x.rule === "no_features" ? "No taste features in the data" : "Personal rule"} · {nameOf(x.detail)}
+                  {x.rule === "misery" ? "Someone would score it too low (AWM)" : x.rule === "no_features" ? "No taste features in the data" : "Personal rule"} · {nameOf(x.detail)}
                 </div>
               </div>
             </div>

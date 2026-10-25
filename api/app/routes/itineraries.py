@@ -10,6 +10,7 @@ from ..db import get_db
 from ..deps import member_trip
 from ..models import Itinerary, PublicHoliday, RecommendationRun, Trip, User, Vote
 from ..places import load_places
+from ..scores import to_fit
 from .auth import current_user
 
 router = APIRouter(tags=["itineraries"])
@@ -29,7 +30,8 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     run = db.get(RecommendationRun, its[0].run_id) if its else None
     ids = {i["poi_id"] for it in its for d in it.days for i in d["items"]}
     places = load_places(db, run.dataset_version, ids) if run else {}
-    fit = {r["poi_id"]: r.get("mean_score") for r in (run.response.get("group", []) if run else [])}
+    scale = run.response.get("score_scale", "0-1") if run else None
+    fit = {r["poi_id"]: to_fit(r.get("mean_score"), scale) for r in (run.response.get("group", []) if run else [])}
 
     count = {it.id: sum(1 for v in votes if v.itinerary_id == it.id) for it in its}
     members = len(trip.members)
@@ -60,10 +62,12 @@ async def generate(trip: Trip = Depends(member_trip), user: User = Depends(curre
                     .order_by(RecommendationRun.id.desc()))
     if not run:
         raise HTTPException(409, "no_recommendations_yet")
+    scale = run.response.get("score_scale", "0-1")
     req = {"trip_id": trip.id, "dates": trip_dates(trip), "day_window": {"start": "10:00", "end": "21:00"},
            "dataset_version": run.dataset_version,
            "candidates": [{"poi_id": r["poi_id"], "group_rank": r["group_rank"], "group_utility": r["group_utility"],
-                           "mean_score": r["mean_score"]} for r in run.response.get("group", [])],
+                           "mean_score": r["mean_score"], "fit": to_fit(r["mean_score"], scale)}
+                          for r in run.response.get("group", [])],
            "locked_items": [], "variants": [v for _, v, _ in VARIANTS],
            "check_availability": config.FEATURE_AVAILABILITY}
     res = await services.build_plans(req)

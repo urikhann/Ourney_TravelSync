@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config, services
+from ..scores import to_fit
 from ..db import get_db
 from ..deps import member_trip
 from ..features import FEATURE_SCHEMA_VERSION, FEATURES
@@ -84,18 +85,21 @@ def enrich(run: RecommendationRun, trip: Trip, db: Session) -> dict:
     """Add place details and member names so the web app can show them directly."""
     res = run.response
     group, removed = res.get("group", []), res.get("removed", [])
+    scale = res.get("score_scale", "0-1")  # the team recommender: "1-5"; the old mock: 0–1
     places = load_places(db, run.dataset_version, [r["poi_id"] for r in group + removed])
     names = {m.user_id: m.user.name for m in trip.members}
 
     def named(r: dict) -> dict:  # "Fair pick for <user id>" -> "Fair pick for Sora"
         rs = [{**x, "text": f"Fair pick for {names.get(x['user_id'], 'a member')}"} if x.get("code") == "fair_pick" else x
               for x in r.get("reasons", [])]
-        return {**r, "reasons": rs, "place": places.get(r["poi_id"])}
+        return {**r, "reasons": rs, "place": places.get(r["poi_id"]),
+                "fit": to_fit(r.get("mean_score"), scale),                                   # 0–1 for the screens
+                "member_fit": {u: to_fit(s, scale) for u, s in (r.get("member_scores") or {}).items()}}
 
     return {
         "run_id": run.id, "created_at": run.created_at.isoformat(), "model_version": run.model_version,
         "method": run.method, "awm_threshold": run.misery_threshold, "dataset_version": run.dataset_version,
-        "feature_schema_version": run.feature_schema_version, "members": names,
+        "feature_schema_version": run.feature_schema_version, "score_scale": scale, "members": names,
         "group": [named(r) for r in group],
         "removed": [{**r, "place": places.get(r["poi_id"])} for r in removed],
         "metrics": res.get("metrics", {}),

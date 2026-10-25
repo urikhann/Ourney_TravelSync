@@ -31,12 +31,13 @@ export type Reason = { code: string; text: string; user_id?: string };
 export type GroupPick = {
   poi_id: string; group_rank: number; mean_score: number; selection_gain: number | null; group_utility: number;
   member_scores: Record<string, number>; picked_for: string | null; reasons: Reason[]; place: Place | null;
+  fit: number; member_fit: Record<string, number>;  // 0–1 for the screens (backend converts from score_scale)
 };
 export type Removed = { poi_id: string; stage: string; rule: "member_exclusion" | "misery" | "no_features"; detail: string; place: Place | null };
 export type Method = "gfar" | "average" | "awm";
 export type Recommendations = {
   run_id: number; created_at: string; model_version: string; method: Method; awm_threshold: number | null;
-  dataset_version: string; feature_schema_version: string; members: Record<string, string>;
+  dataset_version: string; feature_schema_version: string; score_scale: "1-5" | "0-1"; members: Record<string, string>;
   group: GroupPick[]; removed: Removed[];
   metrics: { eligible?: number; candidate_pool?: number; returned?: number; per_member_relevance?: Record<string, number>; min_member_relevance?: number };
 };
