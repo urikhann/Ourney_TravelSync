@@ -18,7 +18,7 @@ from ..db import get_db
 from ..deps import member_trip
 from ..features import FEATURE_SCHEMA_VERSION, FEATURES
 from ..import_places import active_version
-from ..models import RecommendationRun, Trip, User
+from ..models import Poi, RecommendationRun, Trip, User
 from ..places import load_places
 from .auth import current_user
 from .preferences import latest as latest_pref
@@ -29,8 +29,17 @@ SCHEMA = "rec-1.0"
 
 class RunIn(BaseModel):
     method: Literal["gfar", "average", "awm"] = "gfar"
-    awm_threshold: float | None = Field(default=None, ge=0, le=1)  # 0–1 scale, only for "awm"
+    awm_threshold: float | None = Field(default=None, ge=0, le=5)  # on the recommender's score scale, only for "awm"
     group_k: int | None = Field(default=None, ge=1, le=100)
+
+
+def tag_index(db: Session, version: str) -> dict[str, list[str]]:
+    """tag -> place ids of this dataset version (tags like "hiking" are derived from the category at import)."""
+    index: dict[str, list[str]] = {}
+    for pid, tags in db.execute(select(Poi.id, Poi.tags).where(Poi.dataset_version == version)):
+        for t in tags or []:
+            index.setdefault(t, []).append(pid)
+    return index
 
 
 def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict], str]:
@@ -38,6 +47,7 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
     version = active_version(db)
     if not version:
         raise HTTPException(503, "no_active_dataset")
+    tags = None  # loaded only if someone has a tag rule
     members, waiting = [], []
     for m in sorted(trip.members, key=lambda m: m.id or 0):
         p = latest_pref(db, trip.id, m.user_id)
@@ -45,9 +55,16 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
             waiting.append(m.user.name)
             continue
         ex = m.exclusions or {}
+        resolved: dict[str, str] = {}  # place id -> the rule that removes it, so the recommender needs no tag data
+        if ex.get("tags"):
+            tags = tags if tags is not None else tag_index(db, version)
+            for t in ex["tags"]:
+                for pid in tags.get(t, []):
+                    resolved.setdefault(pid, t)
         members.append({"user_id": m.user_id, "preference_version": p.version,
                         "ratings": {f: p.ratings[f] for f in FEATURES},
-                        "exclusions": {"tags": ex.get("tags", []), "poi_ids": ex.get("poi_ids", [])}})
+                        "exclusions": {"tags": ex.get("tags", []), "poi_ids": ex.get("poi_ids", []),
+                                       "resolved": resolved}})
     if waiting:
         raise HTTPException(409, "waiting_for_preferences: " + ", ".join(waiting))
     days = (trip.end_date - trip.start_date).days

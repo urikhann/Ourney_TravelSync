@@ -1,4 +1,4 @@
-# Runs on every push and pull request: backend tests + web app type-check/build.
+# Runs on every push and pull request: backend tests, recommender service tests, web app type-check/build.
 name: CI
 on: [push, pull_request]
 jobs:
@@ -17,3 +17,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
       - run: cd web && npm install && npm run build
+  recommender:  # services/recommender wraps the team package (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {python-version: "3.13"}
+      - run: uv sync --locked
+      - run: uv pip install -r services/recommender/requirements.txt
+      - run: cd services/recommender && uv run --no-sync python -m pytest -q
