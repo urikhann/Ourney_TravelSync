@@ -1,7 +1,7 @@
 {
   "schema_version": "rec-1.0",
   "model_version": "rec-v1",
-  "dataset_version": "busan-csv-1",
+  "dataset_version": "busan-v2",
   "feature_schema_version": "fs-1.0",
   "method": "gfar",
   "group": [

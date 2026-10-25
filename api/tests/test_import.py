@@ -10,7 +10,7 @@ from app.features import FEATURES
 from app.import_places import ImportProblem, check_rows, import_rows
 from app.models import DatasetVersion, Poi
 
-REAL_CSV = Path(__file__).resolve().parents[2] / "data" / "places" / "travelsync_final_places.csv"
+REAL_CSV = Path(__file__).resolve().parents[2] / "src" / "ourney_travelsync" / "data" / "travelsync_final_places_v2.csv"
 COLS = ["place_id", "place_name", "category_name", "address", "latitude", "longitude", "source", *FEATURES]
 
 
@@ -68,5 +68,5 @@ def test_the_real_pipeline_csv_passes_the_checks():
     with open(REAL_CSV, encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         rows = list(reader)
-    assert len(rows) == 3591
+    assert len(rows) == 3570
     assert check_rows(rows, reader.fieldnames) == []

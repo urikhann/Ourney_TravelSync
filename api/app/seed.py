@@ -1,7 +1,8 @@
 """Fills an empty database with places so the app works out of the box.
 
-- If the real data file exists (PLACES_CSV, default ../data/places/travelsync_final_places.csv), it is imported
-  as an ACTIVE dataset version — the 3,591 Busan places from the data pipeline.
+- If the real data file exists (PLACES_CSV, default: the v2 snapshot inside the recommender package,
+  src/ourney_travelsync/data/travelsync_final_places_v2.csv), it is imported as the ACTIVE dataset version
+  PLACES_VERSION ("busan-v2") — the 3,570 Busan places from the data pipeline.
 - Otherwise (and in the tests) the 28 hand-made sample places are loaded as dataset version "sample-v1".
 Runs on startup only when there is no ACTIVE dataset version yet. Later updates: python -m app.import_places ...
 """
@@ -48,5 +49,5 @@ def seed_if_empty(db: Session) -> int:
         return 0
     csv_path = Path(config.PLACES_CSV) if config.PLACES_CSV else None
     if csv_path and csv_path.is_file():
-        return import_csv(db, csv_path, version="busan-csv-1", mapping_version="rule_v2")
+        return import_csv(db, csv_path, version=config.PLACES_VERSION, mapping_version="rule_v2")
     return _sample(db)

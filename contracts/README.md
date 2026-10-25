@@ -22,7 +22,7 @@ Rules for everyone
 | Itinerary optimizer (H, E3) | Recommender owner (proposed) | `POST /plans` | `plans.*.json` |
 | Opening-hours enrichment + E2 | Data owner | *to be defined* (replaces `availability.*.json`) | — |
 | AI agent | Agent owner | `POST /agent/turn` | `agent.*.json` |
-| Place data | Data owner | CSV → `python -m app.import_places` | `data/places/README.md` |
+| Place data | Data owner | CSV → `python -m app.import_places` | `src/ourney_travelsync/data/README.md` |
 
 Reference implementation of the scoring + GFAR from the SDD: `services/mocks/group_rec.py`
 (tests: `api/tests/test_group_rec.py` — score 10/30 and the GFAR fixture A, C, B).

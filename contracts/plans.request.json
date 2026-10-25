@@ -9,7 +9,7 @@
     "start": "10:00",
     "end": "21:00"
   },
-  "dataset_version": "busan-csv-1",
+  "dataset_version": "busan-v2",
   "candidates": [
     {
       "poi_id": "tour:2755676",

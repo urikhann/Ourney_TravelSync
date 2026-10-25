@@ -1,7 +1,7 @@
 """Import the data pipeline's CSV (travelsync_final_places.csv) as a new dataset version.
 
     cd api
-    python -m app.import_places ../data/places/travelsync_final_places.csv --version busan-2026-10-v1 --mapping rule_v2
+    python -m app.import_places ../src/ourney_travelsync/data/travelsync_final_places_v2.csv --version busan-v2 --mapping rule_v2
 
 What it does (SRS FR-POI-DATA-01 / SDD 6.11, simplified for v1):
   1. checks every row (id, name, Busan coordinates, 10 features that are exactly 0 or 1, at least one 1)
@@ -27,7 +27,7 @@ STAY_MIN = {"food": 70, "cafe": 60, "nature": 90, "history": 75, "art": 75, "sho
             "activity": 90, "entertainment": 120, "relax": 60, "festival": 120}
 STAY_RULE = "stay-rule-1"  # category default stay times are ESTIMATED (SDD 7.2)
 TAG_RULES = {
-    "hiking": re.compile(r"등산|둘레길|트레킹"),
+    "hiking": re.compile(r"등산|둘레길|트레킹|갈맷길|숲길"),  # 갈맷길 = Busan's long walking trails
     "raw_fish": re.compile(r"횟집|회센터|회집|물회|활어|초밥|스시|사시미|오마카세"),
     "alcohol": re.compile(r"술집|주점|호프|포차|이자카야|와인바|칵테일바"),
 }
