@@ -25,3 +25,4 @@ dist/
 *.db
 .DS_Store
 !.env.example
+*.tsbuildinfo
