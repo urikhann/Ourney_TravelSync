@@ -1,0 +1,108 @@
+/* ============================================================
+   Login, sign-up and home (My trips) screens.
+   Uses the colour and font tokens from styles.css.
+   ============================================================ */
+
+/* ---------- auth frame: navy header with merging routes + white sheet ---------- */
+.auth { flex: 1; display: flex; flex-direction: column; background: var(--navy); }
+.auth-hero { position: relative; overflow: hidden; padding: calc(58px + env(safe-area-inset-top, 0px)) 24px 52px; color: #fff; }
+.auth-art { display: block; width: calc(100% + 48px); height: 140px; margin: 0 -24px 8px; }
+.auth-route { stroke-dashoffset: 0; animation: route-in 1.1s ease-out both; }
+.auth-merge { stroke-dasharray: 80; animation: merge-in .5s .9s ease-out both; }
+.auth-pin { animation: pin-in .35s 1.3s cubic-bezier(.3, 1.6, .5, 1) both; transform-box: fill-box; transform-origin: center; }
+@keyframes route-in { from { opacity: 0; stroke-dashoffset: 120; } to { opacity: 1; stroke-dashoffset: 0; } }
+@keyframes merge-in { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
+@keyframes pin-in { from { opacity: 0; scale: .4; } to { opacity: 1; scale: 1; } }
+@media (prefers-reduced-motion: reduce) { .auth-route, .auth-merge, .auth-pin { animation: none; } }
+
+.auth-brand { position: absolute; top: calc(20px + env(safe-area-inset-top, 0px)); left: 24px; display: flex; align-items: center; gap: 8px; font: 800 15px var(--display); letter-spacing: -.1px; }
+.auth-mark { width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: var(--blue); display: grid; place-items: center; transform: rotate(-45deg); }
+.auth-mark span { width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+.auth-title { margin: 0; font: 800 30px/1.1 var(--display); letter-spacing: -.6px; }
+.auth-sub { margin: 8px 0 0; font-size: 14.5px; color: #c7d2fe; }
+.auth-sub b { color: #fff; }
+
+.auth-sheet { flex: 1; margin-top: -28px; position: relative; background: var(--bg); border-radius: 28px 28px 0 0; padding: 26px 22px calc(28px + env(safe-area-inset-bottom, 0px)); }
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.auth-field { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.auth-label-row { display: flex; justify-content: space-between; align-items: baseline; }
+.auth-link { color: var(--blue); font-weight: 600; font-size: 13px; }
+.auth-link:disabled { opacity: .5; }
+.auth-hint { margin: -4px 2px 0; font-size: 12.5px; color: var(--muted); }
+.auth-hint.bad { color: var(--rose-d); font-weight: 600; }
+.auth-foot { margin: 22px 0 0; text-align: center; font-size: 14px; color: var(--muted); }
+.auth-foot a { font-weight: 700; }
+.auth-note { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 11px 13px; border-radius: 14px; background: var(--blue-50); color: #1e3a8a; font-size: 13px; font-weight: 600; }
+.auth-form .auth-note { margin-bottom: 0; }
+.auth-row-links { display: flex; justify-content: space-between; padding: 0 2px; }
+
+/* ---------- inputs with an icon (and the password eye) ---------- */
+.inp { position: relative; display: flex; align-items: center; }
+.inp input { width: 100%; height: 52px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; padding: 0 44px 0 42px; font: 15.5px var(--body); color: var(--ink); transition: border-color .15s, box-shadow .15s; }
+.inp input::placeholder { color: #a8b3c4; }
+.inp input:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 4px var(--blue-50); }
+.inp input[aria-invalid="true"] { border-color: #f4a3b4; }
+.inp-ico { position: absolute; left: 14px; color: var(--soft); pointer-events: none; }
+.inp:focus-within .inp-ico { color: var(--blue); }
+.inp-eye { position: absolute; right: 6px; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
+.inp-eye:hover { background: #f1f5f9; }
+
+/* ---------- password strength + match ---------- */
+.pw-meter { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.pw-bars { display: flex; gap: 4px; flex: 1; }
+.pw-bars i { flex: 1; height: 5px; border-radius: 3px; background: #e2e8f0; transition: background .2s; }
+.pw-meter[data-level="0"] { color: var(--rose-d); }
+.pw-meter[data-level="1"] .pw-bars i:nth-child(1) { background: var(--amber); }
+.pw-meter[data-level="2"] .pw-bars i:nth-child(-n+2) { background: var(--blue); }
+.pw-meter[data-level="3"] .pw-bars i { background: var(--green); }
+.pw-match { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; }
+.pw-match.ok { color: var(--green-d); }
+.pw-match.bad { color: var(--rose-d); }
+
+/* ---------- 6-box verification code (one real input on top) ---------- */
+.code-boxes { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.code-boxes input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; }
+.code-box { height: 56px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; display: grid; place-items: center; font: 800 22px var(--display); color: var(--ink); }
+.code-boxes:focus-within .code-box.on { border-color: var(--blue); box-shadow: 0 0 0 4px var(--blue-50); }
+
+/* ---------- home (My trips) ---------- */
+.home { flex: 1; padding: calc(18px + env(safe-area-inset-top, 0px)) 18px 28px; display: flex; flex-direction: column; }
+.home-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.home-hi { font: 800 21px var(--display); letter-spacing: -.3px; }
+
+.join-card { background: var(--navy); color: #fff; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.join-top { display: flex; gap: 12px; align-items: center; }
+.join-ico { width: 40px; height: 40px; border-radius: 12px; background: rgba(255, 255, 255, .1); display: grid; place-items: center; flex: none; color: #fbbf24; }
+.join-title { font: 800 16px var(--display); }
+.join-sub { font-size: 12.5px; color: #c7d2fe; margin-top: 1px; }
+.join-row { display: flex; gap: 8px; }
+.join-row input { flex: 1; min-width: 0; height: 48px; border-radius: 13px; border: 1.5px solid transparent; background: #fff; padding: 0 14px; font: 700 16px var(--body); letter-spacing: 1.5px; color: var(--ink); text-transform: uppercase; }
+.join-row input::placeholder { color: #b6c0d0; letter-spacing: 1.5px; }
+.join-row input:focus { outline: none; border-color: #93c5fd; }
+.join-btn { flex: none; height: 48px; padding: 0 20px; border-radius: 13px; background: var(--blue); color: #fff; font-weight: 700; font-size: 15px; }
+.join-error { font-size: 12.5px; font-weight: 600; color: #fecdd3; }
+
+.home-section { display: flex; align-items: baseline; gap: 8px; margin: 24px 2px 10px; }
+.home-section h2 { margin: 0; font: 800 17px var(--display); }
+.home-empty { padding: 18px; border-radius: 18px; border: 1.5px dashed #cbd5e1; text-align: center; }
+.home-empty p { margin: 2px 0; }
+
+.trip-list { display: flex; flex-direction: column; gap: 10px; }
+.trip-card { display: flex; align-items: center; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 18px; color: inherit; }
+.trip-card:active { transform: scale(.99); }
+.trip-card.past { opacity: .65; }
+.trip-date { width: 50px; height: 54px; border-radius: 14px; background: var(--blue-50); color: var(--blue); display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; line-height: 1; }
+.trip-date span { font-size: 11px; font-weight: 700; }
+.trip-date b { font: 800 21px var(--display); margin-top: 3px; }
+.trip-card.now .trip-date { background: var(--green-50); color: var(--green-d); }
+.trip-card.past .trip-date { background: #f1f5f9; color: var(--muted); }
+.trip-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 5px; font-size: 12.5px; color: var(--muted); }
+.trip-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.trip-status { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--blue-50); color: var(--blue); }
+.trip-status.now { background: var(--green-50); color: var(--green-d); }
+.trip-status.past { background: #f1f5f9; color: var(--muted); }
+
+.new-trip-btn { margin-top: 14px; height: 54px; border-radius: 18px; border: 1.5px dashed #b6c3d6; color: var(--navy); font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.new-trip-btn:hover { background: #fff; }
+.new-trip { margin-top: 14px; padding: 16px; background: #fff; border: 1px solid var(--line); border-radius: 20px; display: flex; flex-direction: column; gap: 14px; }

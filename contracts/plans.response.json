@@ -1,0 +1,28 @@
+{
+  "plans": [
+    {
+      "variant": "best",
+      "stats": {
+        "group_fit": 0.297,
+        "cost_per_person": 0,
+        "cost_unknown_count": 9,
+        "walking_km_per_day": null
+      },
+      "days": [
+        {
+          "date": "2026-10-10",
+          "items": [
+            {
+              "poi_id": "gamcheon",
+              "start": "14:00",
+              "end": "15:30",
+              "locked": false,
+              "moved_from": null,
+              "availability": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

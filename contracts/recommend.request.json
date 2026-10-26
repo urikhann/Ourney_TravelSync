@@ -1,0 +1,116 @@
+{
+  "schema_version": "rec-1.0",
+  "trip_id": "t_busan",
+  "city": "busan",
+  "dataset_version": "busan-v2",
+  "feature_schema_version": "fs-1.0",
+  "features": [
+    "food",
+    "cafe",
+    "nature",
+    "history",
+    "art",
+    "shopping",
+    "activity",
+    "entertainment",
+    "relax",
+    "festival"
+  ],
+  "dates": [
+    "2026-10-09",
+    "2026-10-10",
+    "2026-10-11"
+  ],
+  "members": [
+    {
+      "user_id": "u_bat",
+      "preference_version": 2,
+      "ratings": {
+        "food": 5,
+        "cafe": 5,
+        "nature": 2,
+        "history": 3,
+        "art": 2,
+        "shopping": 3,
+        "activity": 2,
+        "entertainment": 3,
+        "relax": 4,
+        "festival": 3
+      },
+      "exclusions": {
+        "tags": [
+          "hiking"
+        ],
+        "poi_ids": []
+      }
+    },
+    {
+      "user_id": "u_jae",
+      "preference_version": 1,
+      "ratings": {
+        "food": 5,
+        "cafe": 4,
+        "nature": 3,
+        "history": 3,
+        "art": 2,
+        "shopping": 2,
+        "activity": 4,
+        "entertainment": 4,
+        "relax": 2,
+        "festival": 5
+      },
+      "exclusions": {
+        "tags": [],
+        "poi_ids": []
+      }
+    },
+    {
+      "user_id": "u_sora",
+      "preference_version": 1,
+      "ratings": {
+        "food": 3,
+        "cafe": 4,
+        "nature": 5,
+        "history": 3,
+        "art": 5,
+        "shopping": 2,
+        "activity": 1,
+        "entertainment": 2,
+        "relax": 5,
+        "festival": 3
+      },
+      "exclusions": {
+        "tags": [],
+        "poi_ids": []
+      }
+    },
+    {
+      "user_id": "u_minho",
+      "preference_version": 3,
+      "ratings": {
+        "food": 4,
+        "cafe": 3,
+        "nature": 5,
+        "history": 4,
+        "art": 3,
+        "shopping": 2,
+        "activity": 5,
+        "entertainment": 4,
+        "relax": 2,
+        "festival": 3
+      },
+      "exclusions": {
+        "tags": [
+          "raw_fish"
+        ],
+        "poi_ids": []
+      }
+    }
+  ],
+  "options": {
+    "method": "gfar",
+    "top_l": 100,
+    "group_k": 30,
+    "awm_threshold": null
+  }
+}

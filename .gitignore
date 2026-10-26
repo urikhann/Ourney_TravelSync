@@ -38,7 +38,7 @@ dvclive/
 /mlartifacts/
 /mlruns/
 
-# Build and generated collection artifacts
+# Build and generated collection artifacts (recommender / data)
 /dist/
 /build/
 *.egg-info/
@@ -46,7 +46,16 @@ dvclive/
 /data/
 /output/
 /.dvc/
-!.env.example
 .pytest_cache/
 .venv-review/
 .venv-wheel-review/
+
+# Web app + backend (Bat)
+node_modules/
+dist/
+*.db
+.DS_Store
+*.tsbuildinfo
+
+# Templates are allowed (must contain placeholders only)
+!.env.example
