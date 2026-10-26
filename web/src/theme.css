@@ -1,0 +1,311 @@
+/* =====================================================================
+   TravelSync — theme.css  (new look: minimal, flat, one font)
+   Put this file in:  web/src/theme.css
+   Import it LAST in web/src/main.tsx (after styles.css and screens.css)
+   It only re-skins existing class names, so no page logic changes.
+   To undo everything: remove the  import "./theme.css";  line.
+   ===================================================================== */
+
+/* ---------- 1. Design tokens ----------
+   The old variable names are kept on purpose (--navy, --blue, ...)
+   so every place that already uses var(--navy) etc. picks up the
+   new colours automatically. */
+:root, .app {
+  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+          system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  /* neutrals */
+  --ink:   #0F1729;   /* text, primary buttons, tab bar      */
+  --navy:  #0F1729;   /* old "navy" now = ink (flat, no blue tint) */
+  --muted: #667085;   /* secondary text                       */
+  --soft:  #98A2B3;   /* hints, inactive icons                */
+  --line:  #E4E7EC;   /* hairlines                            */
+  --fill:  #EEF0F4;   /* inputs, segmented control background */
+  --bg:    #F4F5F7;   /* page background ("paper")            */
+  --surface: #FFFFFF; /* cards / grouped lists                */
+
+  /* one accent */
+  --blue:     #2D5BFF;
+  --blue-50:  #EEF2FF;
+
+  /* semantic */
+  --green:    #0CA678;  --green-d: #087F5B;  --green-50: #E6FCF5;
+  --amber:    #E8590C;  --amber-d: #C2410C;  --amber-50: #FFF4E6;
+  --rose:     #F03E3E;  --rose-d:  #C92A2A;  --rose-50:  #FFF5F5;
+  --purple:   #AE3EC9;  --purple-50: #F8F0FC;
+
+  /* member colours — the signature of the app (use in this order) */
+  --m1: #2D5BFF;  --m2: #12B886;  --m3: #F59F00;  --m4: #AE3EC9;
+  --m5: #F03E3E;  --m6: #15AABF;
+
+  --r-lg: 20px;  --r-md: 14px;  --r-sm: 10px;
+  --shadow-pop: 0 10px 30px rgba(15, 23, 41, .18);
+}
+
+/* ---------- 2. Base ---------- */
+html, body { background: var(--bg); }
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss06";          /* Pretendard: cleaner digits */
+}
+button, input, select, textarea { font-family: var(--font); }
+
+/* old inline styles that hard-code the previous fonts */
+[style*="Jakarta"], [style*="Inter,"] { font-family: var(--font) !important; }
+
+/* numbers line up (scores, times, prices) */
+.score, .stat, .tl-time, .num { font-variant-numeric: tabular-nums; }
+
+/* ---------- 3. Headings ---------- */
+.title {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+.topbar { min-height: 56px; }
+.topbar h1 {
+  font-family: var(--font);
+  font-weight: 650;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.h2 {
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 26px 4px 10px;
+  letter-spacing: 0;
+}
+.h2 small { font-family: var(--font); font-weight: 500; color: var(--soft); }
+.score { font-family: var(--font); font-weight: 700; letter-spacing: -0.02em; }
+.tag  { letter-spacing: .02em; text-transform: none; font-weight: 600; font-size: 12px; }
+
+/* ---------- 4. Surfaces ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+.card.pad, .pad { padding: 16px; }
+
+/* stacked rows inside a card = one "grouped list" with hairlines */
+.list-row { padding: 14px 0; border-bottom: 1px solid var(--line); gap: 14px; }
+.list-row:last-child { border-bottom: 0; }
+
+.iconbtn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.iconbtn:hover { background: var(--fill); }
+
+.ico-sq { width: 40px; height: 40px; border-radius: 12px; }
+
+/* flat place thumbnails instead of gradients */
+.thumb { border-radius: 14px; }
+.thumb[style*="gradient"] { background: var(--ink) !important; }
+.thumb img { border-radius: inherit; }
+
+/* hero blocks: flat ink, no gradient, no decorative circles */
+.hero { background: var(--ink) !important; border-radius: 24px; }
+.place-hero { border-radius: 24px; }  /* white card; only its cover keeps the category colour */
+.hero > [style*="border-radius:50%"][style*="position:absolute"],
+.hero > [style*="border-radius: 50%"][style*="position: absolute"] { display: none; }
+
+.banner { border-radius: var(--r-md); border: 0; }
+
+/* ---------- 5. Buttons ---------- */
+.btn {
+  height: 54px;
+  border-radius: 16px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  transition: transform .12s ease, opacity .2s ease, background .2s ease;
+}
+.btn:hover { background: #1D2939; }
+.btn:active { transform: scale(.985); }
+/* one primary style: blue/purple buttons become ink */
+.btn.blue, .btn.purple { background: var(--ink); }
+.btn.green { background: var(--green); }
+.btn.ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.btn.ghost:hover { background: var(--fill); }
+.btn.sm { height: 40px; border-radius: 12px; font-size: 14px; }
+.btn[disabled] { opacity: .35; }
+
+/* ---------- 6. Chips ---------- */
+.chip { padding: 5px 10px; font-weight: 600; font-size: 12px; border-radius: 999px; }
+
+/* ---------- 7. Forms ---------- */
+.field label, label.field {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.field input, .field select, .field textarea,
+input.input, .input input {
+  height: 54px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 0 16px;
+  font-size: 16px;               /* 16px stops iOS zoom-on-focus */
+  color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
+}
+.field textarea { height: auto; min-height: 96px; padding: 14px 16px; }
+.field input::placeholder, .field textarea::placeholder { color: var(--soft); }
+.field input:focus, .field select:focus, .field textarea:focus,
+input.input:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px rgba(15, 23, 41, .07);
+}
+.error { color: var(--rose); font-size: 13px; font-weight: 500; }
+
+/* ---------- 8. Segmented control (GFAR / Average etc.) ---------- */
+.seg {
+  background: var(--fill);
+  border: 0;
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg button { border-radius: 10px; color: var(--muted); font-weight: 600; padding: 9px 0; }
+.seg button.on, .seg button.active, .seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(15, 23, 41, .08), 0 0 0 1px rgba(15, 23, 41, .04);
+}
+
+/* ---------- 9. 1–5 rating buttons ---------- */
+.rate { gap: 4px; }
+.rate button {
+  width: 30px; height: 30px;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--soft);
+  font-weight: 650;
+  font-size: 13px;
+}
+.rate button.lo { background: var(--blue-50); color: var(--blue); }
+.rate button.on { background: var(--ink); color: #fff; }
+
+/* ---------- 10. Bars / rings ---------- */
+.bar { height: 6px; border-radius: 3px; background: var(--fill); }
+.bar i { background: var(--ink); border-radius: 3px; }
+.bar i.bad { background: var(--rose); }
+
+/* ---------- 11. Avatars ---------- */
+.av { border-color: var(--surface); font-weight: 700; }
+
+/* ---------- 12. Tab bar → floating ink pill ----------
+   Inactive tabs show only the icon, the active tab shows icon + label.
+   (font-size:0 hides the text label; icons keep their own size) */
+.tabbar {
+  height: auto;
+  margin: 0 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 6px;
+  background: var(--ink);
+  border: 0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  box-shadow: var(--shadow-pop);
+}
+.tab {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 999px;
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0;                  /* hide label when inactive */
+  color: #8A93A6;
+  transition: background .2s, color .2s;
+}
+.tab svg { stroke: currentColor !important; }
+.tab.on, .tab.active, .tab[aria-current="page"] {
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+.tab .dot { top: 10px; right: 10px; border-color: var(--ink); }
+
+/* ---------- 13. Timeline (Plan screen) ---------- */
+.tl:before { background: var(--line); width: 2px; }
+.tl-dot { border-color: var(--ink); }
+.tl-time { color: var(--muted); font-weight: 600; }
+.leg { color: var(--soft); font-weight: 500; }
+
+/* ---------- 14. Sheets, toasts, empty states ---------- */
+.sheet { border-radius: 28px 28px 0 0; }
+.grab { background: var(--line); }
+.toast { background: var(--ink); border-radius: 16px; }
+.empty { padding: 72px 24px 24px; }
+.empty .score { font-size: 20px; }
+
+/* ---------- 15. Auth screens (used by the new AuthShell.tsx) ---------- */
+.ts-auth {
+  min-height: 100dvh;
+  background: var(--bg);
+  display: flex;
+  justify-content: center;
+}
+.ts-auth-inner {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px 22px 40px;
+  display: flex;
+  flex-direction: column;
+}
+.ts-brand {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 700; font-size: 16px; letter-spacing: -0.01em;
+}
+.ts-brand-mark { width: 28px; height: 28px; flex: none; display: block; }
+.ts-auth-art { display: block; width: 100%; height: auto; margin: 36px 0 18px; }
+.ts-auth-title {
+  font-size: 30px; font-weight: 700; line-height: 1.15;
+  letter-spacing: -0.03em; margin: 0;
+}
+.ts-auth-sub { color: var(--muted); font-size: 15px; margin: 8px 0 0; line-height: 1.5; }
+.ts-auth-body { margin-top: 26px; }
+.ts-auth-body .field + .field { margin-top: 14px; }
+.ts-auth-body .btn { margin-top: 22px; }
+.ts-auth-foot { margin-top: 18px; text-align: center; font-size: 14.5px; color: var(--muted); }
+.ts-auth-foot a, .ts-auth-foot button { color: var(--ink); font-weight: 650; }
+
+/* the old auth layout pieces are now flat */
+.auth-sheet {
+  background: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ---------- 16. Respect reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

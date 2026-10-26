@@ -1,0 +1,63 @@
+{
+  "schema_version": "rec-1.0",
+  "model_version": "rec-v1",
+  "dataset_version": "busan-v2",
+  "feature_schema_version": "fs-1.0",
+  "method": "gfar",
+  "group": [
+    {
+      "poi_id": "tour:2755676",
+      "group_rank": 1,
+      "mean_score": 0.394,
+      "selection_gain": 1.21,
+      "group_utility": 1000,
+      "member_scores": {
+        "u_bat": 0.34,
+        "u_jae": 0.38,
+        "u_sora": 0.39,
+        "u_minho": 0.46
+      },
+      "picked_for": "u_minho",
+      "reasons": [
+        {
+          "code": "shared_interest",
+          "text": "2 of 4 love nature & views"
+        },
+        {
+          "code": "fair_pick",
+          "text": "Fair pick for u_minho",
+          "user_id": "u_minho"
+        }
+      ]
+    }
+  ],
+  "removed": [
+    {
+      "poi_id": "tour:129156",
+      "stage": "E1",
+      "rule": "member_exclusion",
+      "detail": "hiking (u_bat)"
+    }
+  ],
+  "individual": {
+    "u_bat": [
+      {
+        "poi_id": "kakao:8732558",
+        "score": 0.333333,
+        "rank": 1
+      }
+    ]
+  },
+  "metrics": {
+    "eligible": 3540,
+    "candidate_pool": 196,
+    "returned": 30,
+    "per_member_relevance": {
+      "u_bat": 0.42,
+      "u_jae": 0.36,
+      "u_sora": 0.21,
+      "u_minho": 0.29
+    },
+    "min_member_relevance": 0.21
+  }
+}
