@@ -1,0 +1,3 @@
+.semantic-venv/
+.model-cache/
+__pycache__/
