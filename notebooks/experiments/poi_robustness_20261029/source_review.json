@@ -1,0 +1,120 @@
+{
+  "review_date_korea": "2026-10-29",
+  "scope": "Bounded public-source follow-up for two conflicts and six missing summaries. A search miss is not proof that no description exists. No current availability, price, accessibility or quality inferred.",
+  "records": [
+    {
+      "place_id": "kakao:1542536804",
+      "issue": "missing description",
+      "status": "RESOLVED_SUMMARY_IN_EXPERIMENT_OVERLAY",
+      "source_url": "https://www.bsdonggu.go.kr/board/view.donggu?boardId=BBS_0000201&dataSid=5053866&menuCd=DOM_000000104008001002&paging=ok&startPage=4",
+      "source_type": "OFFICIAL_DISTRICT",
+      "retrieval": "FULL_TEXT",
+      "source_publication_date": "2024-02-15",
+      "identity_evidence": "Exact facility name and road address 수정공원로 63-1 match frozen record. Municipality lists exercise apparatus, parallel bars and basketball hoops. Distinct from nearby 수정산꿈자람터.",
+      "description_summary": "부산 동구 수정공원로63-1에 있는 체육공원으로, 동구청 시설 안내에 평행봉과 농구대 등 운동시설이 기록되어 있다.",
+      "limitations": "Historical facilities listing; current condition and availability not verified. No nearby playground conditions transferred. Research overlay only. Source carries KOGL type 4 attribution/noncommercial/no-change notice; source link retained, facts summarized."
+    },
+    {
+      "place_id": "kakao:1584060565",
+      "issue": "cafe feature versus restaurant description",
+      "status": "RESTAURANT_ATTRIBUTE_CONFIRMED_FEATURE_CONFLICT_REMAINS",
+      "source_url": "https://www.pknu.ac.kr/main/118",
+      "source_type": "OFFICIAL_UNIVERSITY",
+      "retrieval": "FULL_TEXT",
+      "source_publication_date": "page last modified 2026-03-06",
+      "identity_evidence": "Official university table lists Tavolo as a restaurant on floor 1 of Dongwon Jangbogo Hall, with pasta, pizza and risotto. Campus street address agrees with frozen 용소로45. Confirms restaurant attributes, but does not establish a revised canonical binary feature vector.",
+      "description_summary": "",
+      "limitations": "Retain original cafe vector unchanged. Exclude from primary scorer comparison because correcting feature semantics would change baseline inputs. No current menu price or schedule inferred."
+    },
+    {
+      "place_id": "kakao:25969605",
+      "issue": "birthplace versus memorial identity/address boundary",
+      "status": "UNRESOLVED_EXCLUDED",
+      "source_url": "https://www.bsseogu.go.kr/tour/board/view.do?boardId=BBS_0000084&dataSid=5030&menuCd=DOM_000000304006000000&startPage=1",
+      "source_type": "OFFICIAL_DISTRICT",
+      "retrieval": "SEARCH_EXCERPT_FULL_PAGE_TIMEOUT",
+      "source_publication_date": "not established",
+      "identity_evidence": "Municipal search excerpt still gives birthplace at 해양로22번길13 / 남부민동611-350, differing from frozen 12 / 611-340. Municipality describes memorial separately above birthplace.",
+      "description_summary": "",
+      "limitations": "Do not merge nearby birthplace and memorial or transfer admission/operating facts."
+    },
+    {
+      "place_id": "kakao:10531018",
+      "issue": "missing description",
+      "status": "UNRESOLVED_NO_SAFE_IDENTITY_MATCH",
+      "source_url": "",
+      "source_type": "BOUNDED_SEARCH",
+      "retrieval": "SEARCH",
+      "source_publication_date": "",
+      "identity_evidence": "Searches for 신선대유원지 and original 용호동산248 found wider-site/용당동 references without resolving original boundary.",
+      "description_summary": "",
+      "limitations": "Retain metadata only; wider destination description not transferred."
+    },
+    {
+      "place_id": "kakao:1869511598",
+      "issue": "missing description",
+      "status": "UNRESOLVED_NO_SAFE_IDENTITY_MATCH",
+      "source_url": "https://www.busan.go.kr/jumin04/1588146",
+      "source_type": "OFFICIAL_CITY",
+      "retrieval": "SEARCH_EXCERPT",
+      "source_publication_date": "2023-08-24",
+      "identity_evidence": "City event notice identifies an under-viaduct sports park. District 2018 white paper refers to 산8-18, while frozen record gives 산8-8. No precise boundary match established.",
+      "description_summary": "",
+      "limitations": "Do not transfer event activities or tree inventory from a possibly different park scope."
+    },
+    {
+      "place_id": "kakao:1637578233",
+      "issue": "missing description",
+      "status": "UNRESOLVED_PRIMARY_SOURCE_NOT_FOUND_IN_BOUNDED_SEARCH",
+      "source_url": "",
+      "source_type": "BOUNDED_SEARCH",
+      "retrieval": "SEARCH",
+      "source_publication_date": "",
+      "identity_evidence": "메이갤러리 plus 괴정동 / municipality search yielded no adequate primary narrative for original address.",
+      "description_summary": "",
+      "limitations": "No similarly named gallery information transferred."
+    },
+    {
+      "place_id": "kakao:643003723",
+      "issue": "missing description",
+      "status": "UNRESOLVED_PRIMARY_NARRATIVE_NOT_FOUND",
+      "source_url": "",
+      "source_type": "BOUNDED_SEARCH",
+      "retrieval": "SEARCH",
+      "source_publication_date": "",
+      "identity_evidence": "Third-party licensing mirrors match 대성관온천 and 금강로124번길19 but no directly verified primary narrative was available within bounded search.",
+      "description_summary": "",
+      "limitations": "Hotel or bathhouse aggregator attributes not imported. No opening status, prices or thermal-water properties inferred."
+    },
+    {
+      "place_id": "kakao:17201972",
+      "issue": "missing description",
+      "status": "UNRESOLVED_PRIMARY_SOURCE_NOT_FOUND_IN_BOUNDED_SEARCH",
+      "source_url": "",
+      "source_type": "BOUNDED_SEARCH",
+      "retrieval": "SEARCH",
+      "source_publication_date": "",
+      "identity_evidence": "Exact 부산아틀리에 / 연산동 and operator-domain search did not establish current narrative for original site.",
+      "description_summary": "",
+      "limitations": "No 서면 상상마당 program information transferred."
+    }
+  ],
+  "search_queries": [
+    "site.pknu.ac.kr 타보로 동원장보고관 070 4471 0790",
+    "site.bsseogu.go.kr 이태석 생가 해양로22번길 13 12",
+    "site.bsdonggu.go.kr 수정산가족체육공원 수정동 713",
+    "site.suyeong.go.kr 광안3동 체육공원 산8-8",
+    "\"이태석\" \"생가\" \"해양로22번길\"",
+    "\"신선대유원지\" \"산248\"",
+    "\"대성관온천\" \"금강로124번길19\"",
+    "\"KT&G상상유니브 부산아틀리에\" 연산동",
+    "\"메이갤러리\" \"괴정동\"",
+    "\"신선대유원지\" site.bsnamgu.go.kr",
+    "\"광안3동\" \"체육공원\" site.suyeong.go.kr",
+    "\"수정산가족체육공원\" \"713\"",
+    "\"KT&G상상유니브\" \"부산아틀리에\" site.sangsanguniv.com",
+    "\"메이갤러리\" \"괴정\" site.busan.go.kr",
+    "\"대성관온천\" site.dongnae.go.kr",
+    "\"수정산가족체육공원\" site.bsdonggu.go.kr \"수정공원로\""
+  ]
+}
