@@ -11,7 +11,7 @@ def place_dict(p: Poi) -> dict:
             "features": [f for f in FEATURES if (p.features or {}).get(f)],
             "indoor": p.indoor, "avg_cost_krw": p.avg_cost_krw, "duration_min": p.duration_min,
             "image_url": p.image_url or None, "place_url": p.place_url or None, "lat": p.lat, "lng": p.lng,
-            "field_status": p.field_status or {}}
+            "enriched_metadata": p.enriched_metadata or {}, "field_status": p.field_status or {}}
 
 
 def load_places(db: Session, version: str, ids) -> dict[str, dict]:

@@ -1,6 +1,19 @@
 # CSV to PostgreSQL mapping
 
-The official travelsync_final_places_v2.csv was inspected and strictly validated:
+The current default is `src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv`: 3,570 rows, 72 columns. SHA256: `583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`.
+Its original 29 columns match the previous v2 snapshot exactly. The additional
+43 fields are preserved as source strings in `poi.enriched_metadata` (JSONB),
+including provenance and operating-text fields. Apply migration 003 with
+`ourney-travelsync db-migrate --directory database` before importing it into an
+existing package database. No availability or cost is inferred from this text.
+The API importer stores the same fields in `pois.enriched_metadata` (JSON).
+Existing API tables receive that additive column on startup or CLI import.
+Use a new dataset version when importing; existing snapshots remain immutable.
+
+## Core v2 mapping
+
+
+The previous travelsync_final_places_v2.csv was inspected and strictly validated:
 3,570 rows, 29 columns, 3,570 unique external IDs. Canonical location:
 src/ourney_travelsync/data/travelsync_final_places_v2.csv.
 SHA256: 5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15.

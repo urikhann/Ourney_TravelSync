@@ -2,7 +2,7 @@
   "schema_version": "rec-1.0",
   "trip_id": "t_busan",
   "city": "busan",
-  "dataset_version": "busan-v2",
+  "dataset_version": "busan-enriched-v1",
   "feature_schema_version": "fs-1.0",
   "features": [
     "food",

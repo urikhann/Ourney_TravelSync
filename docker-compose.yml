@@ -19,7 +19,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       WEB_ORIGIN: http://localhost:5173
-      PLACES_CSV: /data/travelsync_final_places_v2.csv   # official v2 snapshot, imported into an empty database on first start
+      PLACES_CSV: /data/travelsync_poi_metadata_enriched_v1.csv   # enriched POI snapshot, imported into an empty database on first start
     ports: ["8000:8000"]
     depends_on:
       db: {condition: service_healthy}

@@ -3,11 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .db import Base, SessionLocal, engine
+from .db import Base, SessionLocal, engine, ensure_enriched_metadata_column
 from .routes import auth, itineraries, pois, preferences, recommendations, trips
 from .seed import seed_if_empty
 
 Base.metadata.create_all(engine)
+ensure_enriched_metadata_column()
 with SessionLocal() as _db:
     seed_if_empty(_db)
 

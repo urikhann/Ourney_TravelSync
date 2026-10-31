@@ -184,6 +184,7 @@ class Poi(Base):
     duration_min: Mapped[int] = mapped_column(Integer, default=60)               # see field_status: usually ESTIMATED
     tags: Mapped[list] = mapped_column(JSON, default=list)                       # ["hiking"], ["raw_fish"], ["alcohol"]
     features: Mapped[dict] = mapped_column(JSON, default=dict)                   # the 10 features, each 0 or 1
+    enriched_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
     feature_rules: Mapped[str] = mapped_column(String(500), default="")          # why each feature was given
     field_status: Mapped[dict] = mapped_column(JSON, default=dict)               # {"hours": "UNKNOWN", "cost": "UNKNOWN", ...}
     walking_level: Mapped[float] = mapped_column(Float, default=0.0)

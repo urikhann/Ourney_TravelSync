@@ -15,7 +15,7 @@ ourney-travelsync = "ourney_travelsync.cli:main"
 [project.optional-dependencies]
 ingestion = ["requests", "pandas"]
 postgres = ["psycopg[binary]", "python-dotenv"]
-viewer = ["streamlit", "pandas", "psycopg[binary]", "python-dotenv"]
+viewer = ["streamlit", "altair", "pandas", "psycopg[binary]", "python-dotenv"]
 experiments = ["mlflow", "dvc"]
 
 [dependency-groups]

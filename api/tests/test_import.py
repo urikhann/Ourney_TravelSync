@@ -10,7 +10,7 @@ from app.features import FEATURES
 from app.import_places import ImportProblem, check_rows, import_rows
 from app.models import DatasetVersion, Poi
 
-REAL_CSV = Path(__file__).resolve().parents[2] / "src" / "ourney_travelsync" / "data" / "travelsync_final_places_v2.csv"
+REAL_CSV = Path(__file__).resolve().parents[2] / "src" / "ourney_travelsync" / "data" / "travelsync_poi_metadata_enriched_v1.csv"
 COLS = ["place_id", "place_name", "category_name", "address", "latitude", "longitude", "source", *FEATURES]
 
 
@@ -70,3 +70,19 @@ def test_the_real_pipeline_csv_passes_the_checks():
         rows = list(reader)
     assert len(rows) == 3570
     assert check_rows(rows, reader.fieldnames) == []
+
+
+def test_enriched_csv_metadata_survives_database_and_response(db):
+    import csv
+    from app.import_places import CORE_COLUMNS, import_csv
+    from app.places import place_dict
+
+    with REAL_CSV.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert import_csv(db, REAL_CSV, "enriched-test") == 3570
+    expected = {k: v for k, v in rows[0].items() if k not in CORE_COLUMNS}
+    db.expire_all()
+    saved = db.get(Poi, (rows[0]["place_id"], "enriched-test"))
+    assert len(expected) == 43
+    assert saved.enriched_metadata == expected
+    assert place_dict(saved)["enriched_metadata"] == expected

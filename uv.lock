@@ -2354,6 +2354,7 @@ postgres = [
     { name = "python-dotenv" },
 ]
 viewer = [
+    { name = "altair" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "python-dotenv" },
@@ -2368,6 +2369,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "altair", marker = "extra == 'viewer'" },
     { name = "dvc", marker = "extra == 'experiments'" },
     { name = "mlflow", marker = "extra == 'experiments'" },
     { name = "numpy", specifier = ">=2.1" },

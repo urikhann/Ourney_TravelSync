@@ -7,7 +7,7 @@ It only translates — the algorithm lives in the package.
 | | Mock (`services/mocks`, 8001) | This service (8002) |
 |---|---|---|
 | Algorithm | stand-in written from the SDD | **the team package** (Urikhan) |
-| Data | backend database | packaged v2 CSV, 3,570 places, version `busan-v2` |
+| Data | backend database | packaged enriched CSV, 3,570 places, version `busan-enriched-v1` |
 | Scores | 0–1 | **1–5** (`score_scale: "1-5"`) |
 | Ties | place id | seeded hash, **one seed per trip** (repeatable for a trip, different between trips) |
 
@@ -33,7 +33,7 @@ Point the backend at it: in `api/.env` put `RECOMMENDER_URL=http://localhost:800
 - `tie_seed`: optional; default is derived from `trip_id`
 - member `exclusions.resolved`: `{poi_id: reason}` — places the backend matched to a member's rule (e.g. hiking)
 
-Environment: `DATASET_VERSION` (default `busan-v2`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
+Environment: `DATASET_VERSION` (default `busan-enriched-v1`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
 
 ## Test
 

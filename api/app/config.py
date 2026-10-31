@@ -30,13 +30,13 @@ AVAILABILITY_URL = _env("AVAILABILITY_URL", "http://localhost:8001")
 AGENT_URL = _env("AGENT_URL", "http://localhost:8001")
 SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))
 
-# Place data: the official v2 snapshot that ships inside the recommender package (one source of truth
+# Place data: the enriched POI snapshot that ships inside the recommender package (one source of truth
 # for the whole team). Imported automatically into an empty database (see app/seed.py).
 # Set PLACES_CSV= (empty) to use the 28 sample places instead.
 _DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ourney_travelsync", "data",
-                            "travelsync_final_places_v2.csv")
+                            "travelsync_poi_metadata_enriched_v1.csv")
 PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)
-PLACES_VERSION = _env("PLACES_VERSION", "busan-v2")  # dataset version name for the auto-import
+PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v1")  # dataset version name for the auto-import
 
 # Group recommendation settings (SDD 8.3 / 9.2): L = each member's top list, K = group candidates.
 REC_TOP_L = int(_env("REC_TOP_L", "100"))

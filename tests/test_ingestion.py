@@ -56,3 +56,23 @@ def test_strict_csv_null_and_row_width(tmp_path):
     assert validate_rows(rows)[0]['phone'] is None
     path.write_text(path.read_text(encoding='utf-8').rstrip()+',extra\n',encoding='utf-8')
     with pytest.raises(ValueError): read_csv(path)
+
+
+def test_enriched_import_preserves_every_metadata_field():
+    pytest.importorskip('psycopg')
+    import csv
+    from importlib.resources import files, as_file
+    from ourney_travelsync.data_schema import ENRICHED_COLUMNS
+    from ourney_travelsync.db.poi_import import read_csv, validate_rows
+
+    with as_file(files('ourney_travelsync').joinpath('data', places.OFFICIAL_FILENAME)) as path:
+        with path.open(encoding='utf-8-sig', newline='') as handle:
+            source = list(csv.DictReader(handle))
+        rows = read_csv(path)
+    assert validate_rows(rows) == rows
+    for original, imported in zip(source, rows, strict=True):
+        assert imported['enriched_metadata'] == {k: original[k] for k in ENRICHED_COLUMNS}
+    legacy = {k: v for k, v in source[0].items() if k not in ENRICHED_COLUMNS}
+    assert 'enriched_metadata' not in validate_rows([legacy])[0]
+    with pytest.raises(ValueError, match='COLUMN_MISMATCH'):
+        validate_rows([{**legacy, 'unexpected_column': 'invalid'}])

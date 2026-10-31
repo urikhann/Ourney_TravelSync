@@ -1,7 +1,7 @@
 """Import the data pipeline's CSV (travelsync_final_places.csv) as a new dataset version.
 
     cd api
-    python -m app.import_places ../src/ourney_travelsync/data/travelsync_final_places_v2.csv --version busan-v2 --mapping rule_v2
+    python -m app.import_places ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv --version busan-enriched-v1 --mapping rule_v2
 
 What it does (SRS FR-POI-DATA-01 / SDD 6.11, simplified for v1):
   1. checks every row (id, name, Busan coordinates, 10 features that are exactly 0 or 1, at least one 1)
@@ -20,6 +20,10 @@ from sqlalchemy.orm import Session
 
 from .features import FEATURE_SCHEMA_VERSION, FEATURES
 from .models import DatasetVersion, Poi
+
+CORE_COLUMNS = {"place_id", "place_name", "category", "category_name", "cat1", "cat2", "cat3",
+                "address", "road_address", "latitude", "longitude", "phone", "place_url", "image_url",
+                "source", "source_place_id", "kakao_place_ids", "feature_rules", "exclude_reason", *FEATURES}
 
 REQUIRED = ["place_id", "place_name", "latitude", "longitude", *FEATURES]
 BUSAN_BOX = (34.8, 35.5, 128.7, 129.4)  # lat min/max, lng min/max — a sanity check, not an exact border
@@ -67,6 +71,7 @@ def row_to_poi(row: dict, version: str) -> Poi:
         place_url=row.get("place_url", ""), image_url=row.get("image_url", ""),
         lat=float(row["latitude"]), lng=float(row["longitude"]), indoor=indoor,
         avg_cost_krw=None, duration_min=STAY_MIN[primary],
+        enriched_metadata={k: v for k, v in row.items() if k not in CORE_COLUMNS},
         tags=_tags(name, category, f), features=f, feature_rules=(row.get("feature_rules") or "")[:500],
         field_status={"hours": "UNKNOWN", "closed_days": "UNKNOWN", "cost": "UNKNOWN",
                       "duration": "ESTIMATED", "duration_rule": STAY_RULE},
@@ -141,7 +146,7 @@ def active_version(db: Session) -> str | None:
 
 
 if __name__ == "__main__":
-    from .db import Base, SessionLocal, engine
+    from .db import Base, SessionLocal, engine, ensure_enriched_metadata_column
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv")
@@ -150,6 +155,7 @@ if __name__ == "__main__":
     ap.add_argument("--draft", action="store_true", help="import as DRAFT only, do not activate")
     a = ap.parse_args()
     Base.metadata.create_all(engine)
+    ensure_enriched_metadata_column()
     with SessionLocal() as s:
         try:
             n = import_csv(s, a.csv, a.version, a.mapping, activate=not a.draft)

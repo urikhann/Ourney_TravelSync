@@ -1,5 +1,5 @@
 """Database engine and session. SQLite by default, PostgreSQL in production."""
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import DATABASE_URL
@@ -19,3 +19,11 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_enriched_metadata_column():
+    """Add enrichment storage to existing API databases without replacing their datasets."""
+    with engine.begin() as conn:
+        columns = {c["name"] for c in inspect(conn).get_columns("pois")}
+        if "enriched_metadata" not in columns:
+            conn.execute(text("ALTER TABLE pois ADD COLUMN enriched_metadata JSON"))

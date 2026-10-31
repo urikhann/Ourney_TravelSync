@@ -77,11 +77,16 @@ docs/                 workflows, diagnostics and cleanup report
 ## Data and recommendation behavior
 
 The authoritative Git-tracked CSV is
-`src/ourney_travelsync/data/travelsync_final_places_v2.csv`: **3,570 records, 29
+`src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv`: **3,570 records, 72
 columns, 3,570 unique place IDs**. SHA256:
-`5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15`.
+`583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`.
 Sources: 345 TourAPI, 106 merged and 3,119 Kakao. Its adjacent README records
 provenance and the distinction between external place IDs and database UUIDs.
+The enriched snapshot preserves the previous 29 core columns and adds 43 metadata
+and provenance fields. Loaders retain all fields; database imports store the additions
+in `enriched_metadata`. Existing package databases require migration 003 before import.
+Existing API databases require an explicit CSV import with the new version
+`busan-enriched-v1`; startup seeds only an empty database.
 
 Feature order: `food, cafe, nature, history, art, shopping, activity,
 entertainment, relax, festival`. POIs have independent binary labels, at least one
@@ -120,8 +125,8 @@ commit credentials. Verify initialization on an empty disposable database first:
 
 ```powershell
 uv run --locked --extra postgres ourney-travelsync db-init --directory database
-uv run --locked --extra postgres ourney-travelsync db-import src/ourney_travelsync/data/travelsync_final_places_v2.csv --validate-only
-uv run --locked --extra postgres ourney-travelsync db-import src/ourney_travelsync/data/travelsync_final_places_v2.csv
+uv run --locked --extra postgres ourney-travelsync db-import src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv --validate-only
+uv run --locked --extra postgres ourney-travelsync db-import src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv
 uv run --locked --extra postgres ourney-travelsync db-check
 uv run --locked --extra postgres ourney-travelsync db-activate NEW_DATASET_UUID
 uv run --locked --extra postgres ourney-travelsync db-recommend GROUP_UUID CONSTRAINT_UUID --algorithm gfar

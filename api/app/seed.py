@@ -1,8 +1,8 @@
 """Fills an empty database with places so the app works out of the box.
 
-- If the real data file exists (PLACES_CSV, default: the v2 snapshot inside the recommender package,
-  src/ourney_travelsync/data/travelsync_final_places_v2.csv), it is imported as the ACTIVE dataset version
-  PLACES_VERSION ("busan-v2") — the 3,570 Busan places from the data pipeline.
+- If the real data file exists (PLACES_CSV, default: the enriched snapshot inside the recommender package,
+  src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv), it is imported as the ACTIVE dataset version
+  PLACES_VERSION ("busan-enriched-v1") — the 3,570 Busan places from the data pipeline.
 - Otherwise (and in the tests) the 28 hand-made sample places are loaded as dataset version "sample-v1".
 Runs on startup only when there is no ACTIVE dataset version yet. Later updates: python -m app.import_places ...
 """

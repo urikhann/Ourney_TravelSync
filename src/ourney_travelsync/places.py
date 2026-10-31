@@ -10,8 +10,8 @@ import numpy as np
 from .common import FloatArray
 from .features import FEATURE_NAMES, validate_features
 
-OFFICIAL_FILENAME = "travelsync_final_places_v2.csv"
-OFFICIAL_SHA256 = "5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15"
+OFFICIAL_FILENAME = "travelsync_poi_metadata_enriched_v1.csv"
+OFFICIAL_SHA256 = "583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4"
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class PlaceDataset:
 
 
 def load_places(path: str | Path | None = None) -> PlaceDataset:
-    """Validate core fields and preserve source/feature_rules as metadata.
+    """Validate core fields and preserve every supplied metadata column.
 
     No description, price, opening hours or dwell-time fields are required.
     Do not merge again: the input already contains the final merged POIs.
