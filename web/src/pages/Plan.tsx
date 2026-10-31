@@ -132,9 +132,13 @@ export default function Plan() {
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
                         <Clock size={12} /> Moved from {it.moved_from}{it.availability?.close ? ` · closes ${it.availability?.close}` : ""}
                       </span>
-                    ) : it.availability?.available && (
+                    ) : it.availability?.available ? (
                       <span className="badge" style={{ background: "var(--green-50)", color: "var(--green-d)" }}>
                         <CircleCheck size={12} /> {it.availability.close === "24:00" ? "Open 24h" : it.availability.close ? `Open · closes ${it.availability.close}` : "Open"}
+                      </span>
+                    ) : it.availability && it.availability.available === null && (
+                      <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
+                        <Clock size={12} /> Hours unknown
                       </span>
                     )}
                   </button>

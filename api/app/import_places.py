@@ -19,6 +19,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .features import FEATURE_SCHEMA_VERSION, FEATURES
+from .metadata import clean_meta
 from .models import DatasetVersion, Poi
 
 CORE_COLUMNS = {"place_id", "place_name", "category", "category_name", "cat1", "cat2", "cat3",
@@ -71,7 +72,7 @@ def row_to_poi(row: dict, version: str) -> Poi:
         place_url=row.get("place_url", ""), image_url=row.get("image_url", ""),
         lat=float(row["latitude"]), lng=float(row["longitude"]), indoor=indoor,
         avg_cost_krw=None, duration_min=STAY_MIN[primary],
-        enriched_metadata={k: v for k, v in row.items() if k not in CORE_COLUMNS},
+        enriched_metadata=clean_meta({k: v for k, v in row.items() if k not in CORE_COLUMNS}),  # "NULL" -> None
         tags=_tags(name, category, f), features=f, feature_rules=(row.get("feature_rules") or "")[:500],
         field_status={"hours": "UNKNOWN", "closed_days": "UNKNOWN", "cost": "UNKNOWN",
                       "duration": "ESTIMATED", "duration_rule": STAY_RULE},

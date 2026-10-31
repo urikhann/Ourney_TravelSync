@@ -80,7 +80,8 @@ def test_enriched_csv_metadata_survives_database_and_response(db):
     with REAL_CSV.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert import_csv(db, REAL_CSV, "enriched-test") == 3570
-    expected = {k: v for k, v in rows[0].items() if k not in CORE_COLUMNS}
+    from app.metadata import clean_meta
+    expected = clean_meta({k: v for k, v in rows[0].items() if k not in CORE_COLUMNS})
     db.expire_all()
     saved = db.get(Poi, (rows[0]["place_id"], "enriched-test"))
     assert len(expected) == 43

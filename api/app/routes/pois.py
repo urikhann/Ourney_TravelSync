@@ -14,6 +14,7 @@ from .auth import current_user
 
 router = APIRouter(tags=["places"])
 DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+WEEK = [1, 2, 3, 4, 5, 6, 0]  # Mon … Sun
 
 
 def _find(db: Session, poi_id: str, version: str | None) -> Poi:
@@ -27,11 +28,14 @@ def _find(db: Session, poi_id: str, version: str | None) -> Poi:
 def get_poi(poi_id: str, version: str | None = None, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """One place. `version` = the dataset version of a run (default: the ACTIVE one)."""
     p = _find(db, poi_id, version)
-    hours = db.scalars(select(PoiHours).where(PoiHours.poi_id == poi_id).order_by(PoiHours.dow)).all()
+    weekly = {h.dow: h for h in db.scalars(select(PoiHours).where(PoiHours.poi_id == poi_id))}
+    # Monday first. A day missing from a known week = closed that day. No rows at all = hours unknown -> [].
+    hours = [{"day": DAYS[d], "open": weekly[d].open if d in weekly else None,
+              "close": weekly[d].close if d in weekly else None} for d in WEEK] if weekly else []
     return {**place_dict(p), "name_ko": p.name_ko, "city": p.city, "address": p.road_address or p.address,
             "phone": p.phone or None, "tags": p.tags, "feature_rules": p.feature_rules, "source": p.source,
-            "dataset_version": p.dataset_version,
-            "hours": [{"day": DAYS[h.dow], "open": h.open, "close": h.close} for h in hours]}
+            "dataset_version": p.dataset_version, "closed_on_public_holidays": p.closed_on_public_holidays,
+            "hours": hours}
 
 
 async def poi_availability(poi_id: str, day: date = Query(alias="date"), start: str = "14:00",
