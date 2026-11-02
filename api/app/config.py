@@ -37,6 +37,12 @@ _DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ourne
                             "travelsync_poi_metadata_enriched_v1.csv")
 PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)
 PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v1")  # dataset version name for the auto-import
+# Opening hours (data team's operating-info CSV), loaded right after an automatic place import. Empty = skip.
+HOURS_CSV = _env("HOURS_CSV", os.path.join(os.path.dirname(PLACES_CSV or _DEFAULT_CSV),
+                                           "travelsync_poi_operating_info_v1.csv"))
+# Docker: make the database follow PLACES_CSV / PLACES_VERSION on every start (import it if missing, else activate
+# it), so switching between all places and the demo pool is just an environment change. Off for local runs.
+PLACES_FOLLOW_ENV = _env("PLACES_FOLLOW_ENV", "false").lower() in ("1", "true", "yes")
 
 # Group recommendation settings (SDD 8.3 / 9.2): L = each member's top list, K = group candidates.
 REC_TOP_L = int(_env("REC_TOP_L", "100"))

@@ -50,6 +50,11 @@ def import_hours(db: Session, rows: list[dict]) -> Counter:
     return stats
 
 
+def import_hours_csv(db: Session, path: str | Path) -> Counter:
+    with open(Path(path), encoding="utf-8-sig", newline="") as fh:
+        return import_hours(db, list(csv.DictReader(fh)))
+
+
 if __name__ == "__main__":
     from .db import Base, SessionLocal, engine
 
