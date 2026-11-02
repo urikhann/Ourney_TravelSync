@@ -5,8 +5,6 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-from psycopg.types.json import Jsonb
-
 from ..data_schema import COLUMNS, ENRICHED_COLUMNS
 
 
@@ -66,6 +64,9 @@ def validate_matches(rows, pois, version):
 
 
 def import_metadata(conn, path, dataset_version=None, *, validate_only=False, expected_count=3570):
+    # CSV validation also runs in the core installation without PostgreSQL extras.
+    from psycopg.types.json import Jsonb
+
     rows, checksum = read_metadata_csv(path, expected_count)
     version = str(dataset_version or rows[0]['dataset_version'])
     with conn.transaction():
