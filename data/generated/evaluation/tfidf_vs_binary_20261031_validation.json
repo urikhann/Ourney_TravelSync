@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "metric_rows_independently_verified": 864,
+  "maximum_absolute_metric_error": 8.215650382226158e-15,
+  "rank_rows_checked": 128520,
+  "byte_identical_repeat_files": 18,
+  "protected_sources_unchanged": true,
+  "unjudged_items_not_converted_to_zero": true,
+  "frozen_scenarios_and_annotation_packets_verified": true,
+  "method": "Exhaustive within-tie permutations, scalar metric oracle"
+}

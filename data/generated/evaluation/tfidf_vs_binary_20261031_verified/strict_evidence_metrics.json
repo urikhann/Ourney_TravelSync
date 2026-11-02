@@ -1,0 +1,16 @@
+{
+  "status": "INSUFFICIENT_COMPARABLE_EVIDENCE",
+  "exact_match_pois": 1,
+  "exact_match_place_ids": [
+    "kakao:17384469"
+  ],
+  "nondegenerate_scenarios": 0,
+  "ndcg_at_5": null,
+  "ndcg_at_10": null,
+  "precision_at_5": null,
+  "precision_at_10": null,
+  "recall_at_5": null,
+  "recall_at_10": null,
+  "mrr": null,
+  "reason": "No scenario has two candidates with unchanged scoring evidence; a singleton cannot compare rankers"
+}

@@ -1,0 +1,229 @@
+﻿sheet,scenario_id,category,method,place_id,place_name,query,grade,score,judged_pool_rank,catalogue_rank,unchanged_evidence
+A,S01,food,option_c,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,0.19160986436081195,1,4,False
+A,S01,food,option_c,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,2,0.0039591266007158055,2,1511,False
+B,S01,food,option_c,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,0.19160986436081195,1,4,False
+B,S01,food,option_c,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,1,0.0039591266007158055,2,1511,False
+A,S01,food,binary_weighted_sum_sdd,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,2,0.15625,1,819,False
+A,S01,food,binary_weighted_sum_sdd,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,0.15625,2,938,False
+B,S01,food,binary_weighted_sum_sdd,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,1,0.15625,1,819,False
+B,S01,food,binary_weighted_sum_sdd,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,0.15625,2,938,False
+A,S01,food,binary_active_mean_package,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,2,5.0,1,105,False
+A,S01,food,binary_active_mean_package,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,5.0,2,224,False
+B,S01,food,binary_active_mean_package,kakao:16239547,맛나감자탕 부산경남지사,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,1,5.0,1,105,False
+B,S01,food,binary_active_mean_package,kakao:20522414,빨간떡볶이,떡볶이를 먹을 수 있는 분식집에 가고 싶어요.,3,5.0,2,224,False
+A,S02,food,option_c,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,0.38947018610190043,1,1,False
+A,S02,food,option_c,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,0.0,2,1245,False
+B,S02,food,option_c,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,0.38947018610190043,1,1,False
+B,S02,food,option_c,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,0.0,2,1245,False
+A,S02,food,binary_weighted_sum_sdd,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,0.15625,1,819,False
+A,S02,food,binary_weighted_sum_sdd,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,0.15625,2,938,False
+B,S02,food,binary_weighted_sum_sdd,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,0.15625,1,819,False
+B,S02,food,binary_weighted_sum_sdd,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,0.15625,2,938,False
+A,S02,food,binary_active_mean_package,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,5.0,1,105,False
+A,S02,food,binary_active_mean_package,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,5.0,2,224,False
+B,S02,food,binary_active_mean_package,kakao:16239547,맛나감자탕 부산경남지사,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,3,5.0,1,105,False
+B,S02,food,binary_active_mean_package,kakao:20522414,빨간떡볶이,감자탕이나 목뼈해장국을 먹으러 가고 싶어요.,1,5.0,2,224,False
+A,S03,activity,option_c,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,0.2837095775247286,1,1,False
+A,S03,activity,option_c,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,0,0.00471952847667568,2,598,False
+B,S03,activity,option_c,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,0.2837095775247286,1,1,False
+B,S03,activity,option_c,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,1,0.00471952847667568,2,598,False
+A,S03,activity,binary_weighted_sum_sdd,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,0,0.15625,1,720,False
+A,S03,activity,binary_weighted_sum_sdd,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,0.15625,2,745,False
+B,S03,activity,binary_weighted_sum_sdd,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,1,0.15625,1,720,False
+B,S03,activity,binary_weighted_sum_sdd,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,0.15625,2,745,False
+A,S03,activity,binary_active_mean_package,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,0,5.0,1,6,False
+A,S03,activity,binary_active_mean_package,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,5.0,2,31,False
+B,S03,activity,binary_active_mean_package,kakao:316557466,남부메이커교육체험센터,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,1,5.0,1,6,False
+B,S03,activity,binary_active_mean_package,kakao:1508609240,키리안 수타소바체험교실,메밀가루로 수타 소바를 직접 만들어 보고 싶어요.,3,5.0,2,31,False
+A,S04,activity,option_c,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,0.19034969711929897,1,1,False
+A,S04,activity,option_c,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",0,0.11679542814335518,2,3,False
+B,S04,activity,option_c,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,0.19034969711929897,1,1,False
+B,S04,activity,option_c,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",1,0.11679542814335518,2,3,False
+A,S04,activity,binary_weighted_sum_sdd,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,0.15625,1,720,False
+A,S04,activity,binary_weighted_sum_sdd,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",0,0.15625,2,745,False
+B,S04,activity,binary_weighted_sum_sdd,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,0.15625,1,720,False
+B,S04,activity,binary_weighted_sum_sdd,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",1,0.15625,2,745,False
+A,S04,activity,binary_active_mean_package,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,5.0,1,6,False
+A,S04,activity,binary_active_mean_package,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",0,5.0,2,31,False
+B,S04,activity,binary_active_mean_package,kakao:316557466,남부메이커교육체험센터,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",3,5.0,1,6,False
+B,S04,activity,binary_active_mean_package,kakao:1508609240,키리안 수타소바체험교실,"코딩이나 VR, 제작 체험을 하는 메이커 프로그램에 참여하고 싶어요.",1,5.0,2,31,False
+A,S05,activity+relax,option_c,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.2379365061543565,1,1,False
+A,S05,activity+relax,option_c,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.12185735373066975,2,2,False
+A,S05,activity+relax,option_c,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.0489704168055446,3,28,False
+A,S05,activity+relax,option_c,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.012437046019663509,4,284,False
+A,S05,activity+relax,option_c,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.009588068332415808,5,320,True
+B,S05,activity+relax,option_c,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.2379365061543565,1,1,False
+B,S05,activity+relax,option_c,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,2,0.12185735373066975,2,2,False
+B,S05,activity+relax,option_c,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.0489704168055446,3,28,False
+B,S05,activity+relax,option_c,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,0,0.012437046019663509,4,284,False
+B,S05,activity+relax,option_c,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.009588068332415808,5,320,True
+A,S05,activity+relax,binary_weighted_sum_sdd,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.29411764705882354,1,37,False
+A,S05,activity+relax,binary_weighted_sum_sdd,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.29411764705882354,2,43,False
+A,S05,activity+relax,binary_weighted_sum_sdd,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.29411764705882354,3,46,False
+A,S05,activity+relax,binary_weighted_sum_sdd,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.29411764705882354,4,54,True
+A,S05,activity+relax,binary_weighted_sum_sdd,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.29411764705882354,5,65,False
+B,S05,activity+relax,binary_weighted_sum_sdd,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.29411764705882354,1,37,False
+B,S05,activity+relax,binary_weighted_sum_sdd,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,2,0.29411764705882354,2,43,False
+B,S05,activity+relax,binary_weighted_sum_sdd,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,0.29411764705882354,3,46,False
+B,S05,activity+relax,binary_weighted_sum_sdd,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,0.29411764705882354,4,54,True
+B,S05,activity+relax,binary_weighted_sum_sdd,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,0,0.29411764705882354,5,65,False
+A,S05,activity+relax,binary_active_mean_package,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,5.0,1,11,False
+A,S05,activity+relax,binary_active_mean_package,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,5.0,2,33,False
+A,S05,activity+relax,binary_active_mean_package,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,5.0,3,40,False
+A,S05,activity+relax,binary_active_mean_package,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,5.0,4,67,True
+A,S05,activity+relax,binary_active_mean_package,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,5.0,5,93,False
+B,S05,activity+relax,binary_active_mean_package,tour:2741526,제이스글램핑,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,5.0,1,11,False
+B,S05,activity+relax,binary_active_mean_package,tour:2729157,대저캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,2,5.0,2,33,False
+B,S05,activity+relax,binary_active_mean_package,tour:2734674,화명오토캠핑장,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,3,5.0,3,40,False
+B,S05,activity+relax,binary_active_mean_package,kakao:17384469,복병산체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,1,5.0,4,67,True
+B,S05,activity+relax,binary_active_mean_package,kakao:1052516304,송정어울림체육공원,글램핑 시설에서 숙박하는 캠핑을 하고 싶어요.,0,5.0,5,93,False
+A,S06,activity+relax,option_c,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.35094799527078474,1,1,False
+A,S06,activity+relax,option_c,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.05405853396040277,2,383,False
+A,S06,activity+relax,option_c,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.03367803461685888,3,413,True
+A,S06,activity+relax,option_c,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,1,0.009005107090519415,4,854,False
+A,S06,activity+relax,option_c,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.002640864992253986,5,1507,False
+B,S06,activity+relax,option_c,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.35094799527078474,1,1,False
+B,S06,activity+relax,option_c,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.05405853396040277,2,383,False
+B,S06,activity+relax,option_c,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,2,0.03367803461685888,3,413,True
+B,S06,activity+relax,option_c,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.009005107090519415,4,854,False
+B,S06,activity+relax,option_c,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.002640864992253986,5,1507,False
+A,S06,activity+relax,binary_weighted_sum_sdd,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,1,0.29411764705882354,1,37,False
+A,S06,activity+relax,binary_weighted_sum_sdd,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.29411764705882354,2,43,False
+A,S06,activity+relax,binary_weighted_sum_sdd,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.29411764705882354,3,46,False
+A,S06,activity+relax,binary_weighted_sum_sdd,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.29411764705882354,4,54,True
+A,S06,activity+relax,binary_weighted_sum_sdd,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.29411764705882354,5,65,False
+B,S06,activity+relax,binary_weighted_sum_sdd,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.29411764705882354,1,37,False
+B,S06,activity+relax,binary_weighted_sum_sdd,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.29411764705882354,2,43,False
+B,S06,activity+relax,binary_weighted_sum_sdd,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,0.29411764705882354,3,46,False
+B,S06,activity+relax,binary_weighted_sum_sdd,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,2,0.29411764705882354,4,54,True
+B,S06,activity+relax,binary_weighted_sum_sdd,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,0.29411764705882354,5,65,False
+A,S06,activity+relax,binary_active_mean_package,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,1,5.0,1,11,False
+A,S06,activity+relax,binary_active_mean_package,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,5.0,2,33,False
+A,S06,activity+relax,binary_active_mean_package,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,5.0,3,40,False
+A,S06,activity+relax,binary_active_mean_package,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,5.0,4,67,True
+A,S06,activity+relax,binary_active_mean_package,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,5.0,5,93,False
+B,S06,activity+relax,binary_active_mean_package,tour:2741526,제이스글램핑,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,5.0,1,11,False
+B,S06,activity+relax,binary_active_mean_package,tour:2729157,대저캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,5.0,2,33,False
+B,S06,activity+relax,binary_active_mean_package,tour:2734674,화명오토캠핑장,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,0,5.0,3,40,False
+B,S06,activity+relax,binary_active_mean_package,kakao:17384469,복병산체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,2,5.0,4,67,True
+B,S06,activity+relax,binary_active_mean_package,kakao:1052516304,송정어울림체육공원,운동기구와 다목적코트가 있는 체육공원을 둘러보고 싶어요.,3,5.0,5,93,False
+A,S07,nature+relax,option_c,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,0.46784942634227267,1,1,False
+A,S07,nature+relax,option_c,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.21384838051644559,2,2,False
+A,S07,nature+relax,option_c,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.035730445776407285,3,35,False
+A,S07,nature+relax,option_c,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.01621393185216495,4,148,False
+A,S07,nature+relax,option_c,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.005930960565902083,5,444,False
+A,S07,nature+relax,option_c,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.0043760127852851445,6,511,False
+B,S07,nature+relax,option_c,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,0.46784942634227267,1,1,False
+B,S07,nature+relax,option_c,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.21384838051644559,2,2,False
+B,S07,nature+relax,option_c,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.035730445776407285,3,35,False
+B,S07,nature+relax,option_c,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.01621393185216495,4,148,False
+B,S07,nature+relax,option_c,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.005930960565902083,5,444,False
+B,S07,nature+relax,option_c,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.0043760127852851445,6,511,False
+A,S07,nature+relax,binary_weighted_sum_sdd,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.29411764705882354,1,66,False
+A,S07,nature+relax,binary_weighted_sum_sdd,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,0.29411764705882354,2,79,False
+A,S07,nature+relax,binary_weighted_sum_sdd,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.29411764705882354,3,165,False
+A,S07,nature+relax,binary_weighted_sum_sdd,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.29411764705882354,4,181,False
+A,S07,nature+relax,binary_weighted_sum_sdd,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.29411764705882354,5,575,False
+A,S07,nature+relax,binary_weighted_sum_sdd,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.29411764705882354,6,601,False
+B,S07,nature+relax,binary_weighted_sum_sdd,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.29411764705882354,1,66,False
+B,S07,nature+relax,binary_weighted_sum_sdd,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,0.29411764705882354,2,79,False
+B,S07,nature+relax,binary_weighted_sum_sdd,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.29411764705882354,3,165,False
+B,S07,nature+relax,binary_weighted_sum_sdd,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,0.29411764705882354,4,181,False
+B,S07,nature+relax,binary_weighted_sum_sdd,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.29411764705882354,5,575,False
+B,S07,nature+relax,binary_weighted_sum_sdd,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,0.29411764705882354,6,601,False
+A,S07,nature+relax,binary_active_mean_package,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,5.0,1,38,False
+A,S07,nature+relax,binary_active_mean_package,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,5.0,2,52,False
+A,S07,nature+relax,binary_active_mean_package,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,5.0,3,140,False
+A,S07,nature+relax,binary_active_mean_package,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,5.0,4,156,False
+A,S07,nature+relax,binary_active_mean_package,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,5.0,5,575,False
+A,S07,nature+relax,binary_active_mean_package,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,5.0,6,603,False
+B,S07,nature+relax,binary_active_mean_package,tour:126122,부산 송도해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,5.0,1,38,False
+B,S07,nature+relax,binary_active_mean_package,kakao:10481915,성지곡산림욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,3,5.0,2,52,False
+B,S07,nature+relax,binary_active_mean_package,kakao:25339484,윤산,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,5.0,3,140,False
+B,S07,nature+relax,binary_active_mean_package,kakao:8202423,광안리해수욕장,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,1,5.0,4,156,False
+B,S07,nature+relax,binary_active_mean_package,kakao:1882087864,부산시민공원 농협기부숲,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,5.0,5,575,False
+B,S07,nature+relax,binary_active_mean_package,kakao:8257954,동백섬,편백과 삼나무가 자라는 숲의 산책로를 걷고 싶어요.,2,5.0,6,603,False
+A,S08,nature+relax,option_c,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.19360867597585052,1,10,False
+A,S08,nature+relax,option_c,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.17086096385376917,2,12,False
+A,S08,nature+relax,option_c,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.05456818370326502,3,415,False
+A,S08,nature+relax,option_c,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.053918062840451926,4,418,False
+A,S08,nature+relax,option_c,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.032248113163539455,5,480,False
+A,S08,nature+relax,option_c,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.009765267992968368,6,1118,False
+B,S08,nature+relax,option_c,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.19360867597585052,1,10,False
+B,S08,nature+relax,option_c,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.17086096385376917,2,12,False
+B,S08,nature+relax,option_c,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.05456818370326502,3,415,False
+B,S08,nature+relax,option_c,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.053918062840451926,4,418,False
+B,S08,nature+relax,option_c,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.032248113163539455,5,480,False
+B,S08,nature+relax,option_c,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.009765267992968368,6,1118,False
+A,S08,nature+relax,binary_weighted_sum_sdd,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.29411764705882354,1,66,False
+A,S08,nature+relax,binary_weighted_sum_sdd,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,2,79,False
+A,S08,nature+relax,binary_weighted_sum_sdd,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,3,165,False
+A,S08,nature+relax,binary_weighted_sum_sdd,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.29411764705882354,4,181,False
+A,S08,nature+relax,binary_weighted_sum_sdd,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,5,575,False
+A,S08,nature+relax,binary_weighted_sum_sdd,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.29411764705882354,6,601,False
+B,S08,nature+relax,binary_weighted_sum_sdd,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,0.29411764705882354,1,66,False
+B,S08,nature+relax,binary_weighted_sum_sdd,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,2,79,False
+B,S08,nature+relax,binary_weighted_sum_sdd,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,3,165,False
+B,S08,nature+relax,binary_weighted_sum_sdd,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.29411764705882354,4,181,False
+B,S08,nature+relax,binary_weighted_sum_sdd,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,0.29411764705882354,5,575,False
+B,S08,nature+relax,binary_weighted_sum_sdd,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,0.29411764705882354,6,601,False
+A,S08,nature+relax,binary_active_mean_package,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,5.0,1,38,False
+A,S08,nature+relax,binary_active_mean_package,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,2,52,False
+A,S08,nature+relax,binary_active_mean_package,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,3,140,False
+A,S08,nature+relax,binary_active_mean_package,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,5.0,4,156,False
+A,S08,nature+relax,binary_active_mean_package,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,5,575,False
+A,S08,nature+relax,binary_active_mean_package,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,5.0,6,603,False
+B,S08,nature+relax,binary_active_mean_package,tour:126122,부산 송도해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,3,5.0,1,38,False
+B,S08,nature+relax,binary_active_mean_package,kakao:10481915,성지곡산림욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,2,52,False
+B,S08,nature+relax,binary_active_mean_package,kakao:25339484,윤산,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,3,140,False
+B,S08,nature+relax,binary_active_mean_package,kakao:8202423,광안리해수욕장,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,5.0,4,156,False
+B,S08,nature+relax,binary_active_mean_package,kakao:1882087864,부산시민공원 농협기부숲,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,1,5.0,5,575,False
+B,S08,nature+relax,binary_active_mean_package,kakao:8257954,동백섬,백사장과 해변공원이 있는 해수욕장을 둘러보고 싶어요.,2,5.0,6,603,False
+A,S09,nature+entertainment+relax,option_c,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,0.20411448709097582,1,1,False
+A,S09,nature+entertainment+relax,option_c,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,2,0.06220776402281383,2,392,False
+B,S09,nature+entertainment+relax,option_c,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,0.20411448709097582,1,1,False
+B,S09,nature+entertainment+relax,option_c,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,1,0.06220776402281383,2,392,False
+A,S09,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,2,0.4166666666666667,1,1,False
+A,S09,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,0.4166666666666667,2,2,False
+B,S09,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,1,0.4166666666666667,1,1,False
+B,S09,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,0.4166666666666667,2,2,False
+A,S09,nature+entertainment+relax,binary_active_mean_package,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,2,5.0,1,116,False
+A,S09,nature+entertainment+relax,binary_active_mean_package,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,5.0,2,334,False
+B,S09,nature+entertainment+relax,binary_active_mean_package,kakao:1170050324,황령산 유원지 생태숲,어린이공원으로 등록된 공원을 둘러보고 싶어요.,1,5.0,1,116,False
+B,S09,nature+entertainment+relax,binary_active_mean_package,kakao:18203633,사직놀이공원,어린이공원으로 등록된 공원을 둘러보고 싶어요.,3,5.0,2,334,False
+A,S10,nature+entertainment+relax,option_c,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,0.5098395155542359,1,1,False
+A,S10,nature+entertainment+relax,option_c,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,0.1316980651467382,2,5,False
+B,S10,nature+entertainment+relax,option_c,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,0.5098395155542359,1,1,False
+B,S10,nature+entertainment+relax,option_c,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,0.1316980651467382,2,5,False
+A,S10,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,0.4166666666666667,1,1,False
+A,S10,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,0.4166666666666667,2,2,False
+B,S10,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,0.4166666666666667,1,1,False
+B,S10,nature+entertainment+relax,binary_weighted_sum_sdd,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,0.4166666666666667,2,2,False
+A,S10,nature+entertainment+relax,binary_active_mean_package,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,5.0,1,116,False
+A,S10,nature+entertainment+relax,binary_active_mean_package,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,5.0,2,334,False
+B,S10,nature+entertainment+relax,binary_active_mean_package,kakao:1170050324,황령산 유원지 생태숲,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,3,5.0,1,116,False
+B,S10,nature+entertainment+relax,binary_active_mean_package,kakao:18203633,사직놀이공원,다양한 수목과 어린이 놀이시설이 있는 도시 생태숲에 가고 싶어요.,2,5.0,2,334,False
+A,S11,history,option_c,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,0.38919351911917205,1,1,False
+A,S11,history,option_c,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,0.0012893617334704946,2,1090,False
+B,S11,history,option_c,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,0.38919351911917205,1,1,False
+B,S11,history,option_c,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,0.0012893617334704946,2,1090,False
+A,S11,history,binary_weighted_sum_sdd,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,0.15625,1,878,False
+A,S11,history,binary_weighted_sum_sdd,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,0.15625,2,971,False
+B,S11,history,binary_weighted_sum_sdd,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,0.15625,1,878,False
+B,S11,history,binary_weighted_sum_sdd,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,0.15625,2,971,False
+A,S11,history,binary_active_mean_package,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,5.0,1,164,False
+A,S11,history,binary_active_mean_package,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,5.0,2,257,False
+B,S11,history,binary_active_mean_package,tour:309338,법륜사(부산),일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,1,5.0,1,164,False
+B,S11,history,binary_active_mean_package,kakao:1822480182,국립일제강제동원역사관,일제강제동원의 역사를 다루는 상설 전시를 보고 싶어요.,3,5.0,2,257,False
+A,S12,history,option_c,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,0.08801101923667715,1,3,False
+A,S12,history,option_c,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,0.021285477572582676,2,68,False
+B,S12,history,option_c,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,0.08801101923667715,1,3,False
+B,S12,history,option_c,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,0.021285477572582676,2,68,False
+A,S12,history,binary_weighted_sum_sdd,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,0.15625,1,878,False
+A,S12,history,binary_weighted_sum_sdd,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,0.15625,2,971,False
+B,S12,history,binary_weighted_sum_sdd,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,0.15625,1,878,False
+B,S12,history,binary_weighted_sum_sdd,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,0.15625,2,971,False
+A,S12,history,binary_active_mean_package,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,5.0,1,164,False
+A,S12,history,binary_active_mean_package,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,5.0,2,257,False
+B,S12,history,binary_active_mean_package,tour:309338,법륜사(부산),사찰을 둘러보며 절의 역사를 알아보고 싶어요.,3,5.0,1,164,False
+B,S12,history,binary_active_mean_package,kakao:1822480182,국립일제강제동원역사관,사찰을 둘러보며 절의 역사를 알아보고 싶어요.,1,5.0,2,257,False
