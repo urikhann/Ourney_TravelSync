@@ -70,8 +70,6 @@ class Trip(Base):
     city: Mapped[str] = mapped_column(String(40), default="busan")
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
-    budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     invite_code: Mapped[str] = mapped_column(String(8), unique=True, index=True, default=new_invite_code)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

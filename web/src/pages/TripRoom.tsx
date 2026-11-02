@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, Check, Clock, Copy, Loader, SlidersHorizontal, Sparkles, Users, Wallet } from "lucide-react";
+import { Calendar, Check, Clock, Copy, Loader, SlidersHorizontal, Sparkles, Users } from "lucide-react";
 import { api, message } from "../api";
 import type { PlansView, Recommendations, Trip } from "../types";
-import { ErrorBox, Loading, Toast, fmtDate, useToast, won, weekday } from "../ui";
+import { ErrorBox, Loading, Toast, fmtDate, useToast, weekday } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import { AvatarStack } from "../components/Avatar";
@@ -67,7 +67,7 @@ export default function TripRoom() {
   const allFree = tripDays.every((d) => free(d) === t.members.length);
   const missing = tripDays.flatMap((d) => t.members.filter((m) => !m.free_dates.includes(d)).map((m) => `${m.name} (${weekday(d)})`));
   const waiting = t.setup.waiting_for;
-  const done = 1 + (allFree ? 1 : 0) + (t.budget_min != null ? 1 : 0) + (waiting.length ? 0 : 1);
+  const done = 1 + (allFree ? 1 : 0) + (waiting.length ? 0 : 1);
   const shade = (n: number) => ["#E2E8F0", "#CBD5E1", "#93C5FD", "#60A5FA", "#2563EB"][Math.round((n / t.members.length) * 4)];
   const toggle = (d: string) => setFree.mutate(me.free_dates.includes(d) ? me.free_dates.filter((x) => x !== d) : [...me.free_dates, d]);
   const copy = async () => {
@@ -89,12 +89,10 @@ export default function TripRoom() {
           </div>
         </div>
 
-        <div className="h2">Setup progress <small>{done} of 4 done</small></div>
+        <div className="h2">Setup progress <small>{done} of 3 done</small></div>
         <div className="card list">
           <SetupRow ok Icon={Users} title="Members joined" sub={`${t.members.length} in the trip`} />
           <SetupRow ok={allFree} Icon={Calendar} title="Dates" sub={allFree ? "Every trip day works for everyone" : `Not free: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}`} />
-          <SetupRow ok={t.budget_min != null} Icon={Wallet} title="Budget range"
-            sub={t.budget_min != null ? `${won(t.budget_min)} – ${won(t.budget_max ?? t.budget_min)} per person` : "Not set yet"} />
           <SetupRow ok={!waiting.length} Icon={SlidersHorizontal} title="Preferences"
             sub={waiting.length ? `Waiting for ${waiting.join(", ")}` : "Everyone has answered"}
             action={waiting.length > 0 && <button className="chip blue" onClick={() => nudge.mutate()} disabled={nudge.isPending}>Nudge</button>} />

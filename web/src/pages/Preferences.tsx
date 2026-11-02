@@ -109,7 +109,7 @@ export default function Preferences() {
             );
           })}
         </div>
-        <p className="muted tiny" style={{ marginTop: 6 }}>Budget, dates and how far to travel are set for the whole group.</p>
+        <p className="muted tiny" style={{ marginTop: 6 }}>Dates are set for the whole group in the trip room.</p>
 
         <TastesCard compact />
 

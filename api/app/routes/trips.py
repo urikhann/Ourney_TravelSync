@@ -22,8 +22,6 @@ class TripIn(BaseModel):
     city: str = "busan"
     start_date: date
     end_date: date
-    budget_min: int | None = Field(default=None, ge=0)
-    budget_max: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def check_dates(self):
@@ -51,7 +49,7 @@ def trip_detail(trip: Trip, me: User, db: Session) -> dict:
     members = [{"user_id": m.user_id, "name": m.user.name, "role": m.role, "is_me": m.user_id == me.id,
                 "preferences_done": m.user_id in prefs, "free_dates": sorted(free.get(m.user_id, []))}
                for m in sorted(trip.members, key=lambda m: m.id or 0)]
-    return {**trip_summary(trip, db), "budget_min": trip.budget_min, "budget_max": trip.budget_max,
+    return {**trip_summary(trip, db),
             "invite_code": trip.invite_code, "invite_url": f"{config.WEB_URL}/join/{trip.invite_code}",
             "members": members,
             "setup": {"members": len(members), "preferences_done": sum(m["preferences_done"] for m in members),

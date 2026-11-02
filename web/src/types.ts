@@ -5,7 +5,7 @@ export type TokenOut = { access_token: string; user: User };
 export type TripSummary = { id: string; name: string; city: string; start_date: string; end_date: string; member_count: number };
 export type Member = { user_id: string; name: string; role: string; is_me: boolean; preferences_done: boolean; free_dates: string[] };
 export type Trip = TripSummary & {
-  budget_min: number | null; budget_max: number | null; invite_code: string; invite_url: string; members: Member[];
+  invite_code: string; invite_url: string; members: Member[];
   setup: { members: number; preferences_done: number; waiting_for: string[] };
 };
 
