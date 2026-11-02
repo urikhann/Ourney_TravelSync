@@ -1,4 +1,11 @@
-# One command starts everything:  docker compose up --build
+# One command starts the whole app:   docker compose up --build      ->  http://localhost:5173
+# 40 demo places instead of all 3,570:  PLACES_FILE=travelsync_demo40.csv PLACES_VERSION=busan-demo40-v1 docker compose up
+# Stop: Ctrl+C (or docker compose down).  Delete all data and start fresh: docker compose down -v
+# Settings come from .env (optional, copy .env.example); the defaults below work without it.
+x-places: &places
+  PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v1.csv}
+  PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v1}
+
 services:
   db:
     image: postgres:16
@@ -9,24 +16,23 @@ services:
     ports: ["5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-travelsync}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-travelsync} -d ${POSTGRES_DB:-travelsync}"]
       interval: 3s
       retries: 20
 
-  api:  # Bat — backend
-    build: ./api
-    env_file: .env
+  recommender:  # Urikhan — the team package (GFAR / AWM) behind contracts/recommend.*.json
+    build: {context: ., dockerfile: services/recommender/Dockerfile}
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
-      WEB_ORIGIN: http://localhost:5173
-      PLACES_CSV: /data/travelsync_poi_metadata_enriched_v1.csv   # enriched POI snapshot, imported into an empty database on first start
-    ports: ["8000:8000"]
-    depends_on:
-      db: {condition: service_healthy}
-    volumes: ["./api/app:/code/app", "./src/ourney_travelsync/data:/data:ro"]
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      <<: *places
+      DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v1}
+    ports: ["8002:8002"]
+    volumes: ["./src/ourney_travelsync/data:/data:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      retries: 20
 
-  mocks:  # fake versions of the teammates' services (recommender, optimizer, availability, agent)
+  mocks:  # stand-ins for the services not built yet (itinerary optimizer, availability checker, AI agent)
     build: ./services/mocks
     environment:
       PYTHONPATH: /package/src
@@ -36,6 +42,31 @@ services:
       db: {condition: service_healthy}
     volumes: ["./services/mocks:/code", "./src:/package/src:ro"]
 
+  api:  # Bat — backend
+    build: ./api
+    env_file: [{path: .env, required: false}]
+    environment:
+      <<: *places
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
+      HOURS_CSV: /data/travelsync_poi_operating_info_v1.csv
+      PLACES_FOLLOW_ENV: "true"   # import / activate PLACES_VERSION on start, so switching to the demo pool just works
+      RECOMMENDER_URL: http://recommender:8002
+      OPTIMIZER_URL: http://mocks:8001
+      AVAILABILITY_URL: http://mocks:8001
+      AGENT_URL: http://mocks:8001
+      FEATURE_AVAILABILITY: ${FEATURE_AVAILABILITY:-true}
+      WEB_ORIGIN: http://localhost:5173
+    ports: ["8000:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+      recommender: {condition: service_healthy}
+    volumes: ["./api/app:/code/app", "./src/ourney_travelsync/data:/data:ro"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      retries: 60   # the first start imports 3,570 places + opening hours
+
   web:  # Bat — web app
     image: node:22
     working_dir: /web
@@ -43,6 +74,8 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000
     ports: ["5173:5173"]
+    depends_on:
+      api: {condition: service_healthy}
     volumes: ["./web:/web", "/web/node_modules"]
 
 volumes:
