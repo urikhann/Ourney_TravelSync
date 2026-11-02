@@ -12,6 +12,7 @@ from ..deps import member_trip
 from ..emailer import send_email
 from ..models import MemberAvailability, Preference, Trip, TripMember, User
 from .auth import current_user
+from .tastes import default_exclusions
 
 router = APIRouter(tags=["trips"])
 
@@ -60,7 +61,7 @@ def trip_detail(trip: Trip, me: User, db: Session) -> dict:
 @router.post("/trips", status_code=201)
 def create_trip(body: TripIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     trip = Trip(**body.model_dump(), created_by=user.id)
-    trip.members.append(TripMember(user_id=user.id, role="owner"))
+    trip.members.append(TripMember(user_id=user.id, role="owner", exclusions=default_exclusions(db, user.id)))
     db.add(trip)
     db.commit()
     db.refresh(trip)
@@ -95,7 +96,7 @@ def join_trip(code: str, user: User = Depends(current_user), db: Session = Depen
     if not any(m.user_id == user.id for m in trip.members):
         if len(trip.members) >= config.MAX_GROUP_MEMBERS:
             raise HTTPException(409, "trip_full")
-        trip.members.append(TripMember(user_id=user.id))
+        trip.members.append(TripMember(user_id=user.id, exclusions=default_exclusions(db, user.id)))
         db.commit()
     return trip_detail(trip, user, db)
 

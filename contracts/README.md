@@ -11,6 +11,8 @@ Rules for everyone
 - Place features are **binary 0/1**, several can be 1. Scores are 0–1; never mix with the old 1–5 thresholds.
 - Personal exclusions (`exclusions.tags`, `exclusions.poi_ids`) are E1 hard rules. A low rating (1) is **not** an exclusion.
   Tags today: `hiking`, `raw_fish`, `alcohol` (derived from the place category at import).
+- Optional `members[].tastes` = `{"keywords": [...], "avoid_keywords": [...]}` from the onboarding survey
+  (`GET /meta/tastes`), only for members who answered it. Korean words for TF-IDF (Method C). Ignore it if unused.
 - Unknown is `null`, never 0: cost `null` = unknown, not free. Times are local `HH:MM`, dates `YYYY-MM-DD`, money KRW.
 - Group list: GFAR (SDD 9.2). Return `group_rank`, `mean_score`, `selection_gain`, `group_utility` separately.
   `method: "average" | "awm"` exist only for comparison (SRS: Should).

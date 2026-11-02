@@ -19,8 +19,9 @@ from ..db import get_db
 from ..deps import member_trip
 from ..features import FEATURE_SCHEMA_VERSION, FEATURES
 from ..import_places import active_version
-from ..models import Poi, RecommendationRun, Trip, User
+from ..models import Poi, RecommendationRun, Trip, User, UserTaste
 from ..places import load_places
+from ..taste_catalog import profile
 from .auth import current_user
 from .preferences import latest as latest_pref
 
@@ -62,10 +63,15 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
             for t in ex["tags"]:
                 for pid in tags.get(t, []):
                     resolved.setdefault(pid, t)
+        t = db.get(UserTaste, m.user_id)
+        taste = profile(t.answers) if t and t.status == "done" else None
         members.append({"user_id": m.user_id, "preference_version": p.version,
                         "ratings": {f: p.ratings[f] for f in FEATURES},
                         "exclusions": {"tags": ex.get("tags", []), "poi_ids": ex.get("poi_ids", []),
-                                       "resolved": resolved}})
+                                       "resolved": resolved},
+                        # optional, for the TF-IDF method (Method C); recommenders that don't use it ignore it
+                        **({"tastes": {"keywords": taste["keywords"], "avoid_keywords": taste["avoid_keywords"]}}
+                           if taste else {})})
     if waiting:
         raise HTTPException(409, "waiting_for_preferences: " + ", ".join(waiting))
     days = (trip.end_date - trip.start_date).days

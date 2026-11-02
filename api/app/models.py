@@ -40,6 +40,16 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class UserTaste(Base):
+    """Onboarding survey answers, one row per user (see app/taste_catalog.py). status: "done" or "skipped"."""
+    __tablename__ = "user_tastes"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)   # {"food": ["seafood"], "places": [...], "activities": [...], "avoid": [...]}
+    status: Mapped[str] = mapped_column(String(10), default="done")
+    version: Mapped[str] = mapped_column(String(20), default="taste-1.0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class EmailCode(Base):
     __tablename__ = "email_codes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

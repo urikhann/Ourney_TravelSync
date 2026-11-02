@@ -67,3 +67,12 @@ export type PoiDetail = Place & {
   hours: { day: string; open: string | null; close: string | null }[]; // Mon…Sun; open null = closed that day; [] = unknown
 };
 export type Availability = { poi_id: string; available: boolean | null; reason: string | null; open: string | null; close: string | null; next_available: string | null };
+
+// Onboarding survey ("travel tastes"), see GET /meta/tastes and GET/PUT /me/tastes
+export type TasteOption = { code: string; label_ko: string; label_en: string; keywords: string[]; exclusion: string | null };
+export type TasteQuestion = { code: string; label_ko: string; label_en: string; options: TasteOption[] };
+export type TastesMeta = { version: string; max_picks: number; questions: TasteQuestion[] };
+export type Tastes = {
+  status: "done" | "skipped" | null; version: string; answers: Record<string, string[]>;
+  keywords: string[]; avoid_keywords: string[]; exclusion_tags: string[];
+};
