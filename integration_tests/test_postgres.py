@@ -50,6 +50,16 @@ def test_snapshot_import_run_and_immutability():
             assert len(results) == 3
             stored = conn.execute('SELECT * FROM group_scores WHERE run_id=%s',(rid,)).fetchall()
             assert all(r['mean_score']==3 and r['group_utility'] is None and r['feasible_dates'] is None for r in stored)
+            # Migration 004 accepts raw zero cosine while preserving historical scores.
+            tfidf_config = config | dict(individual_method='tfidf', score_scale='0-1', misery_threshold=0)
+            tfidf_run, tfidf_results = recommend_database(conn, gid, cid, tfidf_config)
+            assert len(tfidf_results) == 3
+            assert all(r['mean_score'] == 0 for r in conn.execute(
+                'SELECT mean_score FROM group_scores WHERE run_id=%s', (tfidf_run,)).fetchall())
+            save_preference(conn, uid, dict.fromkeys(FEATURE_NAMES, 5), preference_text='바다 산책')
+            assert get_run_inputs(conn, tfidf_run)['preferences'][0]['preference_text'] == ''
+            assert all(r['mean_score'] == 3 for r in conn.execute(
+                'SELECT mean_score FROM group_scores WHERE run_id=%s', (rid,)).fetchall())
             with pytest.raises(psycopg.Error), conn.transaction():
                 conn.execute('UPDATE poi SET food=1 WHERE dataset_version=%s',(report['dataset_version'],))
             with pytest.raises(ValueError):

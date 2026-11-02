@@ -30,19 +30,19 @@ def test_contract_shape_and_scale(method):
     r = client.post("/recommend", json=req(method))
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v1" and body["method"] == method
+    assert body["score_scale"] == "0-1" and body["dataset_version"] == "busan-enriched-v1" and body["method"] == method
     ids = [g["poi_id"] for g in body["group"]]
     assert len(ids) == len(set(ids)) and [g["group_rank"] for g in body["group"]] == list(range(1, len(ids) + 1))
     for g in body["group"]:
-        assert 1 <= g["mean_score"] <= 5 and set(g["member_scores"]) == {m["user_id"] for m in EXAMPLE["members"]}
-        assert all(1 <= s <= 5 for s in g["member_scores"].values())
+        assert 0 <= g["mean_score"] <= 1 and set(g["member_scores"]) == {m["user_id"] for m in EXAMPLE["members"]}
+        assert all(0 <= s <= 1 for s in g["member_scores"].values())
     if method == "gfar":
         assert len(ids) == 30 and all(g["selection_gain"] is not None for g in body["group"])
 
 
 def test_same_order_as_the_package():
     users = {m["user_id"]: m["ratings"] for m in EXAMPLE["members"]}
-    for method, model in [("gfar", None), ("awm", AverageWithoutMisery(2.5))]:
+    for method, model in [("gfar", None), ("awm", AverageWithoutMisery(0.0))]:
         body = client.post("/recommend", json=req(method, tie_seed=0)).json()
         direct = recommend_group(load_places(), users, top_k=30, tie_seed=0, recommender=model)
         assert [g["poi_id"] for g in body["group"]] == [x.poi_id for x in direct]
@@ -55,6 +55,28 @@ def test_member_exclusions_are_removed_for_everyone():
     body = client.post("/recommend", json=r).json()
     assert first not in [g["poi_id"] for g in body["group"]]
     assert {"poi_id": first, "stage": "E1", "rule": "member_exclusion", "detail": "hiking (u_jae)"} in body["removed"]
+
+
+def test_text_queries_reach_gfar_and_preserve_raw_scores():
+    from ourney_travelsync.recommenders import prepare_group
+    r = req(tie_seed=0)
+    for member, text in zip(r["members"], ["떡볶이", "바다 산책", "미술관", "카페"]):
+        member["preference_text"] = text
+    body = client.post("/recommend", json=r).json()
+    users = {m["user_id"]: m["ratings"] for m in r["members"]}
+    queries = {m["user_id"]: m["preference_text"] for m in r["members"]}
+    data = prepare_group(load_places(), users, user_queries=queries, tie_seed=0)
+    direct = main.GFAR(main.GFAR_DEPTH).recommend(data, top_k=30)
+    assert [g["poi_id"] for g in body["group"]] == [p.poi_id for p in direct]
+    assert data.individual_scores.max() > 0
+    for row in body["group"]:
+        j = data.poi_ids.index(row["poi_id"])
+        for i, uid in enumerate(data.user_ids):
+            assert row["member_scores"][uid] == round(float(data.individual_scores[i, j]), 4)
+    empty = client.post("/recommend", json=req()).json()
+    assert all(s == 0 for row in empty["group"] for s in row["member_scores"].values())
+    r["members"][0]["preference_text"] = None
+    assert client.post("/recommend", json=r).status_code == 422
 
 
 def test_seed_per_trip_is_repeatable_and_varies():

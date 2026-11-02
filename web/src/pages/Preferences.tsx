@@ -53,7 +53,7 @@ export default function Preferences() {
   const save = useMutation({
     mutationFn: async ({ p, e }: { p: Prefs; e: Exclusions }) => {
       // expected_version: if I saved on another device in between, the server answers 409 instead of overwriting
-      const result = await api.put<Prefs>(`/trips/${id}/preferences/me`, { ratings: p.ratings, expected_version: p.version });
+      const result = await api.put<Prefs>(`/trips/${id}/preferences/me`, { ratings: p.ratings, preference_text: p.preference_text ?? "", expected_version: p.version });
       await api.put<Exclusions>(`/trips/${id}/exclusions/me`, e);
       return result;
     },
@@ -81,6 +81,13 @@ export default function Preferences() {
       <TopBar title="My preferences" back={`/trips/${id}`} />
       <main className="content">
         <h2 className="title">What do you enjoy on a trip?</h2>
+        <div className="field">
+          <label htmlFor="preference-text">Describe the places you want to visit (optional)</label>
+          <textarea id="preference-text" value={form.preference_text ?? ""}
+            onChange={(e) => setForm({ ...form, preference_text: e.target.value })}
+            placeholder="예: 떡볶이를 먹고 바닷가를 산책하고 싶어요" />
+        </div>
+        <p className="muted small">Place matching uses this description. Korean text works best with our place information. Leave blank for no text preference.</p>
         <p className="muted small">1 = not for me · 5 = must do. All 10 are needed.</p>
 
         <div className="card list">

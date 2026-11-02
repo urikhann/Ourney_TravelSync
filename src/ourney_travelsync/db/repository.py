@@ -46,15 +46,17 @@ def add_group_member(conn,group_id,user_id):
         conn.execute("INSERT INTO group_members(group_id,user_id,role) VALUES(%s,%s,'MEMBER')",(group_id,user_id))
 
 
-def save_preference(conn,user_id,scores):
+def save_preference(conn,user_id,scores,preference_text=''):
+    if not isinstance(preference_text, str):
+        raise ValueError('PREFERENCE_TEXT_REQUIRED_STRING')
     if set(scores)!=set(FEATURES) or any(type(scores[k]) is not int or not 1<=scores[k]<=5 for k in FEATURES):
         raise ValueError('PREFERENCE_1_TO_5_INTEGER_REQUIRED')
     with conn.transaction():
         if not conn.execute('SELECT user_id FROM users WHERE user_id=%s FOR UPDATE',(user_id,)).fetchone():
             raise ValueError('USER_NOT_FOUND')
         row=get_latest_preference(conn,user_id);version=1 if row is None else row['version']+1
-        conn.execute('INSERT INTO preferences(user_id,version,'+','.join(FEATURES)+') VALUES('+','.join(['%s']*12)+')',
-                     [user_id,version]+[scores[k] for k in FEATURES])
+        conn.execute('INSERT INTO preferences(user_id,version,'+','.join(FEATURES)+',preference_text) VALUES('+','.join(['%s']*13)+')',
+                     [user_id,version]+[scores[k] for k in FEATURES]+[preference_text])
         return version
 
 

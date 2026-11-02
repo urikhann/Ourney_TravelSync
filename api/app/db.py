@@ -27,3 +27,6 @@ def ensure_enriched_metadata_column():
         columns = {c["name"] for c in inspect(conn).get_columns("pois")}
         if "enriched_metadata" not in columns:
             conn.execute(text("ALTER TABLE pois ADD COLUMN enriched_metadata JSON"))
+        preference_columns = {c["name"] for c in inspect(conn).get_columns("preferences")}
+        if "preference_text" not in preference_columns:
+            conn.execute(text("ALTER TABLE preferences ADD COLUMN preference_text TEXT NOT NULL DEFAULT ''"))

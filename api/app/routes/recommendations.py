@@ -2,7 +2,7 @@
 
 Flow (TS SDD 1.1, chapters 5, 8, 9): pin the ACTIVE dataset version and each member's latest preference version,
 send them to the recommender (contracts/recommend.request.json), store the run, return the result with place details.
-The recommender computes P(u,i) = sum_k w(u,k)·x(i,k) (0–1), removes excluded places (E1), and picks the
+The recommender computes Option C TF-IDF cosine (0–1), removes excluded places (E1), and picks the
 group list with GFAR. "average" and "awm" are comparison methods only (SRS: Should).
 """
 from datetime import timedelta
@@ -64,6 +64,7 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
                     resolved.setdefault(pid, t)
         members.append({"user_id": m.user_id, "preference_version": p.version,
                         "ratings": {f: p.ratings[f] for f in FEATURES},
+                        "preference_text": p.preference_text,
                         "exclusions": {"tags": ex.get("tags", []), "poi_ids": ex.get("poi_ids", []),
                                        "resolved": resolved}})
     if waiting:

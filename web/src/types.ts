@@ -15,6 +15,7 @@ export const CATEGORIES = ["food", "cafe", "nature", "history", "art", "shopping
 export type Category = (typeof CATEGORIES)[number]; // = "food" | "cafe" | ... | "festival"
 
 export type Preferences = {
+  preference_text?: string;
   ratings: Record<Category, number>; // every feature → whole number 1..5 (raw score; the recommender makes weights)
   version: number;                   // 0 = never saved; every save adds 1
   submitted?: boolean;

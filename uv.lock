@@ -2338,6 +2338,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "scikit-learn" },
 ]
 
 [package.optional-dependencies]
@@ -2380,6 +2381,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'postgres'" },
     { name = "python-dotenv", marker = "extra == 'viewer'" },
     { name = "requests", marker = "extra == 'ingestion'" },
+    { name = "scikit-learn", specifier = "==1.9.1" },
     { name = "streamlit", marker = "extra == 'viewer'" },
 ]
 provides-extras = ["ingestion", "postgres", "viewer", "experiments"]

@@ -2,7 +2,7 @@
 
 Rules from TS SRS/SDD 1.1:
 - exactly the 10 features, each a whole number 1–5. 0, 6, 4.5, "4" or a missing feature is refused (422).
-- the raw 1–5 scores are stored as they are; the recommender derives weights w = r / sum(r) itself.
+- the raw 1–5 scores are stored as they are; optional preference_text supplies the TF-IDF query.
 - saving never overwrites: it stores version + 1. Send expected_version to avoid overwriting a newer save.
 - personal exclusions are a separate input (SDD 6.6 member_exclusions), not part of the taste scores.
 """
@@ -25,6 +25,7 @@ class PreferencesIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ratings: dict[str, StrictInt]          # StrictInt: 4.0, 4.5, "4" and true are refused
     expected_version: int | None = None
+    preference_text: str = ""
 
     @field_validator("ratings")
     @classmethod
@@ -62,8 +63,9 @@ def latest(db: Session, trip_id: str, user_id: str) -> Preference | None:
 
 def _out(p: Preference | None) -> dict:
     if not p:
-        return {"ratings": DEFAULT_RATINGS, "version": 0, "submitted": False}
-    return {"ratings": {f: p.ratings[f] for f in FEATURES}, "version": p.version, "submitted": True}
+        return {"ratings": DEFAULT_RATINGS, "preference_text": "", "version": 0, "submitted": False}
+    return {"ratings": {f: p.ratings[f] for f in FEATURES}, "preference_text": p.preference_text,
+            "version": p.version, "submitted": True}
 
 
 def _member(db: Session, trip: Trip, user: User) -> TripMember:
@@ -90,7 +92,8 @@ def save_mine(body: PreferencesIn, trip: Trip = Depends(member_trip), user: User
     cur_version = cur.version if cur else 0
     if body.expected_version is not None and body.expected_version != cur_version:
         raise HTTPException(409, f"preference_version_conflict: latest is {cur_version}")
-    p = Preference(trip_id=trip.id, user_id=user.id, version=cur_version + 1, ratings=body.ratings)
+    p = Preference(trip_id=trip.id, user_id=user.id, version=cur_version + 1,
+                   ratings=body.ratings, preference_text=body.preference_text)
     db.add(p)
     db.commit()
     return _out(p)

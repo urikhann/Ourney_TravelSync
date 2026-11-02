@@ -90,8 +90,11 @@ Existing API databases require an explicit CSV import with the new version
 
 Feature order: `food, cafe, nature, history, art, shopping, activity,
 entertainment, relax, festival`. POIs have independent binary labels, at least one
-per row. Individual scores average preferences over active labels, on the original
-1-5 scale. Candidates are the union of each member's top-N (default 100).
+per row. Individual recommendations default to Option C metadata + description
+character TF-IDF cosine on 0-1. Members may supply optional `preference_text`;
+absent text produces zero scores. Numeric ratings remain stored but do not enter
+TF-IDF. See [configuration and experimental differences](docs/tfidf.md).
+Candidates are the union of each member's top-N (default 100).
 
 Candidate cutoffs and persisted individual rankings break ties using seeded SHA256
 of stable POI identities (default seed 0). Unequal scores retain descending score
@@ -99,11 +102,13 @@ order. Candidate output rows use the identity order, making fixed-seed results
 independent of CSV ordering. AWM/GFAR themselves break ties by supplied input order;
 the standard pipeline supplies the seeded order.
 
-AWM vetoes a POI if any member scores below 2.5 by default, then ranks by mean.
+AWM vetoes a POI below the supplied threshold, then ranks by mean. The TF-IDF
+CLI/service default is 0 (no calibrated misery cutoff exists); the legacy AWM
+class still defaults to 2.5 for historical binary-score experiments.
 GFAR uses normalized Borda relevance (default depth 20) and greedy coverage gains.
-Its score is selection gain, not mean satisfaction. Compare algorithms using
-`evaluation.evaluate_satisfaction`, which reads original member scores. Empty
-lists have undefined satisfaction. The notebook demonstrates this comparison.
+Its score is selection gain. `evaluation.evaluate_satisfaction` reads supplied
+member scores; with TF-IDF these are cosine similarities, not satisfaction.
+Empty lists have undefined utility. The notebook retains its historical binary analysis.
 AGREE is unimplemented; see `docs/agree_design.md`.
 
 The pipeline filters explicit eligible/excluded IDs before scoring. Database runs

@@ -98,7 +98,7 @@ class PipelineTests(unittest.TestCase):
         group = prepare_group(self.places, self.users, individual_top_n=30)
         self.assertLessEqual(len(group.poi_ids), 60)
         group.validate(require_scores=True)
-        self.assertTrue(((group.individual_scores >= 1) & (group.individual_scores <= 5)).all())
+        self.assertTrue(((group.individual_scores >= 0) & (group.individual_scores <= 1)).all())
         results = recommend_group(self.places, self.users, individual_top_n=30, top_k=10)
         self.assertEqual(len(results), 10)
         self.assertEqual(len({result.poi_id for result in results}), 10)

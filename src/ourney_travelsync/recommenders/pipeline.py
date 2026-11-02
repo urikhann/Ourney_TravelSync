@@ -1,4 +1,4 @@
-"""10D preferences -> individual scores -> candidate union -> aggregation."""
+"""Preference text -> Option C scores -> candidate union -> aggregation."""
 
 from collections.abc import Collection, Mapping
 
@@ -9,6 +9,7 @@ from ..features import feature_vector
 from ..places import PlaceDataset
 from .gfar import GFAR
 from .individual_scoring import score_individuals
+from .tfidf import score_tfidf
 from .ties import ranking, tie_keys
 
 
@@ -46,6 +47,8 @@ def prepare_group(
     tie_seed: int = 0,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
+    user_queries: Mapping[str, str] | None = None,
+    individual_method: str = "tfidf",
 ) -> GroupInput:
     """Apply explicit eligibility/exclusions before scoring and candidate selection.
 
@@ -66,10 +69,22 @@ def prepare_group(
     ], dtype=bool)
     pois = places.features[mask]
 
+    if user_queries is not None and set(user_queries) != set(user_preferences):
+        raise ValueError("Queries must match the group member IDs exactly.")
+    if individual_method == "tfidf":
+        scores = score_tfidf(
+            [user_queries[uid] if user_queries is not None else "" for uid in user_preferences],
+            [row for row, keep in zip(places.records, mask) if keep],
+        )
+    elif individual_method == "binary":
+        scores = score_individuals(users, pois)
+    else:
+        raise ValueError("Unknown individual recommendation method.")
+
     data = GroupInput(
         tuple(user_preferences),
         tuple(poi_id for poi_id, keep in zip(places.place_ids, mask) if keep),
-        users, pois, score_individuals(users, pois),
+        users, pois, scores,
     )
     return generate_candidates(data, individual_top_n=individual_top_n, tie_seed=tie_seed)
 
@@ -84,6 +99,8 @@ def recommend_group(
     recommender: GroupRecommender | None = None,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
+    user_queries: Mapping[str, str] | None = None,
+    individual_method: str = "tfidf",
 ) -> list[Recommendation]:
     """Use GFAR by default; an AWM baseline may be passed as recommender."""
 
@@ -91,6 +108,7 @@ def recommend_group(
     data = prepare_group(
         places, user_preferences, individual_top_n=individual_top_n, tie_seed=tie_seed,
         excluded_place_ids=excluded_place_ids, eligible_place_ids=eligible_place_ids,
+        user_queries=user_queries, individual_method=individual_method,
     )
 
     model = GFAR() if recommender is None else recommender

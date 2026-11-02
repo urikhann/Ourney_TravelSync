@@ -8,7 +8,7 @@ It only translates — the algorithm lives in the package.
 |---|---|---|
 | Algorithm | stand-in written from the SDD | **the team package** (Urikhan) |
 | Data | backend database | packaged enriched CSV, 3,570 places, version `busan-enriched-v1` |
-| Scores | 0–1 | **1–5** (`score_scale: "1-5"`) |
+| Scores | 0–1 | **0–1 raw TF-IDF cosine** (`score_scale: "0-1"`) |
 | Ties | place id | seeded hash, **one seed per trip** (repeatable for a trip, different between trips) |
 
 ## Run (needs Python 3.13, like the package)
@@ -28,12 +28,17 @@ Point the backend at it: in `api/.env` put `RECOMMENDER_URL=http://localhost:800
 
 ## Options in the request
 
-- `method`: `gfar` (default) · `awm` (veto below `awm_threshold`, default 2.5 on 1–5) · `average`
+- member `preference_text`: optional query text, empty when omitted; no query means zero cosine scores
+- `method`: `gfar` (default) · `awm` (veto below `awm_threshold`, default 0 on 0–1) · `average`
 - `top_l`: each member's candidate list (default 100) · `group_k`: length of the group list (default 30)
 - `tie_seed`: optional; default is derived from `trip_id`
 - member `exclusions.resolved`: `{poi_id: reason}` — places the backend matched to a member's rule (e.g. hiking)
 
-Environment: `DATASET_VERSION` (default `busan-enriched-v1`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
+Environment: `DATASET_VERSION` (default `busan-enriched-v1`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (0).
+
+Option C configuration, missing fields, migration and experiment differences:
+[docs/tfidf.md](../../docs/tfidf.md). The legacy `member_satisfaction` metric now
+contains mean cosine similarity; it is not a measured satisfaction value.
 
 ## Test
 

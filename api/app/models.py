@@ -96,7 +96,7 @@ class MemberAvailability(Base):
 
 class Preference(Base):
     """One row per saved version (SDD 6.3): saving again INSERTs version+1, it never overwrites.
-    ratings = the 10 raw 1–5 scores; the recommender derives the weights w = r / sum(r) itself."""
+    ratings retain the ten survey values; preference_text supplies the TF-IDF query."""
     __tablename__ = "preferences"
     __table_args__ = (UniqueConstraint("trip_id", "user_id", "version"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -104,6 +104,7 @@ class Preference(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     version: Mapped[int] = mapped_column(Integer, default=1)
     ratings: Mapped[dict] = mapped_column(JSON)            # {"food": 5, "cafe": 4, ...} — exactly the 10 features
+    preference_text: Mapped[str] = mapped_column(String, default="", server_default="")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

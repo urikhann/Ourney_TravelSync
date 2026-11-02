@@ -6,11 +6,11 @@
 This file only translates. All scoring and group aggregation is done by the `ourney_travelsync`
 package (src/ourney_travelsync, owned by the recommender teammate):
 
-    ratings (1-5) --score_individuals--> member x place scores (1-5)
+    preference_text --Option C TF-IDF--> member x place cosine scores (0-1)
                   --prepare_group------> candidates = union of each member's top-L (seeded ties)
                   --GFAR / AWM---------> group list
 
-Scores stay on the package's 1-5 scale; the response says so in "score_scale".
+Scores stay on the raw cosine scale; the response declares "score_scale": "0-1".
 """
 from __future__ import annotations
 
@@ -29,13 +29,13 @@ from ourney_travelsync.recommenders.gfar import GFAR
 from ourney_travelsync.recommenders.ties import ranking
 
 FEATURE_SCHEMA_VERSION = "fs-1.0"
-SCORE_SCALE = "1-5"
+SCORE_SCALE = "0-1"
 # The dataset version name the backend uses for the packaged enriched CSV (api/app/config.py PLACES_VERSION).
 DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-enriched-v1")
 PLACES_CSV = os.getenv("PLACES_CSV") or None          # None = the CSV inside the package
 GFAR_DEPTH = int(os.getenv("GFAR_DEPTH", "20"))         # Borda depth of each member's list (package default)
-AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.5"))  # package default, 1-5 scale
-MODEL_VERSION = f"ourney-travelsync-{pkg_version('ourney-travelsync')}"
+AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "0.0"))  # no calibrated TF-IDF misery cutoff
+MODEL_VERSION = f"tfidf-c-{pkg_version('ourney-travelsync')}"
 
 LOVE = {"food": "love local food", "cafe": "love cafés", "nature": "love nature & views", "history": "love history",
         "art": "love art & shows", "shopping": "love shopping", "activity": "love activities",
@@ -99,6 +99,8 @@ def check(req: dict) -> None:
     if not req.get("members"):
         raise HTTPException(422, "no_members")
     for m in req["members"]:
+        if not isinstance(m.get("preference_text", ""), str):
+            raise HTTPException(422, "invalid_preference_text")
         r = m.get("ratings") or {}
         if set(r) != set(FEATURE_NAMES) or any(type(v) is not int or not 1 <= v <= 5 for v in r.values()):
             raise HTTPException(422, f"invalid_ratings: {m.get('user_id')}")
@@ -129,10 +131,11 @@ def recommend(req: dict):
 
     users = {m["user_id"]: m["ratings"] for m in members}
     try:
-        data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded)
+        data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded,
+                             user_queries={m["user_id"]: m.get("preference_text", "") for m in members})
     except ValueError as e:
         raise HTTPException(422, f"invalid_input: {e}")
-    S = data.individual_scores  # [members, candidates], 1-5
+    S = data.individual_scores  # [members, candidates], raw cosine 0-1
     col = {pid: j for j, pid in enumerate(data.poi_ids)}
     uids = list(data.user_ids)
 
@@ -147,7 +150,7 @@ def recommend(req: dict):
                 u = int(S[:, j].argmin())
                 removed.append({"poi_id": pid, "stage": "AWM", "rule": "misery",
                                 "detail": f"{uids[u]} {S[u, j]:.2f} < {threshold}"})
-    else:  # plain average = AWM with no veto (all scores are >= 1)
+    else:  # plain average = AWM with no veto (all cosine scores are >= 0)
         picks = AverageWithoutMisery(0.0).recommend(data, top_k=group_k)
 
     # Who each GFAR pick mainly served (the member with the largest share of its gain at selection time).
@@ -190,7 +193,7 @@ def recommend(req: dict):
         "metrics": {
             "eligible": len(P.place_ids) - len(excluded), "candidate_pool": len(data.poi_ids), "returned": k,
             "per_member_relevance": cover, "min_member_relevance": min(cover.values()) if cover else 0,
-            "member_satisfaction": sat,  # predicted: mean 1-5 score of the returned places per member
+            "member_satisfaction": sat,  # legacy key: mean cosine, not measured satisfaction
             "min_member_satisfaction": min((v for v in sat.values() if v is not None), default=None),
         },
     }

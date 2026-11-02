@@ -11,6 +11,7 @@ def parser():
     commands = p.add_subparsers(dest='command', required=True)
     r = commands.add_parser('recommend', help='Recommend from the packaged v2 CSV or an external CSV')
     r.add_argument('--csv'); r.add_argument('--users', help='JSON object: user ID to ten named preferences')
+    r.add_argument('--queries', help='JSON object: user ID to preference text (empty when omitted)')
     for name in ('recommend', 'db-recommend'):
         target = r if name == 'recommend' else commands.add_parser(name, help='Capture and persist a PostgreSQL recommendation run')
         target.add_argument('--algorithm', choices=['awm', 'gfar'], default='gfar')
@@ -18,7 +19,7 @@ def parser():
         target.add_argument('--candidate-top-n', type=int, default=100)
         target.add_argument('--tie-seed', type=int, default=0)
         target.add_argument('--gfar-depth', type=int, default=20)
-        target.add_argument('--misery-threshold', type=float, default=2.5)
+        target.add_argument('--misery-threshold', type=float, default=0.0)
         if name == 'db-recommend':
             target.add_argument('group_id'); target.add_argument('constraint_id'); target.add_argument('--dataset-version')
     for name in ('collect', 'collect-to-db'):
@@ -46,7 +47,8 @@ def recommendation_config(a):
     return dict(algorithm=a.algorithm, top_k=a.top_k, candidate_top_n=a.candidate_top_n,
                 tie_seed=a.tie_seed, gfar_depth=a.gfar_depth, misery_threshold=a.misery_threshold,
                 algorithm_version=version('ourney-travelsync'), numpy_version=version('numpy'),
-                tie_policy='sha256-identity-v1', score_scale='1-5')
+                tie_policy='sha256-identity-v1', score_scale='0-1', individual_method='tfidf',
+                sklearn_version=version('scikit-learn'))
 
 
 def dispatch(a):
@@ -60,9 +62,12 @@ def dispatch(a):
         if not isinstance(users, dict) or any(not isinstance(v, dict) for v in users.values()):
             raise ValueError('USERS_JSON_MUST_MAP_IDS_TO_NAMED_PREFERENCES')
         places = load_places(a.csv)
+        queries = json.loads(Path(a.queries).read_text(encoding='utf-8')) if a.queries else None
+        if queries is not None and not isinstance(queries, dict):
+            raise ValueError('QUERIES_JSON_MUST_MAP_IDS_TO_TEXT')
         model = GFAR(a.gfar_depth) if a.algorithm == 'gfar' else AverageWithoutMisery(a.misery_threshold)
         results = recommend_group(places, users, top_k=a.top_k, individual_top_n=a.candidate_top_n,
-                                  tie_seed=a.tie_seed, recommender=model)
+                                  tie_seed=a.tie_seed, recommender=model, user_queries=queries)
         metadata = {r['place_id']: r for r in places.records}
         return [dict(place_id=r.poi_id, place_name=metadata[r.poi_id]['place_name'],
                      **({'selection_gain': r.score} if a.algorithm == 'gfar' else {'mean_score': r.score})) for r in results]

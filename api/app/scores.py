@@ -1,5 +1,4 @@
-"""Score scales. The team recommender scores places 1–5 (it says so in "score_scale");
-the old mock used 0–1. The web app always gets a 0–1 "fit" so the screens never need to know."""
+"""Keep TF-IDF cosine on 0-1; convert historical 1-5 runs for the web display."""
 
 
 def to_fit(score: float | None, scale: str | None) -> float | None:
