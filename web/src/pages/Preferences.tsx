@@ -8,6 +8,7 @@ import { ErrorBox, Loading } from "../ui";
 import RatingRow from "../components/RatingRow";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
+import TastesCard from "../components/TastesCard";
 import { CableCar, Clapperboard, Coffee, Landmark, Palette, PartyPopper, Plus, ShoppingBag, Trees, Utensils, Waves, X,
   type LucideIcon } from "lucide-react";
 
@@ -108,7 +109,9 @@ export default function Preferences() {
             );
           })}
         </div>
-        <p className="muted tiny" style={{ marginTop: 6 }}>Budget, dates and how far to travel are set for the whole group.</p>
+        <p className="muted tiny" style={{ marginTop: 6 }}>Dates are set for the whole group in the trip room.</p>
+
+        <TastesCard compact />
 
         {loved.length > 0 && (
           <div className="banner blue" style={{ marginTop: 16 }}>You love: {loved.join(", ")}</div>

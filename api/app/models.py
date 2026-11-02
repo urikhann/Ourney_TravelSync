@@ -40,6 +40,16 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class UserTaste(Base):
+    """Onboarding survey answers, one row per user (see app/taste_catalog.py). status: "done" or "skipped"."""
+    __tablename__ = "user_tastes"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)   # {"food": ["seafood"], "places": [...], "activities": [...], "avoid": [...]}
+    status: Mapped[str] = mapped_column(String(10), default="done")
+    version: Mapped[str] = mapped_column(String(20), default="taste-1.0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class EmailCode(Base):
     __tablename__ = "email_codes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -60,8 +70,6 @@ class Trip(Base):
     city: Mapped[str] = mapped_column(String(40), default="busan")
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
-    budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     invite_code: Mapped[str] = mapped_column(String(8), unique=True, index=True, default=new_invite_code)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
