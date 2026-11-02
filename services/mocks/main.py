@@ -27,11 +27,13 @@ def _json(v):
 
 def load_pois(version: str) -> dict[str, dict]:
     """All places of one dataset version (the version the backend pinned for this run)."""
-    sql = ("SELECT id, name, kind, indoor, avg_cost_krw, duration_min, tags, features, walking_level, "
-           "closed_on_public_holidays FROM pois WHERE dataset_version = :v")
+    sql = ("SELECT p.id, p.name, p.kind, p.indoor, p.avg_cost_krw, p.duration_min, p.tags, p.features, p.walking_level, "
+           "p.closed_on_public_holidays, m.metadata AS enriched_metadata FROM pois p LEFT JOIN poi_metadata m "
+           "ON p.id=m.place_id AND p.dataset_version=m.dataset_version WHERE p.dataset_version = :v")
     with engine.connect() as c:
         rows = c.execute(text(sql), {"v": version}).mappings().all()
-    return {r["id"]: {**r, "tags": _json(r["tags"]) or [], "features": _json(r["features"]) or {}} for r in rows}
+    return {r["id"]: {**r, "tags": _json(r["tags"]) or [], "features": _json(r["features"]) or {},
+                      'enriched_metadata': _json(r['enriched_metadata']) or {}} for r in rows}
 
 
 # ------------------------------------------------------------------ recommender (SDD 8–9: weighted sum + GFAR)
@@ -59,7 +61,8 @@ def recommend(req: dict):
     members, opts = req["members"], req.get("options", {})
     places = load_pois(req["dataset_version"])
     res = group_rec.recommend(members, places, top_l=opts.get("top_l", 100), group_k=opts.get("group_k", 30),
-                              method=opts.get("method", "gfar"), awm_threshold=opts.get("awm_threshold"))
+                              method=opts.get("method", "gfar"), awm_threshold=opts.get("awm_threshold"),
+                              individual_method=opts.get("individual_method", "binary"))
     for g in res["group"]:
         g["reasons"] = reasons(places[g["poi_id"]], members, g["picked_for"])
     return {"schema_version": req.get("schema_version", "rec-1.0"), "model_version": "mock-gfar-0.2",
@@ -77,12 +80,15 @@ def _hhmm(m: int) -> str:
     return f"{(m // 60) % 24:02d}:{m % 60:02d}"
 
 
-def check_one(poi_id: str, day: date, start: str, duration: int) -> dict:
+def check_one(poi_id: str, day: date, start: str, duration: int, version: str | None = None) -> dict:
     """available: True = open for the whole visit, False = closed / does not fit, None = we don't know the hours.
     Unknown is never shown as closed (data rule: missing hours or closed days mean "not known")."""
     dow = (day.weekday() + 1) % 7  # Python Monday=0 -> our Sunday=0
     with engine.connect() as c:
-        poi = c.execute(text("SELECT closed_on_public_holidays FROM pois WHERE id=:i LIMIT 1"), {"i": poi_id}).first()
+        if version is None:
+            version = c.execute(text("SELECT version FROM dataset_versions WHERE status='ACTIVE'")).scalar()
+        poi = c.execute(text("SELECT closed_on_public_holidays FROM pois WHERE id=:i AND dataset_version=:v"),
+                        {"i": poi_id, "v": version}).first()
         has_weekly = c.execute(text("SELECT 1 FROM poi_hours WHERE poi_id=:i LIMIT 1"), {"i": poi_id}).first()
         hours = c.execute(text("SELECT open, close FROM poi_hours WHERE poi_id=:i AND dow=:d"), {"i": poi_id, "d": dow}).first()
         holiday = c.execute(text("SELECT name FROM public_holidays WHERE day=:d"), {"d": day}).first()
@@ -95,7 +101,7 @@ def check_one(poi_id: str, day: date, start: str, duration: int) -> dict:
     def next_open():
         for k in range(1, 8):
             d2 = day + timedelta(days=k)
-            if check_one(poi_id, d2, "00:00", 0)["available"]:
+            if check_one(poi_id, d2, "00:00", 0, version)["available"]:
                 return d2.isoformat()
         return None
 
@@ -130,7 +136,7 @@ def check_one(poi_id: str, day: date, start: str, duration: int) -> dict:
 
 @app.post("/availability/check")
 def availability(req: dict):
-    return {"results": [check_one(c["poi_id"], date.fromisoformat(c["date"]), c["start"], c["duration_min"])
+    return {"results": [check_one(c["poi_id"], date.fromisoformat(c["date"]), c["start"], c["duration_min"], c.get("dataset_version") or req.get("dataset_version"))
                         for c in req["checks"]]}
 
 
@@ -169,7 +175,7 @@ def plans(req: dict):
                     p = pois[r["poi_id"]]
                     if r["poi_id"] in used or p["kind"] != kind or _min(t) + p["duration_min"] > nxt - 10:
                         continue
-                    av = check_one(r["poi_id"], date.fromisoformat(d), t, p["duration_min"]) if check else None
+                    av = check_one(r["poi_id"], date.fromisoformat(d), t, p["duration_min"], req["dataset_version"]) if check else None
                     if av is None or av["available"] is not False:  # unknown hours (None) are kept, not dropped
                         used.add(r["poi_id"])
                         items.append({"poi_id": r["poi_id"], "start": t, "end": _hhmm(_min(t) + p["duration_min"]),

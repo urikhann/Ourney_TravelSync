@@ -7,6 +7,7 @@ COLUMNS = BASE + EXTRA + FEATURES
 
 # Optional enrichment columns; the collector still produces the original core schema.
 ENRICHED_COLUMNS = [
+    'activity_type',
     'detailed_category_raw',
     'detailed_category',
     'category_source_url',

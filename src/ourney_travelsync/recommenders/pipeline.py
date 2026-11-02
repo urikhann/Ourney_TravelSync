@@ -46,6 +46,8 @@ def prepare_group(
     tie_seed: int = 0,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
+    individual_method: str = 'binary',
+    preference_texts: Mapping[str, str] | None = None,
 ) -> GroupInput:
     """Apply explicit eligibility/exclusions before scoring and candidate selection.
 
@@ -65,11 +67,19 @@ def prepare_group(
         for poi_id in places.place_ids
     ], dtype=bool)
     pois = places.features[mask]
+    if individual_method == 'binary':
+        scores = score_individuals(users, pois)
+    elif individual_method == 'tfidf':
+        from .tfidf import score_texts
+        scores = score_texts([r for r, keep in zip(places.records, mask) if keep],
+                             [(preference_texts or {}).get(uid, '') for uid in user_preferences])
+    else:
+        raise ValueError('UNKNOWN_INDIVIDUAL_METHOD')
 
     data = GroupInput(
         tuple(user_preferences),
         tuple(poi_id for poi_id, keep in zip(places.place_ids, mask) if keep),
-        users, pois, score_individuals(users, pois),
+        users, pois, scores,
     )
     return generate_candidates(data, individual_top_n=individual_top_n, tie_seed=tie_seed)
 
@@ -84,6 +94,8 @@ def recommend_group(
     recommender: GroupRecommender | None = None,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
+    individual_method: str = 'binary',
+    preference_texts: Mapping[str, str] | None = None,
 ) -> list[Recommendation]:
     """Use GFAR by default; an AWM baseline may be passed as recommender."""
 
@@ -91,6 +103,7 @@ def recommend_group(
     data = prepare_group(
         places, user_preferences, individual_top_n=individual_top_n, tie_seed=tie_seed,
         excluded_place_ids=excluded_place_ids, eligible_place_ids=eligible_place_ids,
+        individual_method=individual_method, preference_texts=preference_texts,
     )
 
     model = GFAR() if recommender is None else recommender

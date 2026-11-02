@@ -64,7 +64,7 @@ def utility(rank: int, k_actual: int) -> int:
 
 
 def recommend(members: list[dict], places: dict[str, dict], top_l: int = 100, group_k: int = 30,
-              method: str = "gfar", awm_threshold: float | None = None) -> dict:
+              method: str = "gfar", awm_threshold: float | None = None, individual_method: str = 'binary') -> dict:
     """members: [{"user_id", "ratings", "exclusions": {"tags", "poi_ids"}}]; places: {poi_id: {"features", "tags"}}."""
     removed, eligible = [], []
     for pid in sorted(places):  # E1 pre-filter: only explicit, confirmed exclusions
@@ -83,6 +83,13 @@ def recommend(members: list[dict], places: dict[str, dict], top_l: int = 100, gr
 
     w = {m["user_id"]: weights(m["ratings"]) for m in members}
     scores = {u: {pid: score(w[u], places[pid]["features"]) for pid in eligible} for u in w}
+    if individual_method == 'tfidf':
+        from ourney_travelsync.recommenders.tfidf import score_texts, taste_query
+        matrix = score_texts([places[pid] for pid in eligible], [taste_query(m.get('tastes')) for m in members])
+        scores = {m['user_id']: {pid: float(matrix[i, j]) for j, pid in enumerate(eligible)}
+                  for i, m in enumerate(members)}
+    elif individual_method != 'binary':
+        raise ValueError('UNKNOWN_INDIVIDUAL_METHOD')
     ranking = {u: rank_for(s) for u, s in scores.items()}
     tops = {u: r[:top_l] for u, r in ranking.items()}
     pool = sorted({pid for t in tops.values() for pid in t})

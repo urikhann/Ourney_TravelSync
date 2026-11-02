@@ -19,7 +19,7 @@ from ..db import get_db
 from ..deps import member_trip
 from ..features import FEATURE_SCHEMA_VERSION, FEATURES
 from ..import_places import active_version
-from ..models import Poi, RecommendationRun, Trip, User, UserTaste
+from ..models import DatasetVersion, Poi, RecommendationRun, Trip, User, UserTaste
 from ..places import load_places
 from ..taste_catalog import profile
 from .auth import current_user
@@ -33,6 +33,7 @@ class RunIn(BaseModel):
     method: Literal["gfar", "average", "awm"] = "gfar"
     awm_threshold: float | None = Field(default=None, ge=0, le=5)  # on the recommender's score scale, only for "awm"
     group_k: int | None = Field(default=None, ge=1, le=100)
+    individual_method: Literal['binary', 'tfidf'] = 'tfidf'
 
 
 def tag_index(db: Session, version: str) -> dict[str, list[str]]:
@@ -49,6 +50,7 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
     version = active_version(db)
     if not version:
         raise HTTPException(503, "no_active_dataset")
+    db.scalar(select(DatasetVersion).where(DatasetVersion.version == version).with_for_update(read=True))
     tags = None  # loaded only if someone has a tag rule
     members, waiting = [], []
     for m in sorted(trip.members, key=lambda m: m.id or 0):
@@ -81,6 +83,7 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
         "dates": [(trip.start_date + timedelta(d)).isoformat() for d in range(days + 1)],
         "members": members,
         "options": {"method": body.method, "top_l": config.REC_TOP_L, "group_k": body.group_k or config.REC_GROUP_K,
+                    'individual_method': body.individual_method,
                     "awm_threshold": body.awm_threshold if body.method == "awm" else None},
     }
     snapshot = [{"user_id": m["user_id"], "preference_version": m["preference_version"]} for m in members]
@@ -116,7 +119,14 @@ def enrich(run: RecommendationRun, trip: Trip, db: Session) -> dict:
 async def run_recommender(body: RunIn | None = None, trip: Trip = Depends(member_trip),
                           user: User = Depends(current_user), db: Session = Depends(get_db)):
     body = body or RunIn()
+    if body.individual_method == 'tfidf' and body.awm_threshold is not None and body.awm_threshold > 1:
+        raise HTTPException(422, 'tfidf_threshold_must_be_between_0_and_1')
     req, snapshot, version = build_request(trip, db, body)
+    # Transmit the JOIN result pinned by this request; never substitute the service's newest CSV.
+    req['poi_snapshot'] = [{'place_id': p.id, 'dataset_version': p.dataset_version,
+                            'latitude': p.lat, 'longitude': p.lng,
+                            'enriched_metadata': p.enriched_metadata, **p.features}
+                          for p in db.scalars(select(Poi).where(Poi.dataset_version == version))]
     res = await services.recommend(req)
     if res.get("dataset_version") not in (None, version) or \
             res.get("feature_schema_version") not in (None, FEATURE_SCHEMA_VERSION):

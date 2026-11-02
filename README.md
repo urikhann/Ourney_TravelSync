@@ -31,8 +31,9 @@ uv run --locked --extra viewer streamlit run apps/data_viewer.py
 ```
 
 Extras: `ingestion` (requests/pandas), `postgres` (psycopg/python-dotenv), `viewer`
-(Streamlit/pandas/PostgreSQL), `experiments` (MLflow/DVC). Core requires only NumPy.
-Scikit-learn is not a direct dependency; optional MLflow may bring it transitively.
+(Streamlit/pandas/PostgreSQL), `experiments` (MLflow/DVC). Core requires NumPy and
+scikit-learn for Method C. See [versioned metadata integration](docs/poi_metadata.md)
+for sidecar imports, JOINs, preference text and historical binary replay.
 Development tools are in the `dev` group. Existing environments and local experiment
 records are not cleanup targets.
 

@@ -71,7 +71,7 @@ def test_enriched_import_preserves_every_metadata_field():
         rows = read_csv(path)
     assert validate_rows(rows) == rows
     for original, imported in zip(source, rows, strict=True):
-        assert imported['enriched_metadata'] == {k: original[k] for k in ENRICHED_COLUMNS}
+        assert imported['enriched_metadata'] == {k: original[k] for k in ENRICHED_COLUMNS if k in original}
     legacy = {k: v for k, v in source[0].items() if k not in ENRICHED_COLUMNS}
     assert 'enriched_metadata' not in validate_rows([legacy])[0]
     with pytest.raises(ValueError, match='COLUMN_MISMATCH'):

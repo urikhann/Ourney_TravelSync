@@ -24,7 +24,7 @@ from .models import DatasetVersion, Poi
 
 CORE_COLUMNS = {"place_id", "place_name", "category", "category_name", "cat1", "cat2", "cat3",
                 "address", "road_address", "latitude", "longitude", "phone", "place_url", "image_url",
-                "source", "source_place_id", "kakao_place_ids", "feature_rules", "exclude_reason", *FEATURES}
+                "source", "source_place_id", "kakao_place_ids", "feature_rules", "exclude_reason", 'dataset_version', *FEATURES}
 
 REQUIRED = ["place_id", "place_name", "latitude", "longitude", *FEATURES]
 BUSAN_BOX = (34.8, 35.5, 128.7, 129.4)  # lat min/max, lng min/max — a sanity check, not an exact border
@@ -114,6 +114,8 @@ def import_rows(db: Session, rows: list[dict], columns: list[str], version: str,
     if db.get(DatasetVersion, version):
         raise ImportProblem([f"dataset version '{version}' already exists — versions never change, pick a new name"])
     problems = check_rows(rows, columns)
+    if any(r.get('dataset_version', version) != version for r in rows):
+        problems.append('CSV dataset_version does not match the requested version')
     if problems:
         raise ImportProblem(problems)
     try:

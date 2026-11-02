@@ -18,7 +18,9 @@ def parser():
         target.add_argument('--candidate-top-n', type=int, default=100)
         target.add_argument('--tie-seed', type=int, default=0)
         target.add_argument('--gfar-depth', type=int, default=20)
-        target.add_argument('--misery-threshold', type=float, default=2.5)
+        target.add_argument('--misery-threshold', type=float)
+        target.add_argument('--individual-method', choices=['binary', 'tfidf'], default='tfidf')
+        target.add_argument('--preference-texts', help='JSON object mapping user IDs to explicit preference text')
         if name == 'db-recommend':
             target.add_argument('group_id'); target.add_argument('constraint_id'); target.add_argument('--dataset-version')
     for name in ('collect', 'collect-to-db'):
@@ -33,6 +35,8 @@ def parser():
     commands.add_parser('db-check', help='Read dataset versions and active head')
     c = commands.add_parser('db-import', help='Strict CSV import; never activates a dataset')
     c.add_argument('csv'); c.add_argument('--validate-only', action='store_true')
+    c = commands.add_parser('db-import-metadata', help='Validate and import the version-pinned metadata sidecar')
+    c.add_argument('csv'); c.add_argument('--dataset-version'); c.add_argument('--validate-only', action='store_true')
     c = commands.add_parser('db-activate', help='Explicitly activate a reviewed READY dataset')
     c.add_argument('dataset_version'); c.add_argument('--expected-head')
     return p
@@ -42,27 +46,37 @@ def recommendation_config(a):
     from .common import validate_top_k
     from . import GFAR, AverageWithoutMisery
     validate_top_k(a.top_k); validate_top_k(a.candidate_top_n)
-    GFAR(a.gfar_depth); AverageWithoutMisery(a.misery_threshold)
+    threshold = a.misery_threshold if a.misery_threshold is not None else (0.25 if a.individual_method == 'tfidf' else 2.5)
+    GFAR(a.gfar_depth); AverageWithoutMisery(threshold)
+    if a.individual_method == 'tfidf' and not 0 <= threshold <= 1:
+        raise ValueError('TFIDF_THRESHOLD_MUST_BE_BETWEEN_0_AND_1')
+    texts = json.loads(Path(a.preference_texts).read_text(encoding='utf-8')) if a.preference_texts else {}
+    if not isinstance(texts, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in texts.items()):
+        raise ValueError('PREFERENCE_TEXTS_MUST_MAP_USER_IDS_TO_STRINGS')
     return dict(algorithm=a.algorithm, top_k=a.top_k, candidate_top_n=a.candidate_top_n,
-                tie_seed=a.tie_seed, gfar_depth=a.gfar_depth, misery_threshold=a.misery_threshold,
+                tie_seed=a.tie_seed, gfar_depth=a.gfar_depth, misery_threshold=threshold,
                 algorithm_version=version('ourney-travelsync'), numpy_version=version('numpy'),
-                tie_policy='sha256-identity-v1', score_scale='1-5')
+                tie_policy='sha256-identity-v1', individual_method=a.individual_method,
+                preference_texts=texts, scorer_version='method-c-char23-v1' if a.individual_method == 'tfidf' else 'active-feature-mean-v1',
+                sklearn_version=version('scikit-learn') if a.individual_method == 'tfidf' else None,
+                score_scale='0-1' if a.individual_method == 'tfidf' else '1-5')
 
 
 def dispatch(a):
     if a.command == 'recommend':
         from . import load_places, FEATURE_NAMES, GFAR, AverageWithoutMisery
         from .recommenders import recommend_group
-        recommendation_config(a)
+        config = recommendation_config(a)
         users = json.loads(Path(a.users).read_text(encoding='utf-8')) if a.users else {
             'alice': dict(zip(FEATURE_NAMES, [4,5,3,2,2,3,3,3,4,1])),
             'bob': dict(zip(FEATURE_NAMES, [3,2,5,4,3,2,4,2,5,3]))}
         if not isinstance(users, dict) or any(not isinstance(v, dict) for v in users.values()):
             raise ValueError('USERS_JSON_MUST_MAP_IDS_TO_NAMED_PREFERENCES')
         places = load_places(a.csv)
-        model = GFAR(a.gfar_depth) if a.algorithm == 'gfar' else AverageWithoutMisery(a.misery_threshold)
+        model = GFAR(a.gfar_depth) if a.algorithm == 'gfar' else AverageWithoutMisery(config['misery_threshold'])
         results = recommend_group(places, users, top_k=a.top_k, individual_top_n=a.candidate_top_n,
-                                  tie_seed=a.tie_seed, recommender=model)
+                                  tie_seed=a.tie_seed, recommender=model, individual_method=a.individual_method,
+                                  preference_texts=config['preference_texts'])
         metadata = {r['place_id']: r for r in places.records}
         return [dict(place_id=r.poi_id, place_name=metadata[r.poi_id]['place_name'],
                      **({'selection_gain': r.score} if a.algorithm == 'gfar' else {'mean_score': r.score})) for r in results]
@@ -90,6 +104,9 @@ def dispatch(a):
             return dict(valid_rows=len(rows))
     from .db.connection import connect
     with connect() as conn:
+        if a.command == 'db-import-metadata':
+            from .db.metadata_import import import_metadata
+            return import_metadata(conn, a.csv, a.dataset_version, validate_only=a.validate_only)
         if a.command == 'db-import':
             return import_rows(conn, rows, activate=False)
         if a.command == 'db-activate':

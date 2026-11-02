@@ -11,3 +11,10 @@ silently rescaled. The cleanup never connects to or migrates a shared database.
 
 003_enriched_poi_metadata.sql adds JSONB storage for the 43 enriched source
 fields. db-init includes it for new schemas; existing schemas use db-migrate.
+
+004_poi_metadata.sql copies those payloads unchanged into a separate versioned
+`poi_metadata` table, protects them from mutation, adds preference text, and
+supports Method C [0,1] alongside historical binary [1,5] run scores. It preserves
+stored scores and checks new score inserts against the run's method. See
+[metadata import and validation](../../docs/poi_metadata.md). The API owns a
+separate SQLAlchemy schema; these migrations are for the recommendation package.

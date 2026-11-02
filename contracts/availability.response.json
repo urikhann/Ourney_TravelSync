@@ -10,6 +10,18 @@
       "confidence": 0.9,
       "source": "tourapi",
       "last_updated": "2026-09-20"
+    },
+    {
+      "poi_id": "tour:129156",
+      "dataset_version": "a063d4af-9004-4f13-aebe-ec6f174a7010",
+      "available": null,
+      "reason": "Opening hours unknown — check before you go",
+      "open": null,
+      "close": null,
+      "next_available": null,
+      "confidence": null,
+      "source": null,
+      "last_updated": null
     }
   ]
 }

@@ -25,8 +25,8 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
   });
   const checks = useQueries({
     queries: dates.map((d) => ({
-      queryKey: ["avail", poiId, d, start],
-      queryFn: () => api.get<Availability>(`/pois/${poiId}/availability?date=${d}&start=${start ?? "14:00"}`),
+      queryKey: ["avail", poiId, d, start, version],
+      queryFn: () => api.get<Availability>(`/pois/${encodeURIComponent(poiId ?? "")}/availability?date=${d}&start=${start ?? "14:00"}${version ? `&version=${encodeURIComponent(version)}` : ""}`),
       enabled: !!poiId && availability,
     })),
   });

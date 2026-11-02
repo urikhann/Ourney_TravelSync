@@ -82,16 +82,28 @@ def compute_snapshot(inputs):
     snapshot = adapt_run_inputs(inputs)
     config = inputs['run']['config_snapshot']
     seed, algorithm = config['tie_seed'], config['algorithm']
+    individual_method = config.get('individual_method', 'binary')
+    preference_texts = {str(r['user_id']): r.get('preference_text', '') for r in inputs['preferences']}
+    preference_texts.update(config.get('preference_texts', {}))
     if algorithm not in ('awm', 'gfar'):
         raise ValueError('UNKNOWN_ALGORITHM')
     group = prepare_group(snapshot.places, snapshot.preferences,
                           excluded_place_ids=snapshot.excluded_ids,
-                          individual_top_n=config['candidate_top_n'], tie_seed=seed)
+                          individual_top_n=config['candidate_top_n'], tie_seed=seed,
+                          individual_method=individual_method, preference_texts=preference_texts)
     model = (GFAR(config['gfar_depth']) if algorithm == 'gfar'
              else AverageWithoutMisery(config['misery_threshold']))
     results = model.recommend(group, top_k=config['top_k'])
     users = np.asarray([[v[f] for f in FEATURE_NAMES] for v in snapshot.preferences.values()], dtype=float)
-    scores = score_individuals(users, snapshot.places.features)
+    if individual_method == 'tfidf':
+        # Fit exactly the same eligible corpus used for candidate generation.
+        from ..recommenders.tfidf import score_texts
+        eligible = [i for i, pid in enumerate(snapshot.places.place_ids) if pid not in snapshot.excluded_ids]
+        scores = np.zeros((len(users), len(snapshot.places.place_ids)))
+        scores[:, eligible] = score_texts([snapshot.places.records[i] for i in eligible],
+                                          [preference_texts.get(uid, '') for uid in snapshot.preferences])
+    else:
+        scores = score_individuals(users, snapshot.places.features)
     individual, excluded = [], set(snapshot.excluded_ids)
     for u, uid in enumerate(snapshot.preferences):
         eligible = [i for i, pid in enumerate(snapshot.places.place_ids) if pid not in excluded]

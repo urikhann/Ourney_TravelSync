@@ -39,10 +39,11 @@ def get_poi(poi_id: str, version: str | None = None, user: User = Depends(curren
 
 
 async def poi_availability(poi_id: str, day: date = Query(alias="date"), start: str = "14:00",
-                           duration_min: int | None = None, user: User = Depends(current_user),
+                           duration_min: int | None = None, version: str | None = None, user: User = Depends(current_user),
                            db: Session = Depends(get_db)):
-    p = _find(db, poi_id, None)
+    p = _find(db, poi_id, version)
     res = await services.check_availability({"checks": [{"poi_id": poi_id, "date": day.isoformat(), "start": start,
+                                                          'dataset_version': p.dataset_version,
                                                           "duration_min": duration_min or p.duration_min}]})
     return res["results"][0]
 

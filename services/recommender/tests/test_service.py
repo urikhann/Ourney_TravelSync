@@ -25,6 +25,23 @@ def test_health():
     assert body["ok"] and body["places"] == 3570 and body["dataset_version"] == "busan-enriched-v1"
 
 
+def test_method_c_uses_versioned_join_snapshot():
+    r = req('average', individual_method='tfidf', group_k=2)
+    r['dataset_version'] = 'archived-dataset'
+    for member in r['members']:
+        member['tastes'] = {'keywords': ['seafood'], 'avoid_keywords': ['bakery']}
+    r['poi_snapshot'] = [dict(place_id=pid, dataset_version='archived-dataset', latitude=35.1, longitude=129.1,
+                              enriched_metadata={'food_type': food}, **{f: int(f == 'food') for f in FEATURE_NAMES})
+                         for pid, food in [('a', 'bakery'), ('b', 'seafood')]]
+    response = client.post('/recommend', json=r)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body['dataset_version'] == 'archived-dataset' and body['score_scale'] == '0-1'
+    assert body['group'][0]['poi_id'] == 'b' and body['group'][0]['mean_score'] == 1
+    r['poi_snapshot'][0]['dataset_version'] = 'newest'
+    assert client.post('/recommend', json=r).status_code == 422
+
+
 @pytest.mark.parametrize("method", ["gfar", "average", "awm"])
 def test_contract_shape_and_scale(method):
     r = client.post("/recommend", json=req(method))

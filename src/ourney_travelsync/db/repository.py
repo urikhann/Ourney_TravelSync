@@ -12,7 +12,10 @@ def get_active_pois(conn,dataset_version=None):
         head=conn.execute('SELECT dataset_version FROM dataset_head WHERE singleton').fetchone()
         if head is None:return []
         dataset_version=head['dataset_version']
-    return conn.execute("SELECT p.* FROM poi p JOIN dataset_versions d USING(dataset_version) WHERE p.dataset_version=%s AND p.active AND d.status='READY' ORDER BY p.place_id",(dataset_version,)).fetchall()
+    return conn.execute("""SELECT p.*,coalesce(m.metadata,'{}'::jsonb) AS enriched_metadata
+        FROM poi p JOIN dataset_versions d ON d.dataset_version=p.dataset_version
+        LEFT JOIN poi_metadata m ON p.place_id=m.place_id AND p.dataset_version=m.dataset_version
+        WHERE p.dataset_version=%s AND p.active AND d.status='READY' ORDER BY p.place_id""",(dataset_version,)).fetchall()
 
 
 def get_latest_preference(conn,user_id):
@@ -46,15 +49,16 @@ def add_group_member(conn,group_id,user_id):
         conn.execute("INSERT INTO group_members(group_id,user_id,role) VALUES(%s,%s,'MEMBER')",(group_id,user_id))
 
 
-def save_preference(conn,user_id,scores):
+def save_preference(conn,user_id,scores,preference_text=''):
+    if not isinstance(preference_text, str): raise ValueError('PREFERENCE_TEXT_REQUIRED_STRING')
     if set(scores)!=set(FEATURES) or any(type(scores[k]) is not int or not 1<=scores[k]<=5 for k in FEATURES):
         raise ValueError('PREFERENCE_1_TO_5_INTEGER_REQUIRED')
     with conn.transaction():
         if not conn.execute('SELECT user_id FROM users WHERE user_id=%s FOR UPDATE',(user_id,)).fetchone():
             raise ValueError('USER_NOT_FOUND')
         row=get_latest_preference(conn,user_id);version=1 if row is None else row['version']+1
-        conn.execute('INSERT INTO preferences(user_id,version,'+','.join(FEATURES)+') VALUES('+','.join(['%s']*12)+')',
-                     [user_id,version]+[scores[k] for k in FEATURES])
+        conn.execute('INSERT INTO preferences(user_id,version,'+','.join(FEATURES)+',preference_text) VALUES('+','.join(['%s']*13)+')',
+                     [user_id,version]+[scores[k] for k in FEATURES]+[preference_text])
         return version
 
 
@@ -109,7 +113,7 @@ def create_recommendation_run(conn,group_id,constraint_id,config_snapshot,datase
             head=conn.execute('SELECT dataset_version FROM dataset_head WHERE singleton').fetchone()
             if not head:raise ValueError('NO_ACTIVE_DATASET')
             dataset_version=head['dataset_version']
-        ds=conn.execute("SELECT * FROM dataset_versions WHERE dataset_version=%s AND status='READY'",(dataset_version,)).fetchone()
+        ds=conn.execute("SELECT * FROM dataset_versions WHERE dataset_version=%s AND status='READY' FOR SHARE",(dataset_version,)).fetchone()
         if not ds:raise ValueError('DATASET_NOT_READY')
         members=get_group_members(conn,group_id)
         if not 1<=len(members)<=10:raise ValueError('GROUP_SIZE_LIMIT')

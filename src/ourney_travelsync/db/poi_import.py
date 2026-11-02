@@ -103,10 +103,15 @@ def begin_dataset(conn,parent,input_hash):
 
 
 def insert_record(conn, record):
+    record = dict(record)
+    metadata = record.pop('enriched_metadata', {})
     values={k: Jsonb(v) if isinstance(v,(dict,list)) else v for k,v in record.items()}
     query=sql.SQL('INSERT INTO poi ({}) VALUES ({})').format(
         sql.SQL(',').join(map(sql.Identifier,values)),sql.SQL(',').join(sql.Placeholder()*len(values)))
     conn.execute(query,list(values.values()))
+    if metadata:
+        conn.execute('INSERT INTO poi_metadata(place_id,dataset_version,metadata) VALUES(%s,%s,%s)',
+                     (record['place_id'], record['dataset_version'], Jsonb(metadata)))
 
 
 def insert_poi(conn,r,version,submission_id=None):
@@ -133,7 +138,7 @@ def clone_dataset(conn,parent,version,user_only=False):
     if parent is None:return 0
     meta=conn.execute('SELECT mapping_version FROM dataset_versions WHERE dataset_version=%s',(parent,)).fetchone()
     if meta['mapping_version']!=MAPPING_VERSION: raise ValueError('MAPPING_CHANGED: reprocess source data before combining snapshots')
-    rows=conn.execute('SELECT * FROM poi WHERE dataset_version=%s'+(" AND source='USER'" if user_only else ''),(parent,)).fetchall()
+    rows=conn.execute("SELECT p.*,coalesce(m.metadata,'{}'::jsonb) AS enriched_metadata FROM poi p LEFT JOIN poi_metadata m ON p.place_id=m.place_id AND p.dataset_version=m.dataset_version WHERE p.dataset_version=%s"+(" AND p.source='USER'" if user_only else ''),(parent,)).fetchall()
     for row in rows:
         row['dataset_version']=version
         insert_record(conn,row)

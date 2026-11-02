@@ -32,7 +32,7 @@ def test_snapshot_import_run_and_immutability():
                 rows = read_csv(path)
             report = import_rows(conn, rows)
             assert report['imported_rows'] == 3570 and not report['activated']
-            saved = conn.execute('SELECT enriched_metadata FROM poi WHERE dataset_version=%s AND place_id=%s',
+            saved = conn.execute('SELECT metadata AS enriched_metadata FROM poi_metadata WHERE dataset_version=%s AND place_id=%s',
                                  (report['dataset_version'], rows[0]['place_id'])).fetchone()
             assert saved['enriched_metadata'] == rows[0]['enriched_metadata']
             assert conn.execute('SELECT * FROM dataset_head').fetchone() is None
