@@ -78,14 +78,17 @@ def _hhmm(m: int) -> str:
 
 
 def check_one(poi_id: str, day: date, start: str, duration: int) -> dict:
+    """available: True = open for the whole visit, False = closed / does not fit, None = we don't know the hours.
+    Unknown is never shown as closed (data rule: missing hours or closed days mean "not known")."""
     dow = (day.weekday() + 1) % 7  # Python Monday=0 -> our Sunday=0
     with engine.connect() as c:
         poi = c.execute(text("SELECT closed_on_public_holidays FROM pois WHERE id=:i LIMIT 1"), {"i": poi_id}).first()
+        has_weekly = c.execute(text("SELECT 1 FROM poi_hours WHERE poi_id=:i LIMIT 1"), {"i": poi_id}).first()
         hours = c.execute(text("SELECT open, close FROM poi_hours WHERE poi_id=:i AND dow=:d"), {"i": poi_id, "d": dow}).first()
         holiday = c.execute(text("SELECT name FROM public_holidays WHERE day=:d"), {"d": day}).first()
         exc = c.execute(text("SELECT closed, open, close, reason FROM poi_exceptions WHERE poi_id=:i AND day=:d"),
                         {"i": poi_id, "d": day}).first()
-    base = {"poi_id": poi_id, "confidence": 0.7, "source": "sample", "last_updated": "2026-09-28"}
+    base = {"poi_id": poi_id, "confidence": 0.7, "source": "place data", "last_updated": None}
     if poi is None:
         return {**base, "available": False, "reason": "Unknown place", "open": None, "close": None, "next_available": None}
 
@@ -102,10 +105,16 @@ def check_one(poi_id: str, day: date, start: str, duration: int) -> dict:
     if holiday and poi.closed_on_public_holidays:
         return {**base, "available": False, "reason": f"Closed on public holidays ({holiday.name})", "open": None,
                 "close": None, "next_available": next_open()}
-    if not hours:
+    if exc and exc.open:
+        o, cl = exc.open, exc.close  # hours seen for this exact date
+    elif not has_weekly:
+        return {**base, "available": None, "confidence": 0.0, "reason": "Opening hours unknown — check before you go",
+                "open": None, "close": None, "next_available": None}
+    elif not hours:
         return {**base, "available": False, "reason": f"Closed on {day.strftime('%A')}s", "open": None, "close": None,
                 "next_available": next_open()}
-    o, cl = (exc.open, exc.close) if exc and exc.open else (hours.open, hours.close)
+    else:
+        o, cl = hours.open, hours.close
     om, cm = _min(o), _min(cl)
     if cm <= om:
         cm += 24 * 60  # closes after midnight
@@ -161,11 +170,11 @@ def plans(req: dict):
                     if r["poi_id"] in used or p["kind"] != kind or _min(t) + p["duration_min"] > nxt - 10:
                         continue
                     av = check_one(r["poi_id"], date.fromisoformat(d), t, p["duration_min"]) if check else None
-                    if av is None or av["available"]:
+                    if av is None or av["available"] is not False:  # unknown hours (None) are kept, not dropped
                         used.add(r["poi_id"])
                         items.append({"poi_id": r["poi_id"], "start": t, "end": _hhmm(_min(t) + p["duration_min"]),
                                       "locked": False, "moved_from": None,
-                                      "availability": {"available": True, "close": av["close"]} if av else None})
+                                      "availability": {"available": av["available"], "close": av["close"]} if av else None})
                         break
             days.append({"date": d, "items": items})
         all_items = [it for dd in days for it in dd["items"]]

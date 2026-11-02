@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { CircleCheck, CircleX, ExternalLink } from "lucide-react";
+import { CircleCheck, CircleHelp, CircleX, ExternalLink } from "lucide-react";
 import { api } from "../api";
 import { useFeatures } from "../features";
 import type { Availability, GroupPick, PoiDetail } from "../types";
@@ -7,6 +7,7 @@ import { fmtDate, pct, won } from "../ui";
 import PlaceThumb from "./PlaceThumb";
 import Sheet from "./Sheet";
 import { MemberScores } from "./Scores";
+import PlaceAbout, { ReportedHours } from "./PlaceAbout";
 
 const CAT_NAME: Record<string, string> = { food: "food", cafe: "café", nature: "nature", history: "history", art: "art",
   shopping: "shopping", activity: "activity", entertainment: "entertainment", relax: "rest & walks", festival: "festival" };
@@ -52,6 +53,7 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
           )}
 
           <div className="chips">{p.features.map((c) => <span key={c} className="chip white">{CAT_NAME[c] ?? c}</span>)}</div>
+          <PlaceAbout meta={p.enriched_metadata} />
           {(p.address || p.phone || p.place_url) && (
             <div className="card list">
               {p.address && <div className="list-row small">{p.address}</div>}
@@ -64,13 +66,14 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
             <>
               <div className="h2" style={{ margin: "6px 2px 0" }}>Opening hours <small>from place data</small></div>
               <div className="card list">
-                {p.hours.length === 0 && <div className="list-row muted small">Opening hours aren't in the data yet — check before you go.</div>}
+                {p.hours.length === 0 && <ReportedHours meta={p.enriched_metadata} />}
                 {p.hours.map((h) => (
                   <div className="list-row" key={h.day} style={{ padding: "7px 0" }}>
                     <div className="grow b" style={{ fontWeight: 600 }}>{h.day}</div>
-                    <div className="muted small num">{h.open === "00:00" && h.close === "24:00" ? "Open 24h" : `${h.open}–${h.close}`}</div>
+                    <div className="muted small num">{!h.open ? "Closed" : h.open === "00:00" && h.close === "24:00" ? "Open 24h" : `${h.open}–${h.close}`}</div>
                   </div>
                 ))}
+                {p.hours.length > 0 && <HoursNote closedDays={p.field_status.closed_days} holidays={!!p.closed_on_public_holidays} />}
               </div>
             </>
           ) : (<>
@@ -82,7 +85,8 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
               const r = checks[i]?.data;
               return (
                 <div className="list-row" key={d}>
-                  {r ? (r.available ? <CircleCheck size={18} color="var(--green)" /> : <CircleX size={18} color="var(--rose)" />) : <span style={{ width: 18 }} />}
+                  {!r ? <span style={{ width: 18 }} /> : r.available ? <CircleCheck size={18} color="var(--green)" />
+                    : r.available === null ? <CircleHelp size={18} color="var(--amber)" /> : <CircleX size={18} color="var(--rose)" />}
                   <div className="grow">
                     <div className="b" style={{ fontWeight: 600 }}>{fmtDate(d)}</div>
                     <div className="muted tiny">
@@ -104,4 +108,15 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
       )}
     </Sheet>
   );
+}
+
+/** Under a weekly table: what we could not confirm (data rule: an unknown closed day is never "open every day"). */
+function HoursNote({ closedDays, holidays }: { closedDays?: string; holidays: boolean }) {
+  const notes = [
+    holidays && "Closed on public holidays.",
+    closedDays === "UNKNOWN" && "Closed days aren't confirmed — check before you go.",
+    closedDays === "PARTIAL" && "Also closed on some special days (e.g. Seollal, Chuseok) — check before you go.",
+  ].filter(Boolean);
+  if (!notes.length) return null;
+  return <div className="list-row muted tiny" style={{ padding: "7px 0" }}>{notes.join(" ")}</div>;
 }
