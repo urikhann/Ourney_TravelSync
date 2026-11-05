@@ -5,6 +5,7 @@ from time import monotonic
 from ortools.sat.python import cp_model
 
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
+from .eligibility import common_bounds
 
 
 @dataclass(frozen=True)
@@ -19,21 +20,27 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     if req.search_seconds == 0:
         return RawSolution("UNKNOWN")
     model = cp_model.CpModel()
+    bounds = common_bounds(req)
+    if len(bounds) != len(req.days):
+        return RawSolution("INFEASIBLE")
     eligible = {e.poi_id: e for e in eligibility}
     pois = {p.poi_id: p for p in sorted(req.candidates, key=lambda p: p.poi_id)
             if p.poi_id in eligible and eligible[p.poi_id].schedule_eligible}
     edges = {(e.date, e.origin, e.destination): e for e in req.edges if e.usable}
     visits, times, day_arcs = {}, {}, {}
+    total_cost = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes = [day.start_point, *pois, day.end_point]
         end = len(nodes) - 1
+        bound = bounds[day.date]
         starts = {0: model.new_constant(day.start_min),
-                  end: model.new_int_var(day.start_min, day.end_min, f"end_{day.date}")}
+                  end: model.new_int_var(day.start_min, bound.end_min, f"end_{day.date}")}
         circuit = [(end, 0, model.new_constant(1))]
         arcs = {}
         for i, pid in enumerate(pois, 1):
             y = model.new_bool_var(f"visit_{day.date}_{pid}")
             visits[day.date, pid] = y
+            total_cost.append(len(req.members) * pois[pid].cost_per_person.value * y)
             starts[i] = model.new_int_var(day.start_min, day.end_min, f"time_{day.date}_{pid}")
             times[day.date, pid] = starts[i]
             circuit.append((i, i, y.Not()))
@@ -53,15 +60,27 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 edge = edges.get((day.date, nodes[i], nodes[j]))
                 if edge is None:
                     continue  # no fabricated zero-time arc
+                if req.max_leg_minutes is not None and edge.duration_minutes > req.max_leg_minutes:
+                    continue
                 a = model.new_bool_var(f"arc_{day.date}_{i}_{j}")
                 circuit.append((i, j, a))
                 arcs[i, j] = (a, edge)
+                total_cost.append(edge.group_fare * a)
                 stay = 0 if i == 0 else pois[nodes[i]].duration_min.value
                 model.add(starts[j] >= starts[i] + stay + edge.duration_minutes).only_enforce_if(a)
         model.add_circuit(circuit)
+        if req.max_total_walk_minutes is not None:
+            model.add(sum(a * e.walk_minutes for a, e in arcs.values()) <= req.max_total_walk_minutes)
         day_arcs[day.date] = (nodes, arcs)
     for pid in pois:
         model.add(sum(visits[day.date, pid] for day in req.days) <= 1)
+    model.add(sum(total_cost) <= req.budget_total)
+    for lock in req.locked_items:
+        if lock.poi_id not in pois:
+            return RawSolution("INFEASIBLE")
+        model.add(visits[lock.date, lock.poi_id] == 1)
+        if lock.start_min is not None:
+            model.add(times[lock.date, lock.poi_id] == lock.start_min)
     utility = sum(pois[pid].group_utility * y for (_, pid), y in visits.items())
     model.maximize(utility)
     error = model.validate()
