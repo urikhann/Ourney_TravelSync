@@ -1,5 +1,6 @@
 from optimizer_fixtures import prepared, request_data
 from ourney_travelsync.optimizer.solver import solve_prepared
+import pytest
 
 
 def test_single_day_waits_and_returns():
@@ -27,5 +28,21 @@ def test_missing_return_leg_is_infeasible():
     data = request_data(1)
     data["edges"] = [e for e in data["edges"] if e["destination"] != "hotel"]
     result = solve_prepared(*prepared(data))
+    assert result.status == "INFEASIBLE"
+    assert not result.days
+
+
+@pytest.mark.parametrize("days", [1, 2, 3])
+def test_multiday_no_duplicates_and_no_deleted_dates(days):
+    result = solve_prepared(*prepared(request_data(4, days)))
+    assert result.status == "OPTIMAL"
+    assert len(result.days) == days
+    ids = [v.poi_id for d in result.days for v in d.items]
+    assert len(ids) == len(set(ids)) == 4
+    assert all(d.items for d in result.days)
+
+
+def test_too_few_pois_cannot_silently_delete_day():
+    result = solve_prepared(*prepared(request_data(1, 2)))
     assert result.status == "INFEASIBLE"
     assert not result.days

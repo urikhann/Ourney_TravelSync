@@ -16,8 +16,6 @@ class RawSolution:
 
 def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> RawSolution:
     """Internal entry point: eligibility must be derived from this same snapshot."""
-    if len(req.days) != 1:
-        raise ValueError("single-day milestone only")
     if req.search_seconds == 0:
         return RawSolution("UNKNOWN")
     model = cp_model.CpModel()
@@ -62,6 +60,8 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 model.add(starts[j] >= starts[i] + stay + edge.duration_minutes).only_enforce_if(a)
         model.add_circuit(circuit)
         day_arcs[day.date] = (nodes, arcs)
+    for pid in pois:
+        model.add(sum(visits[day.date, pid] for day in req.days) <= 1)
     utility = sum(pois[pid].group_utility * y for (_, pid), y in visits.items())
     model.maximize(utility)
     error = model.validate()
