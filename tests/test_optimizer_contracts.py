@@ -1,4 +1,5 @@
 import pytest
+pytest.importorskip("pydantic")
 from pydantic import ValidationError
 
 from ourney_travelsync.optimizer.contracts import Edge, Fact, Window, ceil_minutes

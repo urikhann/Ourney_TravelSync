@@ -1,6 +1,7 @@
+import pytest
+pytest.importorskip("ortools")
 from optimizer_fixtures import prepared, request_data
 from ourney_travelsync.optimizer.solver import solve_prepared
-import pytest
 
 
 def test_single_day_waits_and_returns():

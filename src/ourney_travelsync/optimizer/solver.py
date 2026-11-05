@@ -82,24 +82,62 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         if lock.start_min is not None:
             model.add(times[lock.date, lock.poi_id] == lock.start_min)
     utility = sum(pois[pid].group_utility * y for (_, pid), y in visits.items())
-    model.maximize(utility)
-    error = model.validate()
-    if error:
-        return RawSolution("MODEL_INVALID")
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = req.search_seconds
-    solver.parameters.num_search_workers = 1
-    solver.parameters.random_seed = req.seed
-    started = monotonic()
-    status = solver.solve(model)
-    elapsed = monotonic() - started
-    has_solution = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-    phase = Phase(objective="group_utility", solver_status=solver.status_name(status),
-                  objective_value=solver.objective_value if has_solution else None,
-                  best_bound=solver.best_objective_bound if status != cp_model.MODEL_INVALID else None,
-                  wall_seconds=elapsed, allocated_seconds=req.search_seconds)
-    if not has_solution:
-        return RawSolution(solver.status_name(status), phases=(phase,))
+    minimum = model.new_int_var(0, len(pois) * 10000, "minimum_member_relevance")
+    model.add_min_equality(minimum, [sum(round(pois[pid].relevance[m.member_id] * 10000) * y
+                                        for (_, pid), y in visits.items()) for m in req.members])
+    travel = sum(a * e.duration_minutes for _, arcs in day_arcs.values() for a, e in arcs.values())
+    # Fixed phase caps sum to the request cap. Also check an elapsed deadline so
+    # CP-SAT teardown/overhead cannot buy another full search allocation.
+    deadline = monotonic() + req.search_seconds
+    phases, incumbent, all_optimal = [], (), True
+    objectives = [("group_utility", utility, True, 0.7),
+                  ("minimum_relevance", minimum, True, 0.2),
+                  ("travel_minutes", travel, False, 0.1)]
+    for name, expression, maximize, fraction in objectives:
+        allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
+        if allocated <= 0:
+            all_optimal = False
+            break
+        if maximize:
+            model.maximize(expression)
+        else:
+            model.minimize(expression)
+        if model.validate():
+            phases.append(Phase(objective=name, solver_status="MODEL_INVALID", objective_value=None,
+                                best_bound=None, wall_seconds=0, allocated_seconds=0))
+            if not incumbent:
+                return RawSolution("MODEL_INVALID", phases=tuple(phases))
+            all_optimal = False
+            break
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = allocated
+        solver.parameters.num_search_workers = 1
+        solver.parameters.random_seed = req.seed
+        started = monotonic()
+        status = solver.solve(model)
+        elapsed = monotonic() - started
+        has_solution = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        phases.append(Phase(objective=name, solver_status=solver.status_name(status),
+                            objective_value=solver.objective_value if has_solution else None,
+                            best_bound=solver.best_objective_bound if status != cp_model.MODEL_INVALID else None,
+                            wall_seconds=elapsed, allocated_seconds=allocated))
+        if not has_solution:
+            if not incumbent:
+                return RawSolution(solver.status_name(status), phases=tuple(phases))
+            all_optimal = False
+            break  # retain earlier solution; never read values from UNKNOWN
+        incumbent = _extract(req, solver, pois, day_arcs, times)
+        all_optimal = all_optimal and status == cp_model.OPTIMAL
+        model.add(expression == solver.value(expression))
+        model.clear_hints()
+        for index in range(len(model.proto.variables)):
+            var = model.get_int_var_from_proto_index(index)
+            model.add_hint(var, solver.value(var))
+    return RawSolution("OPTIMAL" if all_optimal and len(phases) == 3 else "FEASIBLE",
+                       incumbent, tuple(phases))
+
+
+def _extract(req, solver, pois, day_arcs, times):
     days = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes, arcs = day_arcs[day.date]
@@ -126,4 +164,4 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                             start_min=day.start_min, items=tuple(items), end_arrival_min=arrival,
                             return_travel_minutes=edge.duration_minutes, total_cost=cost,
                             travel_minutes=travel, walk_minutes=walk))
-    return RawSolution(solver.status_name(status), tuple(days), (phase,))
+    return tuple(days)

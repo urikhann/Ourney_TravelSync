@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import pytest
+pytest.importorskip("ortools")
 
 from optimizer_fixtures import DAY, request_data
 from ourney_travelsync.optimizer.contracts import PlanRequest
