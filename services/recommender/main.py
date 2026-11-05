@@ -23,15 +23,17 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 
 from ourney_travelsync import FEATURE_NAMES, load_places
+from ourney_travelsync.places import PlaceDataset
+from ourney_travelsync.features import validate_features
 from ourney_travelsync.recommenders import prepare_group
 from ourney_travelsync.recommenders.average_without_misery import AverageWithoutMisery
 from ourney_travelsync.recommenders.gfar import GFAR
 from ourney_travelsync.recommenders.ties import ranking
+from ourney_travelsync.recommenders.tfidf import taste_query
 
 FEATURE_SCHEMA_VERSION = "fs-1.0"
-SCORE_SCALE = "1-5"
-# The dataset version name the backend uses for the packaged v2 CSV (api/app/config.py PLACES_VERSION).
-DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-v2")
+# The dataset version name the backend uses for the packaged enriched CSV (api/app/config.py PLACES_VERSION).
+DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-enriched-v1")
 PLACES_CSV = os.getenv("PLACES_CSV") or None          # None = the CSV inside the package
 GFAR_DEPTH = int(os.getenv("GFAR_DEPTH", "20"))         # Borda depth of each member's list (package default)
 AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.5"))  # package default, 1-5 scale
@@ -93,11 +95,18 @@ def check(req: dict) -> None:
         raise HTTPException(422, "feature_schema_version_mismatch")
     if list(req.get("features") or FEATURE_NAMES) != list(FEATURE_NAMES):
         raise HTTPException(422, "feature_order_mismatch")
-    if req.get("dataset_version") != DATASET_VERSION:
+    if req.get("dataset_version") != DATASET_VERSION and req.get('poi_snapshot') is None:
         # The backend pinned a dataset this service does not have (SRS 7: versions must match).
         raise HTTPException(409, f"dataset_version_mismatch: service has {DATASET_VERSION}")
     if not req.get("members"):
         raise HTTPException(422, "no_members")
+    if (req.get('options') or {}).get('individual_method', 'binary') not in ('binary', 'tfidf'):
+        raise HTTPException(422, 'unknown_individual_method')
+    try:
+        for member in req['members']:
+            taste_query(member.get('tastes'))
+    except ValueError:
+        raise HTTPException(422, 'invalid_tastes') from None
     for m in req["members"]:
         r = m.get("ratings") or {}
         if set(r) != set(FEATURE_NAMES) or any(type(v) is not int or not 1 <= v <= 5 for v in r.values()):
@@ -113,7 +122,30 @@ def recommend(req: dict):
         raise HTTPException(422, "unknown_method")
     top_l, group_k = int(opts.get("top_l") or 100), int(opts.get("group_k") or 30)
     seed = int(opts["tie_seed"]) if opts.get("tie_seed") is not None else trip_seed(str(req.get("trip_id", "")))
-    P = places()
+    individual_method = opts.get('individual_method', 'binary')
+    scale = '0-1' if individual_method == 'tfidf' else '1-5'
+    if individual_method == 'tfidf' and opts.get('awm_threshold') is not None:
+        threshold = opts['awm_threshold']
+        if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 1:
+            raise HTTPException(422, 'tfidf_threshold_must_be_between_0_and_1')
+    if req.get('poi_snapshot') is not None:
+        try:
+            records = tuple(req['poi_snapshot'])
+            ids = tuple(r['place_id'] for r in records)
+            features = np.asarray([[r[f] for f in FEATURE_NAMES] for r in records], dtype=float).reshape(-1, 10)
+            coordinates = np.asarray([[r['latitude'], r['longitude']] for r in records], dtype=float).reshape(-1, 2)
+            validate_features(features, preferences=False)
+            if len(ids) != len(set(ids)) or any(not isinstance(pid, str) or not pid.strip() for pid in ids):
+                raise ValueError('invalid_ids')
+            if any(r.get('dataset_version') != req['dataset_version'] for r in records):
+                raise ValueError('dataset_version_mismatch')
+            if not np.isfinite(coordinates).all() or np.any(np.abs(coordinates) > [90, 180]):
+                raise ValueError('invalid_coordinates')
+            P = PlaceDataset(records, ids, features, coordinates)
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(422, 'invalid_poi_snapshot') from None
+    else:
+        P = places()
     known = set(P.place_ids)
 
     # E1: personal exclusions. Any member's rule removes the place for the whole group.
@@ -129,17 +161,19 @@ def recommend(req: dict):
 
     users = {m["user_id"]: m["ratings"] for m in members}
     try:
-        data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded)
+        data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded,
+                             individual_method=individual_method,
+                             preference_texts={m['user_id']: taste_query(m.get('tastes')) for m in members})
     except ValueError as e:
         raise HTTPException(422, f"invalid_input: {e}")
-    S = data.individual_scores  # [members, candidates], 1-5
+    S = data.individual_scores  # [members, candidates], on the declared score scale
     col = {pid: j for j, pid in enumerate(data.poi_ids)}
     uids = list(data.user_ids)
 
     if method == "gfar":
         picks = GFAR(individual_top_n=GFAR_DEPTH).recommend(data, top_k=group_k)
     elif method == "awm":
-        threshold = float(opts["awm_threshold"]) if opts.get("awm_threshold") is not None else AWM_THRESHOLD
+        threshold = float(opts["awm_threshold"]) if opts.get("awm_threshold") is not None else (0.25 if scale == '0-1' else AWM_THRESHOLD)
         picks = AverageWithoutMisery(threshold).recommend(data, top_k=group_k)
         for pid in data.poi_ids:  # show which candidates the veto removed, and for whom
             j = col[pid]
@@ -184,8 +218,9 @@ def recommend(req: dict):
 
     return {
         "schema_version": req.get("schema_version", "rec-1.0"), "model_version": MODEL_VERSION,
-        "dataset_version": DATASET_VERSION, "feature_schema_version": FEATURE_SCHEMA_VERSION,
-        "method": method, "score_scale": SCORE_SCALE, "tie_seed": seed,
+        "dataset_version": req['dataset_version'], "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "method": method, 'individual_method': individual_method, "score_scale": scale, "tie_seed": seed,
+        'scorer_version': 'method-c-char23-v1' if individual_method == 'tfidf' else 'active-feature-mean-v1',
         "group": group, "removed": removed, "individual": individual,
         "metrics": {
             "eligible": len(P.place_ids) - len(excluded), "candidate_pool": len(data.poi_ids), "returned": k,

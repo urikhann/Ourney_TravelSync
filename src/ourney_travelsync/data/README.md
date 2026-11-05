@@ -1,6 +1,17 @@
 # Official POI snapshot
 
-`travelsync_final_places_v2.csv` is the authoritative teammate handoff snapshot
+The current default is `travelsync_poi_metadata_enriched_v1.csv`, supplied on
+2026-10-31: 3,570 POIs, 72 columns, SHA256
+`583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`. It preserves every row and all 29 core
+columns of the v2 snapshot below, adding 43 metadata and provenance columns.
+The loader retains all columns; scoring still uses the same ten binary features.
+Database imports retain the additions in `enriched_metadata`. Operating text and
+verification fields remain source metadata; they do not establish availability.
+
+## Previous core snapshot
+
+
+`travelsync_final_places_v2.csv` is the previous teammate handoff snapshot
 from `travel.zip`, received 2026-10-24. Its bytes were copied directly from the
 archive, not regenerated during repository cleanup.
 

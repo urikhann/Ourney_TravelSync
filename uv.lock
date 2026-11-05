@@ -2338,6 +2338,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "scikit-learn" },
 ]
 
 [package.optional-dependencies]
@@ -2354,6 +2355,7 @@ postgres = [
     { name = "python-dotenv" },
 ]
 viewer = [
+    { name = "altair" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "python-dotenv" },
@@ -2368,6 +2370,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "altair", marker = "extra == 'viewer'" },
     { name = "dvc", marker = "extra == 'experiments'" },
     { name = "mlflow", marker = "extra == 'experiments'" },
     { name = "numpy", specifier = ">=2.1" },
@@ -2378,6 +2381,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'postgres'" },
     { name = "python-dotenv", marker = "extra == 'viewer'" },
     { name = "requests", marker = "extra == 'ingestion'" },
+    { name = "scikit-learn", specifier = ">=1.6,<2" },
     { name = "streamlit", marker = "extra == 'viewer'" },
 ]
 provides-extras = ["ingestion", "postgres", "viewer", "experiments"]

@@ -9,7 +9,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String,
-                        UniqueConstraint)
+                        UniqueConstraint, ForeignKeyConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -40,6 +40,16 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class UserTaste(Base):
+    """Onboarding survey answers, one row per user (see app/taste_catalog.py). status: "done" or "skipped"."""
+    __tablename__ = "user_tastes"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)   # {"food": ["seafood"], "places": [...], "activities": [...], "avoid": [...]}
+    status: Mapped[str] = mapped_column(String(10), default="done")
+    version: Mapped[str] = mapped_column(String(20), default="taste-1.0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class EmailCode(Base):
     __tablename__ = "email_codes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -60,8 +70,6 @@ class Trip(Base):
     city: Mapped[str] = mapped_column(String(40), default="busan")
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
-    budget_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    budget_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     invite_code: Mapped[str] = mapped_column(String(8), unique=True, index=True, default=new_invite_code)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -184,12 +192,30 @@ class Poi(Base):
     duration_min: Mapped[int] = mapped_column(Integer, default=60)               # see field_status: usually ESTIMATED
     tags: Mapped[list] = mapped_column(JSON, default=list)                       # ["hiking"], ["raw_fish"], ["alcohol"]
     features: Mapped[dict] = mapped_column(JSON, default=dict)                   # the 10 features, each 0 or 1
+    _legacy_enriched_metadata: Mapped[dict] = mapped_column('enriched_metadata', JSON, default=dict)
+    metadata_record: Mapped['PoiMetadata | None'] = relationship(lazy='joined', cascade='save-update, merge', uselist=False)
     feature_rules: Mapped[str] = mapped_column(String(500), default="")          # why each feature was given
     field_status: Mapped[dict] = mapped_column(JSON, default=dict)               # {"hours": "UNKNOWN", "cost": "UNKNOWN", ...}
     walking_level: Mapped[float] = mapped_column(Float, default=0.0)
     closed_on_public_holidays: Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(40), default="sample")            # KAKAO | TOUR_API | TOUR_API+KAKAO | sample
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    @property
+    def enriched_metadata(self):
+        return self.metadata_record.metadata_json if self.metadata_record else {}
+
+    @enriched_metadata.setter
+    def enriched_metadata(self, value):
+        self.metadata_record = PoiMetadata(metadata_json=value) if value else None
+
+
+class PoiMetadata(Base):
+    __tablename__ = 'poi_metadata'
+    __table_args__ = (ForeignKeyConstraint(['place_id', 'dataset_version'], ['pois.id', 'pois.dataset_version']),)
+    place_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_version: Mapped[str] = mapped_column(String(40), primary_key=True)
+    metadata_json: Mapped[dict] = mapped_column('metadata', JSON, default=dict)
 
 
 class PoiHours(Base):

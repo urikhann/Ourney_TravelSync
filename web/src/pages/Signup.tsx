@@ -58,7 +58,7 @@ export default function Signup() {
     const r = await api.post<TokenOut>("/auth/verify-email", { email, code });
     setToken(r.access_token);
     qc.setQueryData(["me"], r.user);
-    nav(next, { replace: true });
+    nav(`/welcome?next=${encodeURIComponent(next)}`, { replace: true }); // new account: onboarding survey first
   }); };
 
   const resend = () => run(async () => {

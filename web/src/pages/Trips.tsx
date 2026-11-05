@@ -1,13 +1,14 @@
 // Home screen after logging in: join a trip with an invite code, see your trips, start a new one.
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChevronRight, LogOut, Plus, Ticket, Users, X } from "lucide-react";
 import { api, message, setToken } from "../api";
 import { useMe } from "../auth";
-import type { Trip, TripSummary } from "../types";
+import type { Tastes, Trip, TripSummary } from "../types";
 import { ErrorBox, Loading } from "../ui";
 import { Avatar } from "../components/Avatar";
+import TastesCard from "../components/TastesCard";
 
 const MAX_DAYS = 3; // SRS: trips are 1–3 days
 const days = (a: string, b: string) => Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86_400_000) + 1;
@@ -42,6 +43,7 @@ export default function Trips() {
   const qc = useQueryClient();
   const me = useMe();
   const trips = useQuery({ queryKey: ["trips"], queryFn: () => api.get<TripSummary[]>("/trips") });
+  const tastes = useQuery({ queryKey: ["tastes"], queryFn: () => api.get<Tastes>("/me/tastes") });
 
   // ---- join with a code ----
   const [invite, setInvite] = useState("");
@@ -69,6 +71,9 @@ export default function Trips() {
   const logout = () => { setToken(null); qc.clear(); nav("/login"); };
   const list = [...(trips.data ?? [])].sort((a, b) => (status(a).cls === "past" ? 1 : 0) - (status(b).cls === "past" ? 1 : 0) || a.start_date.localeCompare(b.start_date));
 
+  // Accounts that never answered (or skipped) the onboarding survey see it once.
+  if (tastes.data && tastes.data.status === null) return <Navigate to="/welcome?next=/trips" replace />;
+
   return (
     <main className="home">
       <header className="home-head">
@@ -95,6 +100,8 @@ export default function Trips() {
         </div>
         {inviteError && <div className="join-error" role="alert">{inviteError}</div>}
       </form>
+
+      <TastesCard />
 
       <div className="home-section">
         <h2>Your trips</h2>

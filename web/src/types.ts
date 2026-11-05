@@ -5,7 +5,7 @@ export type TokenOut = { access_token: string; user: User };
 export type TripSummary = { id: string; name: string; city: string; start_date: string; end_date: string; member_count: number };
 export type Member = { user_id: string; name: string; role: string; is_me: boolean; preferences_done: boolean; free_dates: string[] };
 export type Trip = TripSummary & {
-  budget_min: number | null; budget_max: number | null; invite_code: string; invite_url: string; members: Member[];
+  invite_code: string; invite_url: string; members: Member[];
   setup: { members: number; preferences_done: number; waiting_for: string[] };
 };
 
@@ -26,7 +26,10 @@ export type Place = {
   id: string; name: string; area: string; kind: string; category: string; features: Category[];
   indoor: boolean | null; avg_cost_krw: number | null; duration_min: number;
   image_url: string | null; place_url: string | null; lat: number; lng: number; field_status: FieldStatus;
+  enriched_metadata?: EnrichedMeta;  // extra info from the data pipeline; missing values are null
 };
+/** Enriched place info (travelsync_poi_metadata_enriched_v1.csv). Every value can be null = unknown. */
+export type EnrichedMeta = Partial<Record<string, string | null>>;
 export type Reason = { code: string; text: string; user_id?: string };
 export type GroupPick = {
   poi_id: string; group_rank: number; mean_score: number; selection_gain: number | null; group_utility: number;
@@ -44,7 +47,7 @@ export type Recommendations = {
 
 export type PlanItem = {
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
-  availability: { available: boolean; close?: string | null } | null; // null when the availability checker is off
+  availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown
   place: Place | null; mean_score: number | null;
 };
 export type Plan = {
@@ -60,6 +63,16 @@ export type PlansView = {
 export type Features = { availability: boolean };
 export type PoiDetail = Place & {
   name_ko: string | null; address: string; phone: string | null; tags: string[]; feature_rules: string; source: string;
-  dataset_version: string; hours: { day: string; open: string; close: string }[];
+  dataset_version: string; closed_on_public_holidays?: boolean;
+  hours: { day: string; open: string | null; close: string | null }[]; // Mon…Sun; open null = closed that day; [] = unknown
 };
-export type Availability = { poi_id: string; available: boolean; reason: string | null; open: string | null; close: string | null; next_available: string | null };
+export type Availability = { poi_id: string; available: boolean | null; reason: string | null; open: string | null; close: string | null; next_available: string | null };
+
+// Onboarding survey ("travel tastes"), see GET /meta/tastes and GET/PUT /me/tastes
+export type TasteOption = { code: string; label_ko: string; label_en: string; keywords: string[]; exclusion: string | null };
+export type TasteQuestion = { code: string; label_ko: string; label_en: string; options: TasteOption[] };
+export type TastesMeta = { version: string; max_picks: number; questions: TasteQuestion[] };
+export type Tastes = {
+  status: "done" | "skipped" | null; version: string; answers: Record<string, string[]>;
+  keywords: string[]; avoid_keywords: string[]; exclusion_tags: string[];
+};

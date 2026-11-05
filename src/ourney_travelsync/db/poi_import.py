@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from psycopg import sql, Error
 from .connection import safe_db_error
 from psycopg.types.json import Jsonb
-from ..data_schema import BASE, EXTRA, FEATURES
+from ..data_schema import BASE, EXTRA, FEATURES, ENRICHED_COLUMNS
 
 PIPELINE = Path(__file__).resolve().parents[1] / 'ingestion/travelsync_pipeline_rule_v2.py'
 SCHEMA_VERSION = 'travel10-v1'
@@ -23,9 +23,14 @@ def validate_rows(rows):
     for line, raw in enumerate(rows, 2):
         def fail(field, reason):
             raise ValueError(f'row={line} field={field} {reason}')
-        if set(raw) != set(COLUMNS):
+        if not set(COLUMNS) <= set(raw) or set(raw) - set(COLUMNS) - set(ENRICHED_COLUMNS) - {"enriched_metadata"}:
             fail('header', 'COLUMN_MISMATCH')
-        r = dict(raw)
+        r = {k: raw[k] for k in COLUMNS}
+        metadata = dict(raw.get("enriched_metadata", {}))
+        metadata.update({k: raw[k] for k in ENRICHED_COLUMNS if k in raw})
+        # Preserve enriched source text and provenance without interpreting availability.
+        if metadata:
+            r["enriched_metadata"] = metadata
         for k in BASE + EXTRA:
             v = r[k]
             r[k] = None if v is None or str(v) == r'\N' else str(v)
@@ -65,7 +70,8 @@ def read_csv(path):
         reader = csv.DictReader(f)
         if not reader.fieldnames or len(reader.fieldnames)!=len(set(reader.fieldnames)):
             raise ValueError('DUPLICATE_OR_MISSING_HEADER')
-        if set(reader.fieldnames)!=set(COLUMNS): raise ValueError('COLUMN_MISMATCH: expected pipeline BASE+EXTRA+FEATURES (29)')
+        if not set(COLUMNS) <= set(reader.fieldnames) or set(reader.fieldnames) - set(COLUMNS) - set(ENRICHED_COLUMNS):
+            raise ValueError('COLUMN_MISMATCH: expected core columns and optional enrichment columns')
         rows = list(reader)
         if any(None in row or any(value is None for value in row.values()) for row in rows):
             raise ValueError('CSV_ROW_WIDTH_MISMATCH')
@@ -97,10 +103,15 @@ def begin_dataset(conn,parent,input_hash):
 
 
 def insert_record(conn, record):
+    record = dict(record)
+    metadata = record.pop('enriched_metadata', {})
     values={k: Jsonb(v) if isinstance(v,(dict,list)) else v for k,v in record.items()}
     query=sql.SQL('INSERT INTO poi ({}) VALUES ({})').format(
         sql.SQL(',').join(map(sql.Identifier,values)),sql.SQL(',').join(sql.Placeholder()*len(values)))
     conn.execute(query,list(values.values()))
+    if metadata:
+        conn.execute('INSERT INTO poi_metadata(place_id,dataset_version,metadata) VALUES(%s,%s,%s)',
+                     (record['place_id'], record['dataset_version'], Jsonb(metadata)))
 
 
 def insert_poi(conn,r,version,submission_id=None):
@@ -127,7 +138,7 @@ def clone_dataset(conn,parent,version,user_only=False):
     if parent is None:return 0
     meta=conn.execute('SELECT mapping_version FROM dataset_versions WHERE dataset_version=%s',(parent,)).fetchone()
     if meta['mapping_version']!=MAPPING_VERSION: raise ValueError('MAPPING_CHANGED: reprocess source data before combining snapshots')
-    rows=conn.execute('SELECT * FROM poi WHERE dataset_version=%s'+(" AND source='USER'" if user_only else ''),(parent,)).fetchall()
+    rows=conn.execute("SELECT p.*,coalesce(m.metadata,'{}'::jsonb) AS enriched_metadata FROM poi p LEFT JOIN poi_metadata m ON p.place_id=m.place_id AND p.dataset_version=m.dataset_version WHERE p.dataset_version=%s"+(" AND p.source='USER'" if user_only else ''),(parent,)).fetchall()
     for row in rows:
         row['dataset_version']=version
         insert_record(conn,row)

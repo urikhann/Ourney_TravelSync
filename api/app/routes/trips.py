@@ -12,6 +12,7 @@ from ..deps import member_trip
 from ..emailer import send_email
 from ..models import MemberAvailability, Preference, Trip, TripMember, User
 from .auth import current_user
+from .tastes import default_exclusions
 
 router = APIRouter(tags=["trips"])
 
@@ -21,8 +22,6 @@ class TripIn(BaseModel):
     city: str = "busan"
     start_date: date
     end_date: date
-    budget_min: int | None = Field(default=None, ge=0)
-    budget_max: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def check_dates(self):
@@ -50,7 +49,7 @@ def trip_detail(trip: Trip, me: User, db: Session) -> dict:
     members = [{"user_id": m.user_id, "name": m.user.name, "role": m.role, "is_me": m.user_id == me.id,
                 "preferences_done": m.user_id in prefs, "free_dates": sorted(free.get(m.user_id, []))}
                for m in sorted(trip.members, key=lambda m: m.id or 0)]
-    return {**trip_summary(trip, db), "budget_min": trip.budget_min, "budget_max": trip.budget_max,
+    return {**trip_summary(trip, db),
             "invite_code": trip.invite_code, "invite_url": f"{config.WEB_URL}/join/{trip.invite_code}",
             "members": members,
             "setup": {"members": len(members), "preferences_done": sum(m["preferences_done"] for m in members),
@@ -60,7 +59,7 @@ def trip_detail(trip: Trip, me: User, db: Session) -> dict:
 @router.post("/trips", status_code=201)
 def create_trip(body: TripIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     trip = Trip(**body.model_dump(), created_by=user.id)
-    trip.members.append(TripMember(user_id=user.id, role="owner"))
+    trip.members.append(TripMember(user_id=user.id, role="owner", exclusions=default_exclusions(db, user.id)))
     db.add(trip)
     db.commit()
     db.refresh(trip)
@@ -95,7 +94,7 @@ def join_trip(code: str, user: User = Depends(current_user), db: Session = Depen
     if not any(m.user_id == user.id for m in trip.members):
         if len(trip.members) >= config.MAX_GROUP_MEMBERS:
             raise HTTPException(409, "trip_full")
-        trip.members.append(TripMember(user_id=user.id))
+        trip.members.append(TripMember(user_id=user.id, exclusions=default_exclusions(db, user.id)))
         db.commit()
     return trip_detail(trip, user, db)
 

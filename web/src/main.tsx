@@ -22,6 +22,7 @@ import TripRoom from "./pages/TripRoom";
 import Preferences from "./pages/Preferences";
 import Places from "./pages/Places";
 import Plan from "./pages/Plan";
+import Tastes from "./pages/Tastes";
 
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
@@ -37,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot" element={<Forgot />} />
+            <Route path="/welcome" element={guard(<Tastes />)} />
             <Route path="/trips" element={guard(<Trips />)} />
             <Route path="/join/:code" element={guard(<Join />)} />
             <Route path="/trips/:id" element={guard(<TripRoom />)} />

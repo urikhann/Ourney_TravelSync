@@ -7,8 +7,8 @@ It only translates — the algorithm lives in the package.
 | | Mock (`services/mocks`, 8001) | This service (8002) |
 |---|---|---|
 | Algorithm | stand-in written from the SDD | **the team package** (Urikhan) |
-| Data | backend database | packaged v2 CSV, 3,570 places, version `busan-v2` |
-| Scores | 0–1 | **1–5** (`score_scale: "1-5"`) |
+| Data | versioned backend POI/metadata JOIN | backend `poi_snapshot` when supplied; otherwise packaged enriched CSV |
+| Scores | 0–1 | Method C: 0–1; historical binary: 1–5 |
 | Ties | place id | seeded hash, **one seed per trip** (repeatable for a trip, different between trips) |
 
 ## Run (needs Python 3.13, like the package)
@@ -31,9 +31,15 @@ Point the backend at it: in `api/.env` put `RECOMMENDER_URL=http://localhost:800
 - `method`: `gfar` (default) · `awm` (veto below `awm_threshold`, default 2.5 on 1–5) · `average`
 - `top_l`: each member's candidate list (default 100) · `group_k`: length of the group list (default 30)
 - `tie_seed`: optional; default is derived from `trip_id`
+- `individual_method`: `tfidf` (Method C, optional member `tastes.keywords`) or `binary`.
+  Legacy direct calls default to binary; the API supplies `tfidf`. AWM defaults
+  to 0.25 for TF-IDF, 2.5 for binary.
+- `poi_snapshot`: backend's version-pinned POI/metadata JOIN. Every record must
+  carry the request's `dataset_version`. This avoids substituting the newest CSV
+  for an archived database version. See [metadata integration](../../docs/poi_metadata.md).
 - member `exclusions.resolved`: `{poi_id: reason}` — places the backend matched to a member's rule (e.g. hiking)
 
-Environment: `DATASET_VERSION` (default `busan-v2`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
+Environment: `DATASET_VERSION` (default `busan-enriched-v1`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
 
 ## Test
 

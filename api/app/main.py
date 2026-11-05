@@ -3,11 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .db import Base, SessionLocal, engine
-from .routes import auth, itineraries, pois, preferences, recommendations, trips
+from .db import Base, SessionLocal, engine, ensure_enriched_metadata_column
+from .routes import auth, itineraries, pois, preferences, recommendations, tastes, trips
 from .seed import seed_if_empty
 
 Base.metadata.create_all(engine)
+ensure_enriched_metadata_column()
 with SessionLocal() as _db:
     seed_if_empty(_db)
 
@@ -23,6 +24,7 @@ app.include_router(preferences.router)
 app.include_router(recommendations.router)
 app.include_router(pois.router)
 app.include_router(itineraries.router)
+app.include_router(tastes.router)
 
 
 @app.get("/meta/features", tags=["meta"])
