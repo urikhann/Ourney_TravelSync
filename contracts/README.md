@@ -23,7 +23,8 @@ Rules for everyone
 | Service | Owner | Endpoint | Files |
 |---|---|---|---|
 | Recommender (D, E1, F, G) | Recommender owner | `POST /recommend` | `recommend.*.json` |
-| Itinerary optimizer (H, E3) | Recommender owner (proposed) | `POST /plans` | `plans.*.json` |
+| Itinerary optimizer (H, E2/E3) | Recommender owner (proposed) | New service `POST /plans`, optional shared-budget `POST /runs` | `optimizer.synthetic.*.json`, [typed contract](../src/ourney_travelsync/optimizer/contracts.py) |
+| Legacy mock itinerary | Existing demo only | Mock `POST /plans` | `plans.*.json` (incompatible with the new optimizer) |
 | Opening-hours enrichment + E2 | Data owner | *to be defined* (replaces `availability.*.json`) | — |
 | AI agent | Agent owner | `POST /agent/turn` | `agent.*.json` |
 | Place data | Data owner | CSV → `python -m app.import_places` | `src/ourney_travelsync/data/README.md` |
@@ -49,6 +50,13 @@ hours without labelling them verified. POI identity and metadata use the pinned
 version; the upstream `poi_hours` and `poi_exceptions` tables remain keyed by place
 ID alone and do not provide historical operating-schedule snapshots.
 
-**Not yet in the contract (next):** async runs (`POST /groups/{id}/runs` → 202 + run_id, `GET /runs/{id}`),
-group constraints (daily time windows, start/end points, total budget, transport), the single OR-Tools itinerary with
-arrival/start/departure/travel/stay/cost per stop and `solver_status`. See the progress note.
+The new optimizer uses `optimizer-1.0`: explicit dated windows, endpoint IDs,
+group budget, transport, directed evidenced routes, member constraints and pinned
+operating facts. The example files are **synthetic testing examples only**.
+Missing production facts must not be copied from them. The legacy request cannot
+be upgraded by adding defaults. See [optimizer integration requirements](../docs/optimizer.md).
+
+**Still outside the live API contract:** async runs (`POST /groups/{id}/runs` →
+202 + run_id, `GET /runs/{id}`) and wiring the production app to enriched Module H
+snapshots. The new optimizer `/runs` is a synchronous internal budget coordinator,
+not the planned asynchronous group-run API.

@@ -47,3 +47,25 @@ def test_too_few_pois_cannot_silently_delete_day():
     result = solve_prepared(*prepared(request_data(1, 2)))
     assert result.status == "INFEASIBLE"
     assert not result.days
+
+
+def test_disconnected_high_reward_cycle_cannot_be_selected():
+    data = request_data(3)
+    data["edges"] = [e for e in data["edges"] if
+                     set((e["origin"], e["destination"])) in ({"hotel", "A"}, {"B", "C"})]
+    result = solve_prepared(*prepared(data))
+    assert [v.poi_id for v in result.days[0].items] == ["A"]
+
+
+def test_directed_route_order_and_distinct_endpoints():
+    data = request_data(2)
+    data["days"][0]["end_point"] = "station"
+    data["edges"] = [e for e in data["edges"] if e["destination"] != "hotel"]
+    for e in data["edges"]:
+        e["duration_minutes"] = 100 if (e["origin"], e["destination"]) == ("A", "B") else 10
+    sample = data["edges"][0]
+    data["edges"].extend([{**sample, "origin": p, "destination": "station"} for p in ("A", "B")])
+    result = solve_prepared(*prepared(data))
+    assert [v.poi_id for v in result.days[0].items] == ["B", "A"]
+    assert result.days[0].end_point == "station"
+    assert result.days[0].travel_minutes == 30

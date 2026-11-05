@@ -7,7 +7,7 @@ from datetime import date, datetime
 from math import ceil, isfinite
 from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 NonNegative = Annotated[int, Field(strict=True, ge=0, le=10**9)]
 Minute = Annotated[int, Field(strict=True, ge=0, le=1440)]
@@ -198,6 +198,15 @@ class Phase(Contract):
     allocated_seconds: float
 
 
+class Attempt(Contract):
+    input_snapshot: PlanRequest
+    solver_status: str
+    validation_status: str
+    error_code: str | None
+    eligibility: tuple[Eligibility, ...]
+    phases: tuple[Phase, ...]
+
+
 class PlanResponse(Contract):
     schema_version: Literal["optimizer-1.0"] = "optimizer-1.0"
     run_id: str
@@ -207,10 +216,28 @@ class PlanResponse(Contract):
     eligibility: tuple[Eligibility, ...] = ()
     days: tuple[DayPlan, ...] = ()
     phases: tuple[Phase, ...] = ()
+    attempts: tuple[Attempt, ...] = ()
     metrics: dict = Field(default_factory=dict)
     validation_errors: tuple[str, ...] = ()
     # Exact validated snapshot for replay; access-controlled, contains member data.
     input_snapshot: PlanRequest
+
+
+class PlanRunRequest(Contract):
+    """At most one already enriched GFAR expansion; never relax constraints."""
+    schema_version: Literal["optimizer-run-1.0"] = "optimizer-run-1.0"
+    initial: PlanRequest
+    expanded: PlanRequest | None = None
+
+    @model_validator(mode="after")
+    def same_run(self):
+        if self.expanded is not None:
+            mutable = {"candidates", "edges", "operating_snapshot_id"}
+            if self.initial.model_dump(exclude=mutable) != self.expanded.model_dump(exclude=mutable):
+                raise ValueError("expansion must preserve run versions, members, constraints and total search cap")
+            if len(self.expanded.candidates) <= len(self.initial.candidates):
+                raise ValueError("expanded candidate pool must be larger (maximum 60)")
+        return self
 
 
 def ceil_minutes(value: float) -> int:

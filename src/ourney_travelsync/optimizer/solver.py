@@ -133,6 +133,8 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         for index in range(len(model.proto.variables)):
             var = model.get_int_var_from_proto_index(index)
             model.add_hint(var, solver.value(var))
+    if not incumbent:
+        return RawSolution("UNKNOWN", phases=tuple(phases))
     return RawSolution("OPTIMAL" if all_optimal and len(phases) == 3 else "FEASIBLE",
                        incumbent, tuple(phases))
 

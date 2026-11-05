@@ -1,0 +1,255 @@
+{
+  "schema_version": "optimizer-1.0",
+  "run_id": "synthetic-run",
+  "solver_status": "OPTIMAL",
+  "validation_status": "PASSED",
+  "error_code": null,
+  "eligibility": [
+    {
+      "poi_id": "A",
+      "schedule_eligible": true,
+      "feasible_dates": [
+        "2026-11-05"
+      ],
+      "windows": {
+        "2026-11-05": [
+          {
+            "start_min": 600,
+            "end_min": 1020
+          }
+        ]
+      },
+      "reasons": []
+    }
+  ],
+  "days": [
+    {
+      "date": "2026-11-05",
+      "start_point": "hotel",
+      "end_point": "hotel",
+      "start_min": 540,
+      "items": [
+        {
+          "poi_id": "A",
+          "arrival_min": 570,
+          "start_min": 600,
+          "departure_min": 660,
+          "travel_minutes": 30,
+          "stay_minutes": 60,
+          "visit_cost": 200
+        }
+      ],
+      "end_arrival_min": 690,
+      "return_travel_minutes": 30,
+      "total_cost": 220,
+      "travel_minutes": 60,
+      "walk_minutes": 10
+    }
+  ],
+  "phases": [
+    {
+      "objective": "group_utility",
+      "solver_status": "OPTIMAL",
+      "objective_value": 1000.0,
+      "best_bound": 1000.0,
+      "wall_seconds": 0.004447500000424043,
+      "allocated_seconds": 1.4
+    },
+    {
+      "objective": "minimum_relevance",
+      "solver_status": "OPTIMAL",
+      "objective_value": 2000.0,
+      "best_bound": 2000.0,
+      "wall_seconds": 0.000449799999842071,
+      "allocated_seconds": 0.4
+    },
+    {
+      "objective": "travel_minutes",
+      "solver_status": "OPTIMAL",
+      "objective_value": 60.0,
+      "best_bound": 60.0,
+      "wall_seconds": 0.00037290000000211876,
+      "allocated_seconds": 0.2
+    }
+  ],
+  "attempts": [],
+  "metrics": {
+    "total_cost": 220,
+    "travel_minutes": 60,
+    "walk_minutes": 10,
+    "visit_count": 1,
+    "group_utility": 1000,
+    "per_member_utility": {
+      "u1": 0.8,
+      "u2": 0.2
+    },
+    "per_member_personal_score": {
+      "u1": 0.4,
+      "u2": 0.6
+    },
+    "minimum_member_utility": 0.2,
+    "utility_disparity": 0.6000000000000001,
+    "mean_personal_fit": 0.5,
+    "solver_version": "9.15.6755",
+    "optimizer_version": "1.0",
+    "snapshot_sha256": "9d1a62f08ab87fcb80c927aca3d7cbe1d5e5daa4ff986e30407f6aeed358569e",
+    "solver_workers": 1,
+    "seed": 0,
+    "search_seconds": 0.0052702000002682325,
+    "allocated_search_seconds": 2.0
+  },
+  "validation_errors": [],
+  "input_snapshot": {
+    "schema_version": "optimizer-1.0",
+    "run_id": "synthetic-run",
+    "dataset_version": "synthetic-v1",
+    "constraint_version": "c1",
+    "preference_version": "p1",
+    "mapping_version": "m1",
+    "feature_schema_version": "fs-1.0",
+    "operating_snapshot_id": "synthetic-ops",
+    "routing_version": "synthetic-routes",
+    "transport_mode": "walk",
+    "days": [
+      {
+        "start_min": 540,
+        "end_min": 1080,
+        "date": "2026-11-05",
+        "start_point": "hotel",
+        "end_point": "hotel"
+      }
+    ],
+    "members": [
+      {
+        "member_id": "u1",
+        "available": {
+          "2026-11-05": [
+            {
+              "start_min": 540,
+              "end_min": 1080
+            }
+          ]
+        },
+        "excluded_poi_ids": [],
+        "excluded_tags": [],
+        "required_access": []
+      },
+      {
+        "member_id": "u2",
+        "available": {
+          "2026-11-05": [
+            {
+              "start_min": 540,
+              "end_min": 1080
+            }
+          ]
+        },
+        "excluded_poi_ids": [],
+        "excluded_tags": [],
+        "required_access": []
+      }
+    ],
+    "candidates": [
+      {
+        "poi_id": "A",
+        "dataset_version": "synthetic-v1",
+        "group_rank": 1,
+        "group_utility": 1000,
+        "selection_gain": null,
+        "mean_score": 0.5,
+        "personal_scores": {
+          "u1": 0.4,
+          "u2": 0.6
+        },
+        "relevance": {
+          "u1": 0.8,
+          "u2": 0.2
+        },
+        "tags": [],
+        "is_festival": false,
+        "duration_min": {
+          "value": 60,
+          "status": "KNOWN",
+          "source": "synthetic fixture",
+          "verified_at": "2026-11-01T00:00:00Z",
+          "rule_version": null,
+          "user_upper_bound": false
+        },
+        "cost_per_person": {
+          "value": 100,
+          "status": "KNOWN",
+          "source": "synthetic fixture",
+          "verified_at": "2026-11-01T00:00:00Z",
+          "rule_version": null,
+          "user_upper_bound": false
+        },
+        "operations": {
+          "2026-11-05": {
+            "openings": {
+              "value": [
+                {
+                  "start_min": 600,
+                  "end_min": 1020
+                }
+              ],
+              "status": "KNOWN",
+              "source": "synthetic fixture",
+              "verified_at": "2026-11-01T00:00:00Z",
+              "rule_version": null,
+              "user_upper_bound": false
+            },
+            "closed": {
+              "value": false,
+              "status": "KNOWN",
+              "source": "synthetic fixture",
+              "verified_at": "2026-11-01T00:00:00Z",
+              "rule_version": null,
+              "user_upper_bound": false
+            },
+            "event_active": {
+              "value": null,
+              "status": "UNKNOWN",
+              "source": null,
+              "verified_at": null,
+              "rule_version": null,
+              "user_upper_bound": false
+            }
+          }
+        },
+        "access": {}
+      }
+    ],
+    "edges": [
+      {
+        "date": "2026-11-05",
+        "origin": "hotel",
+        "destination": "A",
+        "status": "KNOWN",
+        "duration_minutes": 30,
+        "distance_m": 1000,
+        "group_fare": 10,
+        "walk_minutes": 5,
+        "provider": "synthetic fixture",
+        "fetched_at": "2026-11-01T00:00:00Z"
+      },
+      {
+        "date": "2026-11-05",
+        "origin": "A",
+        "destination": "hotel",
+        "status": "KNOWN",
+        "duration_minutes": 30,
+        "distance_m": 1000,
+        "group_fare": 10,
+        "walk_minutes": 5,
+        "provider": "synthetic fixture",
+        "fetched_at": "2026-11-01T00:00:00Z"
+      }
+    ],
+    "budget_total": 10000,
+    "max_leg_minutes": null,
+    "max_total_walk_minutes": null,
+    "locked_items": [],
+    "search_seconds": 2.0,
+    "seed": 0
+  }
+}

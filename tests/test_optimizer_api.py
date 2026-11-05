@@ -140,3 +140,24 @@ def test_tertiary_objective_reduces_travel_with_prior_values_fixed():
     res = api.optimize(data)
     assert [v.poi_id for v in res.days[0].items] == ["A"]
     assert [p.objective_value for p in res.phases] == [1000, 2000, 40]
+
+
+@pytest.mark.parametrize("size", [1, 10])
+def test_supported_party_size_and_per_person_costs(size):
+    data = request_data(1)
+    template = data["members"][0]
+    data["members"] = [{**template, "member_id": f"m{i}"} for i in range(size)]
+    p = data["candidates"][0]
+    p["personal_scores"] = {m["member_id"]: 0.5 for m in data["members"]}
+    p["relevance"] = {m["member_id"]: 0.25 for m in data["members"]}
+    res = api.optimize(data)
+    assert res.validation_status == "PASSED"
+    assert res.metrics["total_cost"] == size * 100 + 20
+
+
+def test_single_run_thirty_second_cap_is_shared_by_all_objectives():
+    data = request_data(1)
+    data["search_seconds"] = 30
+    res = api.optimize(data)
+    assert [p.allocated_seconds for p in res.phases] == [21, 6, 3]
+    assert res.metrics["allocated_search_seconds"] <= 30

@@ -125,3 +125,18 @@ def test_unknown_route_fare_is_not_zero():
     res, es = run(data)
     assert res.status == "INFEASIBLE"
     assert any("ROUTE_UNAVAILABLE" in r for r in es[0].reasons)
+
+
+@pytest.mark.parametrize("budget,status", [(439, "INFEASIBLE"), (440, "OPTIMAL")])
+def test_budget_is_shared_across_dates(budget, status):
+    data = request_data(2, 2)
+    data["budget_total"] = budget
+    result, _ = run(data)
+    assert result.status == status
+
+
+def test_exact_closing_boundary_contains_full_stay():
+    data = request_data(1)
+    data["candidates"][0]["operations"][DAY]["openings"] = fact([dict(start_min=600, end_min=660)])
+    result, _ = run(data)
+    assert result.days[0].items[0].departure_min == 660

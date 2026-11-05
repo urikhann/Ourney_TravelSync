@@ -19,3 +19,14 @@ def test_time_and_unknown_contracts():
 def test_invalid_windows(start, end):
     with pytest.raises(ValidationError):
         Window(start_min=start, end_min=end)
+
+
+def test_documented_synthetic_examples_validate_independently():
+    from pathlib import Path
+    from ourney_travelsync.optimizer.contracts import PlanRequest, PlanResponse
+    from ourney_travelsync.optimizer.validation import validate_final
+    root = Path(__file__).resolve().parents[1] / "contracts"
+    req = PlanRequest.model_validate_json((root / "optimizer.synthetic.request.json").read_text())
+    res = PlanResponse.model_validate_json((root / "optimizer.synthetic.response.json").read_text())
+    assert req == res.input_snapshot
+    assert validate_final(req, res.days).passed
