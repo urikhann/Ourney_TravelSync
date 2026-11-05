@@ -2,7 +2,7 @@
 
     cd api
     python -m app.activate_version                      # list versions
-    python -m app.activate_version busan-enriched-v1    # use all 3,570 places again
+    python -m app.activate_version busan-enriched-v3    # use all 3,570 places again
     python -m app.activate_version busan-demo40-v1      # use the 40 demo places
 
 Remember: the recommender service must be started with the same DATASET_VERSION (and PLACES_CSV for the demo).

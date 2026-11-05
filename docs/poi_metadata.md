@@ -60,7 +60,7 @@ python -m app.import_metadata 'D:\Backup\Documents\KakaoTalk Downloads\poi_metad
 python -m app.import_metadata 'D:\Backup\Documents\KakaoTalk Downloads\poi_metadata_for_team.csv' --version a063d4af-9004-4f13-aebe-ec6f174a7010
 ```
 
-An API dataset named `busan-enriched-v1` is **not** the CSV's UUID version. Do not
+An API dataset named `busan-enriched-v3` is **not** the CSV's UUID version. Do not
 relabel it implicitly. Import a new full dataset with the intended version if
 needed using `app.import_places`, which now also populates the separate sidecar.
 Existing runs continue to read their original version. The backend sends the

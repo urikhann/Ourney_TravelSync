@@ -1,12 +1,28 @@
 # Official POI snapshot
 
-The current default is `travelsync_poi_metadata_enriched_v1.csv`, supplied on
-2026-10-31: 3,570 POIs, 72 columns, SHA256
-`583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`. It preserves every row and all 29 core
+The current default is `travelsync_poi_metadata_enriched_v3.csv`, supplied on
+2026-11-05: 3,570 POIs, 72 columns, SHA256
+`3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9`. It preserves every row and all 29 core
 columns of the v2 snapshot below, adding 43 metadata and provenance columns.
 The loader retains all columns; scoring still uses the same ten binary features.
 Database imports retain the additions in `enriched_metadata`. Operating text and
 verification fields remain source metadata; they do not establish availability.
+
+V3 provides 2,252 non-missing `description_summary` values (63.1%); the literal
+`NULL` is missing. Against the packaged v1, it fills 417 previously missing
+descriptions and preserves all 1,835 existing descriptions. The supplied handoff
+reports 91 additions over a 2,161-description version; that intermediate file was
+not supplied for comparison and was not the packaged baseline. Only eight columns change: `description_raw`,
+`description_summary`, `description_source_url`, `description_source_type`,
+`description_basis`, `description_raw_format`, `description_checked_at`, and
+`field_provenance_json`. All 29 core columns, remaining metadata, IDs and row order
+are unchanged. The supplied v3 file is copied byte-for-byte.
+
+The previous `travelsync_poi_metadata_enriched_v1.csv` remains available for
+snapshot comparison (SHA256
+`583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`).
+Existing databases require an explicit import as a new version; this repository
+update does not import or activate data in a running database.
 
 ## Previous core snapshot
 

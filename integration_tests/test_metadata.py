@@ -19,7 +19,7 @@ def test_metadata_sidecar_validation_and_versioned_join(tmp_path):
     from ourney_travelsync.db.metadata_import import import_metadata
     from ourney_travelsync.db.repository import get_active_pois
     root = Path(__file__).resolve().parents[1]
-    rows = read_csv(root / 'src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv')[:2]
+    rows = read_csv(root / 'src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv')[:2]
     core = [{k: r[k] for k in COLUMNS} for r in rows]
     schema = 'metadata_test_' + uuid4().hex
     with psycopg.connect(URL, autocommit=True, row_factory=dict_row) as conn:

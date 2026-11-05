@@ -39,7 +39,7 @@ Point the backend at it: in `api/.env` put `RECOMMENDER_URL=http://localhost:800
   for an archived database version. See [metadata integration](../../docs/poi_metadata.md).
 - member `exclusions.resolved`: `{poi_id: reason}` — places the backend matched to a member's rule (e.g. hiking)
 
-Environment: `DATASET_VERSION` (default `busan-enriched-v1`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
+Environment: `DATASET_VERSION` (default `busan-enriched-v3`), `PLACES_CSV`, `GFAR_DEPTH` (20), `AWM_THRESHOLD` (2.5).
 
 ## Test
 

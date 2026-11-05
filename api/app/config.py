@@ -34,9 +34,9 @@ SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))
 # for the whole team). Imported automatically into an empty database (see app/seed.py).
 # Set PLACES_CSV= (empty) to use the 28 sample places instead.
 _DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ourney_travelsync", "data",
-                            "travelsync_poi_metadata_enriched_v1.csv")
+                            "travelsync_poi_metadata_enriched_v3.csv")
 PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)
-PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v1")  # dataset version name for the auto-import
+PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v3")  # dataset version name for the auto-import
 # Opening hours (data team's operating-info CSV), loaded right after an automatic place import. Empty = skip.
 HOURS_CSV = _env("HOURS_CSV", os.path.join(os.path.dirname(PLACES_CSV or _DEFAULT_CSV),
                                            "travelsync_poi_operating_info_v1.csv"))

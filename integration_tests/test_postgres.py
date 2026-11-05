@@ -28,7 +28,7 @@ def test_snapshot_import_run_and_immutability():
                 conn.execute((root/'database/schema.sql').read_text(encoding='utf-8'))
                 from ourney_travelsync.db.operations import apply_migrations
                 apply_migrations(conn, root/'database')
-            with as_file(files('ourney_travelsync').joinpath('data/travelsync_poi_metadata_enriched_v1.csv')) as path:
+            with as_file(files('ourney_travelsync').joinpath('data/travelsync_poi_metadata_enriched_v3.csv')) as path:
                 rows = read_csv(path)
             report = import_rows(conn, rows)
             assert report['imported_rows'] == 3570 and not report['activated']

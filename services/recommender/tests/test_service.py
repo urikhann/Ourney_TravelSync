@@ -22,7 +22,7 @@ def req(method="gfar", **opts):
 
 def test_health():
     body = client.get("/health").json()
-    assert body["ok"] and body["places"] == 3570 and body["dataset_version"] == "busan-enriched-v1"
+    assert body["ok"] and body["places"] == 3570 and body["dataset_version"] == "busan-enriched-v3"
 
 
 def test_method_c_uses_versioned_join_snapshot():
@@ -47,7 +47,7 @@ def test_contract_shape_and_scale(method):
     r = client.post("/recommend", json=req(method))
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v1" and body["method"] == method
+    assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v3" and body["method"] == method
     ids = [g["poi_id"] for g in body["group"]]
     assert len(ids) == len(set(ids)) and [g["group_rank"] for g in body["group"]] == list(range(1, len(ids) + 1))
     for g in body["group"]:

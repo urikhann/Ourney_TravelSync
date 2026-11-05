@@ -1,5 +1,5 @@
 {
- "source": "Hand-made sample of 28 Busan places (English names) for tests and offline demos. Real data: src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv",
+ "source": "Hand-made sample of 28 Busan places (English names) for tests and offline demos. Real data: src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv",
  "pois": [
   {
    "id": "haeundae",

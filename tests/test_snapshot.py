@@ -24,5 +24,30 @@ def test_official_enriched_snapshot():
     assert Counter(r['source'] for r in rows) == {'TOUR_API':345, 'TOUR_API+KAKAO':106, 'KAKAO':3119}
 
     assert all(len(row) == 72 for row in places.records)
-    assert any(row["description_summary"] for row in places.records)
+    assert sum(row["description_summary"] != "NULL" for row in places.records) == 2252
     assert "field_provenance_json" in places.records[0]
+
+
+def test_v3_preserves_core_and_existing_descriptions():
+    previous = files('ourney_travelsync').joinpath('data', 'travelsync_poi_metadata_enriched_v1.csv')
+    with previous.open(encoding='utf-8-sig', newline='') as handle:
+        reader = csv.DictReader(handle)
+        columns = reader.fieldnames
+        old_rows = list(reader)
+    new_rows = load_places().records
+    assert len(old_rows) == len(new_rows)
+    changed_columns = {
+        'description_raw', 'description_summary', 'description_source_url',
+        'description_source_type', 'description_basis', 'description_raw_format',
+        'description_checked_at', 'field_provenance_json',
+    }
+    additions = 0
+    for old, new in zip(old_rows, new_rows):
+        assert list(new) == columns
+        assert old['place_id'] == new['place_id']
+        assert all(old[key] == new[key] for key in columns if key not in changed_columns)
+        if old['description_summary'] != 'NULL':
+            assert all(old[key] == new[key] for key in changed_columns)
+        elif new['description_summary'] != 'NULL':
+            additions += 1
+    assert additions == 417

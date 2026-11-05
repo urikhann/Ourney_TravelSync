@@ -1,4 +1,4 @@
-"""Enriched place metadata from the data pipeline (travelsync_poi_metadata_enriched_v1.csv).
+"""Enriched place metadata from the data pipeline (travelsync_poi_metadata_enriched_v3.csv).
 
 The CSV writes a missing value as the text "NULL". In the app, missing must be a real empty value (None),
 so the screens never show the word "NULL" and nothing unknown is mistaken for a real value.

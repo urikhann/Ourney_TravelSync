@@ -1,14 +1,14 @@
 """Make a small demo place list: only the places named in the data teammate's demo-candidate file.
 
     cd api
-    python -m app.make_demo_pool ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv \\
+    python -m app.make_demo_pool ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv \\
         ../src/ourney_travelsync/data/travelsync_demo_candidates_missing_info.csv \\
         ../src/ourney_travelsync/data/travelsync_demo40.csv
 
 The output has exactly the same columns as the full file, so it can be
   1. imported as its own dataset version:  python -m app.import_places <out.csv> --version busan-demo40-v1
   2. given to the recommender service:     PLACES_CSV=<out.csv> DATASET_VERSION=busan-demo40-v1
-Switch back to all places with:            python -m app.activate_version busan-enriched-v1
+Switch back to all places with:            python -m app.activate_version busan-enriched-v3
 """
 import argparse
 import csv

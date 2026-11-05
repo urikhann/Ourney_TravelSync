@@ -33,7 +33,7 @@ from ourney_travelsync.recommenders.tfidf import taste_query
 
 FEATURE_SCHEMA_VERSION = "fs-1.0"
 # The dataset version name the backend uses for the packaged enriched CSV (api/app/config.py PLACES_VERSION).
-DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-enriched-v1")
+DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-enriched-v3")
 PLACES_CSV = os.getenv("PLACES_CSV") or None          # None = the CSV inside the package
 GFAR_DEPTH = int(os.getenv("GFAR_DEPTH", "20"))         # Borda depth of each member's list (package default)
 AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.5"))  # package default, 1-5 scale

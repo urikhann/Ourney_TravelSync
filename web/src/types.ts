@@ -28,7 +28,7 @@ export type Place = {
   image_url: string | null; place_url: string | null; lat: number; lng: number; field_status: FieldStatus;
   enriched_metadata?: EnrichedMeta;  // extra info from the data pipeline; missing values are null
 };
-/** Enriched place info (travelsync_poi_metadata_enriched_v1.csv). Every value can be null = unknown. */
+/** Enriched place info (travelsync_poi_metadata_enriched_v3.csv). Every value can be null = unknown. */
 export type EnrichedMeta = Partial<Record<string, string | null>>;
 export type Reason = { code: string; text: string; user_id?: string };
 export type GroupPick = {

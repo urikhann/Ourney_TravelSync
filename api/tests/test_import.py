@@ -10,7 +10,7 @@ from app.features import FEATURES
 from app.import_places import ImportProblem, check_rows, import_rows
 from app.models import DatasetVersion, Poi
 
-REAL_CSV = Path(__file__).resolve().parents[2] / "src" / "ourney_travelsync" / "data" / "travelsync_poi_metadata_enriched_v1.csv"
+REAL_CSV = Path(__file__).resolve().parents[2] / "src" / "ourney_travelsync" / "data" / "travelsync_poi_metadata_enriched_v3.csv"
 COLS = ["place_id", "place_name", "category_name", "address", "latitude", "longitude", "source", *FEATURES]
 
 

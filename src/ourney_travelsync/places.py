@@ -10,8 +10,8 @@ import numpy as np
 from .common import FloatArray
 from .features import FEATURE_NAMES, validate_features
 
-OFFICIAL_FILENAME = "travelsync_poi_metadata_enriched_v1.csv"
-OFFICIAL_SHA256 = "583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4"
+OFFICIAL_FILENAME = "travelsync_poi_metadata_enriched_v3.csv"
+OFFICIAL_SHA256 = "3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9"
 
 
 @dataclass(frozen=True)

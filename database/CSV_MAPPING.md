@@ -1,6 +1,6 @@
 # CSV to PostgreSQL mapping
 
-The current default is `src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv`: 3,570 rows, 72 columns. SHA256: `583046906e737845fe5673487a40f79a84401c146f23df516c8c39af94e33eb4`.
+The current default is `src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv`: 3,570 rows, 72 columns. SHA256: `3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9`.
 Its original 29 columns match the previous v2 snapshot exactly. The additional
 43 fields are preserved as source strings in `poi.enriched_metadata` (JSONB),
 including provenance and operating-text fields. Apply migration 003 with

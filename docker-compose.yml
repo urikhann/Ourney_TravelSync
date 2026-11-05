@@ -3,8 +3,8 @@
 # Stop: Ctrl+C (or docker compose down).  Delete all data and start fresh: docker compose down -v
 # Settings come from .env (optional, copy .env.example); the defaults below work without it.
 x-places: &places
-  PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v1.csv}
-  PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v1}
+  PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v3.csv}
+  PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v3}
 
 services:
   db:
@@ -24,7 +24,7 @@ services:
     build: {context: ., dockerfile: services/recommender/Dockerfile}
     environment:
       <<: *places
-      DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v1}
+      DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v3}
     ports: ["8002:8002"]
     volumes: ["./src/ourney_travelsync/data:/data:ro"]
     healthcheck:

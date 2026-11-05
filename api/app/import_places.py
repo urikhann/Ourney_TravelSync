@@ -1,7 +1,7 @@
 """Import the data pipeline's CSV (travelsync_final_places.csv) as a new dataset version.
 
     cd api
-    python -m app.import_places ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv --version busan-enriched-v1 --mapping rule_v2
+    python -m app.import_places ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv --version busan-enriched-v3 --mapping rule_v2
 
 What it does (SRS FR-POI-DATA-01 / SDD 6.11, simplified for v1):
   1. checks every row (id, name, Busan coordinates, 10 features that are exactly 0 or 1, at least one 1)
