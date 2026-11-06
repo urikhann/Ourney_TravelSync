@@ -55,3 +55,6 @@ MAX_TRIP_DAYS = int(_env("MAX_TRIP_DAYS", "3"))
 # Feature switches. The availability checker (opening hours / holidays) is postponed for the first version:
 # plans are built without checking opening hours. Set FEATURE_AVAILABILITY=true to turn it back on.
 FEATURE_AVAILABILITY = _env("FEATURE_AVAILABILITY", "false").lower() in ("1", "true", "yes")
+
+# Read-only agent tools. Disabled until explicitly enabled.
+FEATURE_AGENT = _env("FEATURE_AGENT", "false").lower() in ("1", "true", "yes")
