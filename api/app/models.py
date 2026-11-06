@@ -9,7 +9,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String,
-                        UniqueConstraint, ForeignKeyConstraint)
+                        UniqueConstraint, ForeignKeyConstraint, CheckConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -242,3 +242,84 @@ class PublicHoliday(Base):
     __tablename__ = "public_holidays"
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     name: Mapped[str] = mapped_column(String(60))
+
+# ---------------------------------------------------------------- agent requests/jobs
+
+class AgentRequest(Base):
+    __tablename__ = "agent_requests"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "trip_id",
+            "actor_id",
+            "idempotency_key",
+            name="uq_agent_request_idempotency",
+        ),
+        CheckConstraint(
+            "length(input_hash) = 64",
+            name="ck_agent_request_hash_length",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    schema_version: Mapped[str] = mapped_column(
+        String(20), default="agent.v1"
+    )
+    trip_id: Mapped[str] = mapped_column(
+        ForeignKey("trips.id", ondelete="CASCADE"), index=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    input_hash: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+
+    resolved_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recommendation_runs.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now
+    )
+
+
+class AgentJob(Base):
+    __tablename__ = "agent_jobs"
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ("
+            "'PENDING', 'RUNNING', 'SUCCEEDED', "
+            "'NEEDS_CLARIFICATION', 'FAILED', 'CANCELLED'"
+            ")",
+            name="ck_agent_job_state",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=new_id
+    )
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_requests.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    state: Mapped[str] = mapped_column(String(24), default="PENDING")
+
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    
