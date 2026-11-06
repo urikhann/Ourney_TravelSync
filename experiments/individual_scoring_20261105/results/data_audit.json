@@ -1,0 +1,136 @@
+{
+  "travelsync_final_places_v2.csv": {
+    "count": 3570,
+    "unique_ids": 3570,
+    "feature_counts": {
+      "2": 684,
+      "1": 2856,
+      "3": 30
+    },
+    "feature_frequency": {
+      "food": 842,
+      "cafe": 799,
+      "nature": 667,
+      "history": 390,
+      "art": 460,
+      "shopping": 204,
+      "activity": 132,
+      "entertainment": 54,
+      "relax": 717,
+      "festival": 49
+    },
+    "feature_vectors": 21,
+    "usable_source_backed_descriptions": 0,
+    "description_mean_chars": null,
+    "description_language": {},
+    "name_language": {
+      "Korean": 3472,
+      "mixed": 95,
+      "Latin": 3
+    },
+    "description_basis": {},
+    "verification_status": {
+      "absent": 3570
+    },
+    "duplicate_name_extra_rows": 58,
+    "duplicate_coordinate_extra_rows": 14,
+    "sha256": "5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15"
+  },
+  "travelsync_poi_metadata_enriched_v3.csv": {
+    "count": 3570,
+    "unique_ids": 3570,
+    "feature_counts": {
+      "2": 684,
+      "1": 2856,
+      "3": 30
+    },
+    "feature_frequency": {
+      "food": 842,
+      "cafe": 799,
+      "nature": 667,
+      "history": 390,
+      "art": 460,
+      "shopping": 204,
+      "activity": 132,
+      "entertainment": 54,
+      "relax": 717,
+      "festival": 49
+    },
+    "feature_vectors": 21,
+    "usable_source_backed_descriptions": 2249,
+    "description_mean_chars": 50.7638950644731,
+    "description_language": {
+      "Korean": 2033,
+      "mixed": 216
+    },
+    "name_language": {
+      "Korean": 3472,
+      "mixed": 95,
+      "Latin": 3
+    },
+    "description_basis": {
+      "OFFICIAL_INTRO_EXTRACTIVE": 543,
+      "OFFICIAL_MENU_FACTS": 59,
+      "OFFICIAL_INTRO_PARAPHRASE": 17,
+      "OFFICIAL_FACILITY_INTRO": 224,
+      "OFFICIAL_DESCRIPTION_SUMMARY": 150,
+      "STRUCTURED_MENU_FACTS": 1191,
+      "REGISTERED_BUSINESS_INTRO": 47,
+      "PRIOR_VERIFIED_SAME_POI": 18
+    },
+    "verification_status": {
+      "PARTIAL": 3022,
+      "VERIFIED": 522,
+      "NOT_FOUND": 17,
+      "CONFLICT": 9
+    },
+    "duplicate_name_extra_rows": 58,
+    "duplicate_coordinate_extra_rows": 14,
+    "sha256": "3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9"
+  },
+  "travelsync_demo40.csv": {
+    "count": 40,
+    "unique_ids": 40,
+    "feature_counts": {
+      "2": 18,
+      "1": 18,
+      "3": 4
+    },
+    "feature_frequency": {
+      "food": 3,
+      "cafe": 3,
+      "nature": 12,
+      "history": 3,
+      "art": 4,
+      "shopping": 1,
+      "activity": 13,
+      "entertainment": 6,
+      "relax": 20,
+      "festival": 1
+    },
+    "feature_vectors": 19,
+    "usable_source_backed_descriptions": 34,
+    "description_mean_chars": 53.61764705882353,
+    "description_language": {
+      "Korean": 31,
+      "mixed": 3
+    },
+    "name_language": {
+      "Korean": 39,
+      "mixed": 1
+    },
+    "description_basis": {
+      "OFFICIAL_INTRO_EXTRACTIVE": 10,
+      "OFFICIAL_INTRO_PARAPHRASE": 2,
+      "PRIOR_VERIFIED_SAME_POI": 18,
+      "STRUCTURED_MENU_FACTS": 4
+    },
+    "verification_status": {
+      "VERIFIED": 10,
+      "PARTIAL": 30
+    },
+    "duplicate_name_extra_rows": 0,
+    "duplicate_coordinate_extra_rows": 0,
+    "sha256": "39f6de1ca52189a4e29b1ea748be29fde5b3ea27a1925756569a047b16e69476"
+  }
+}

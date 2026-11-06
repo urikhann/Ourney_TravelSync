@@ -1,0 +1,12 @@
+{
+  "seed": 20261105,
+  "version": "individual-study-v1",
+  "penalties": [0, 0.25, 0.5, 1],
+  "alphas": [0, 0.25, 0.5, 0.75, 1],
+  "betas": [0, 0.5, 1],
+  "representations": ["name_category", "features", "description"],
+  "models": [
+    {"id": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42", "license": "apache-2.0", "cache": "notebooks/experiments/enriched_poi_round1_20261028/.model-cache", "query_prefix": "", "passage_prefix": ""},
+    {"id": "intfloat/multilingual-e5-small", "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3", "license": "mit", "cache": "experiments/individual_scoring_20261105/.model-cache", "query_prefix": "query: ", "passage_prefix": "passage: "}
+  ]
+}

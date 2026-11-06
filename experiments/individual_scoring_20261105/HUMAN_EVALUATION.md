@@ -1,0 +1,21 @@
+# Blinded study protocol
+
+No participant responses have been collected for this study. The packet contains real catalogue POIs and stored source-linked metadata, not generated judgments. Stored text is not a live verification of a venue. Historical phase-one sheets concern a different frozen task and must not be relabeled as independent evidence for these numeric profiles.
+
+Recruit 10–20 participants and record their ten actual 1–5 preferences, explicit hard exclusions, participant ID, and intended travel group. Assign entire groups to development or held-out evaluation before collecting judgments. Use a 24-POI packet for each split from `results/labeling_template.csv`; POIs are disjoint between splits. Randomize presentation order per participant with a recorded seed. The template is stratified by feature count and description availability, not predicted scores. It is a pilot, not a representative population sample. Freeze and hash each participant packet before collection.
+
+Show only place name, category, available stored description, and source reference. Obtain explicit consent and collect a 1–5 anticipated relevance judgment (1 strongly irrelevant, 3 neutral, 5 strongly relevant), a separate yes/no willingness-to-visit response, and an insufficient-evidence flag. Leave both judgments blank when evidence is insufficient. These are anticipated preferences, not experienced satisfaction. Do not show scores, rankings, model identities, hypotheses about a winner, or this report to participants before rating. An organizer keeps the mapping from anonymous IDs to methods separately.
+
+Do not invent detailed interests from numeric ratings. Participants may supply optional actual free text for a separately declared experiment. Do not add that text to only one method and attribute the resulting change solely to embeddings. Keep hard exclusions and eligible candidate pools identical for all methods. Store actual collection date, collector, blinding procedure, group split and frozen method configuration in a collection-record JSON; never fill those fields speculatively.
+
+Use development groups only for choosing lambda, beta, alpha, profile strategy, normalization or any calibration. Freeze the full configuration before opening held-out judgments. Keep held-out participant/group identities and POIs out of training and selection. The 48-POI packet provides 24 items per split; more POIs and groups are needed for a reliable confirmatory study. Do not pool repeated ratings from one person as independent raters. Report individual participants, group counts, missing evidence, confidence intervals resampled at group level, and disagreements. Ten participants is too small to establish universal superiority.
+
+For each held-out participant, generate scores with that person's actual ratings over the entire assigned packet. Supply `evaluate_labels.py` a CSV with `participant_id,place_id,method,score` for every assigned POI and method. It evaluates tie-expected NDCG@5/@10 (gain `2**grade-1`), willingness@K and Spearman correlation only on the fully judged candidate packet. This is not full-catalogue retrieval evaluation. A participant/method pool with any insufficient-evidence item is excluded rather than silently treating it as irrelevant. `--collection-record` requires actual nonempty documentation; its existence alone does not prove blinding.
+
+Example after collection:
+
+```powershell
+.venv/Scripts/python.exe experiments/individual_scoring_20261105/evaluate_labels.py --labels actual_heldout.csv --scores frozen_predictions.csv --collection-record actual_collection.json --out heldout_metrics.json
+```
+
+For group evaluation, have real members independently rate the same eligible packet, then evaluate their group lists without averaging members into a profile. Collect separate group willingness/acceptance and per-member list judgments. Report worst-member judgments, disparity, each member's representation, list lengths, candidate exhaustion and feature diversity. A structured proxy or GFAR Borda coverage is not a group acceptance label. Do not tune AWM on raw cosine or distribution-normalized scores. Any future satisfaction calibration requires separate development data, held-out reliability checks and a documented threshold interpretation.

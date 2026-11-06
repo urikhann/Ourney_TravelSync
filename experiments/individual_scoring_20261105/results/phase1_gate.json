@@ -1,0 +1,56 @@
+{
+  "canonical_descriptions": 0,
+  "enriched": {
+    "count": 3570,
+    "unique_ids": 3570,
+    "feature_counts": {
+      "2": 684,
+      "1": 2856,
+      "3": 30
+    },
+    "feature_frequency": {
+      "food": 842,
+      "cafe": 799,
+      "nature": 667,
+      "history": 390,
+      "art": 460,
+      "shopping": 204,
+      "activity": 132,
+      "entertainment": 54,
+      "relax": 717,
+      "festival": 49
+    },
+    "feature_vectors": 21,
+    "usable_source_backed_descriptions": 2249,
+    "description_mean_chars": 50.7638950644731,
+    "description_language": {
+      "Korean": 2033,
+      "mixed": 216
+    },
+    "name_language": {
+      "Korean": 3472,
+      "mixed": 95,
+      "Latin": 3
+    },
+    "description_basis": {
+      "OFFICIAL_INTRO_EXTRACTIVE": 543,
+      "OFFICIAL_MENU_FACTS": 59,
+      "OFFICIAL_INTRO_PARAPHRASE": 17,
+      "OFFICIAL_FACILITY_INTRO": 224,
+      "OFFICIAL_DESCRIPTION_SUMMARY": 150,
+      "STRUCTURED_MENU_FACTS": 1191,
+      "REGISTERED_BUSINESS_INTRO": 47,
+      "PRIOR_VERIFIED_SAME_POI": 18
+    },
+    "verification_status": {
+      "PARTIAL": 3022,
+      "VERIFIED": 522,
+      "NOT_FOUND": 17,
+      "CONFLICT": 9
+    },
+    "duplicate_name_extra_rows": 58,
+    "duplicate_coordinate_extra_rows": 14,
+    "sha256": "3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9"
+  },
+  "decision": "Run source-backed enrichment pilot and full-catalog taxonomy controls; partial provenance is not independent verification. No quality winner can be selected without aligned independent labels."
+}
