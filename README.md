@@ -4,8 +4,10 @@ Different tastes, one itinerary. Inha University CSE capstone, team Ourney.
 
 This repository implements Python group recommendations, Busan POI collection and
 cleaning, immutable PostgreSQL dataset/run snapshots, and an optional Streamlit
-viewer. Frontend, authentication API, LLM agent, routing and itinerary optimization
-are planned, not implemented here.
+viewer. The authenticated API/web app now calls the OR-Tools itinerary optimizer
+with an independent E3 publication gate. Verified operating/routing data requires
+a configured server-side adapter; the LLM agent remains a separate integration.
+See [optimizer app setup](docs/optimizer_app_integration.md).
 
 ## Install and run
 
@@ -111,9 +113,11 @@ AGREE is unimplemented; see `docs/agree_design.md`.
 
 The pipeline filters explicit eligible/excluded IDs before scoring. Database runs
 also filter captured member exclusions by database UUID or exact category/category_name.
-Budget, dates, operating hours, accessibility and routing feasibility are **not
-enforced**. Undefined utility/feasible-date fields remain SQL NULL. No itinerary is
-produced or certified feasible.
+The recommendation-only CLI/database adapter does not enforce budget, dates,
+operating hours, accessibility or routing feasibility. Its undefined utility/
+feasible-date fields remain SQL NULL and it does not certify an itinerary.
+The production web API invokes [Module H and E3](docs/optimizer_app_integration.md)
+separately, using explicit conditions and verified planning-data inputs.
 
 ## Collection and PostgreSQL
 

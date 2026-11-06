@@ -49,16 +49,31 @@ export type PlanItem = {
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
   availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown
   place: Place | null; mean_score: number | null;
+  arrival: string; travel_minutes: number; stay_minutes: number; visit_cost: number;
+};
+export type PlanningPoint = { label: string; latitude: number; longitude: number };
+export type OptimizationInput = {
+  days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint }[];
+  budget_total: number; transport_mode: "walk" | "drive" | "transit";
+  max_leg_minutes?: number | null; max_total_walk_minutes?: number | null;
+  required_access?: string[];
+  locked_items?: { poi_id: string; date: string; start_min?: number | null }[];
 };
 export type Plan = {
-  id: number; letter: string; variant: string; name: string; votes: number;
-  stats: { group_fit: number; cost_per_person: number; cost_unknown_count?: number; walking_km_per_day: number | null };
-  days: { date: string; items: PlanItem[] }[];
+  id: number; letter: string; variant: string; name: string; votes: number; stale: boolean;
+  stats: { group_fit: number; total_cost: number; cost_unknown_count?: number; walking_km_per_day: number | null;
+    solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
+  days: { date: string; items: PlanItem[]; start: string; start_label: string; end_label: string;
+    end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {
   plans: Plan[]; my_vote: number | null; voted: number; members: number; chosen_id: number | null;
   holidays: { date: string; name: string }[];
   availability_checked: boolean;
+  setup: { dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[] };
+  latest_optimization: { id: number; status: string; error_code: string | null; solver_status: string;
+    validation_status: string; configuration: OptimizationInput | null;
+    eligibility: { poi_id: string; schedule_eligible: boolean; reasons: string[] }[] } | null;
 };
 export type Features = { availability: boolean };
 export type PoiDetail = Place & {

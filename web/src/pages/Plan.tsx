@@ -1,24 +1,14 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CarFront, CircleCheck, Clock, Footprints, Loader, Lock, Map, RefreshCw, ThumbsUp, TrainFront } from "lucide-react";
-import { api, message } from "../api";
+import { CalendarDays, CircleCheck, Clock, Lock, Map, ThumbsUp } from "lucide-react";
+import { api, ApiError, message } from "../api";
 import type { PlanItem, PlansView } from "../types";
-import { ErrorBox, Loading, pct, weekday, won } from "../ui";
+import { ErrorBox, Loading, pct, weekday } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
-
-// Rough travel time between two stops (straight-line distance → walk / metro / taxi).
-function leg(a: PlanItem, b: PlanItem) {
-  if (!a.place || !b.place) return null;
-  const R = 6371, rad = (x: number) => (x * Math.PI) / 180;
-  const dLat = rad(b.place.lat - a.place.lat), dLng = rad(b.place.lng - a.place.lng);
-  const km = 2 * R * Math.asin(Math.sqrt(Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.place.lat)) * Math.cos(rad(b.place.lat)) * Math.sin(dLng / 2) ** 2));
-  if (km < 1) return { Icon: Footprints, min: Math.max(5, Math.round(km * 13)) };
-  if (km < 8) return { Icon: TrainFront, min: Math.round(km * 2.6 + 8) };
-  return { Icon: CarFront, min: Math.round(km * 2.1 + 7) };
-}
+import OptimizationForm from "../components/OptimizationForm";
 
 const mealLabel = (it: PlanItem) => it.place?.kind === "food" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
 
@@ -30,10 +20,6 @@ export default function Plan() {
   const [openItem, setOpenItem] = useState<PlanItem | null>(null);
 
   const q = useQuery({ queryKey: ["plans", id], queryFn: () => api.get<PlansView>(`/trips/${id}/itineraries`) });
-  const generate = useMutation({
-    mutationFn: () => api.post<PlansView>(`/trips/${id}/itineraries/generate`),
-    onSuccess: (v) => { qc.setQueryData(["plans", id], v); setTab(null); },
-  });
   const vote = useMutation({
     mutationFn: (planId: number) => api.post<PlansView>(`/itineraries/${planId}/vote`),
     onSuccess: (v) => qc.setQueryData(["plans", id], v),
@@ -42,21 +28,30 @@ export default function Plan() {
   const v = q.data;
   if (q.isLoading) return <><TopBar title="Choose a plan" back={`/trips/${id}`} /><Loading /><TabBar tripId={id} /></>;
 
-  if (!v || v.plans.length === 0) {
+  if (!v) return <><TopBar title="Itinerary" back={`/trips/${id}`} /><main className="content"><ErrorBox error={message(q.error)} /></main><TabBar tripId={id} /></>;
+  const latestError = v.latest_optimization?.error_code;
+  const failure = latestError ? message(new ApiError(409, latestError)) : null;
+  const excluded = v.latest_optimization?.eligibility.filter(p => !p.schedule_eligible) ?? [];
+  const exclusions = excluded.length > 0 && <details className="card pad" style={{ marginTop: 12 }}><summary>Excluded from automatic planning ({excluded.length})</summary>
+    {excluded.map(p => <p className="small" key={p.poi_id}><b>{v.setup.points.find(x => x.id === p.poi_id)?.name ?? p.poi_id}</b><br />{p.reasons.map(r => {
+      const code = r.split(":").pop() ?? r;
+      const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", ROUTE_UNAVAILABLE: "Verified route unavailable", NO_FULL_STAY_WINDOW: "Visit does not fit the available opening hours", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
+      return names[code] ?? "Required information or conditions are not satisfied";
+    }).join(" · ")}</p>)}</details>;
+  if (v.plans.length === 0) {
     return (
       <>
-        <TopBar title="Choose a plan" back={`/trips/${id}`} />
+        <TopBar title="Itinerary" back={`/trips/${id}`} />
         <main className="content">
           <div className="empty">
             <div className="ic"><Map size={30} /></div>
             <div className="title" style={{ fontSize: 18 }}>No plans yet</div>
             <p className="muted small">Plans are built from your group's recommendations.</p>
-            <button className="btn blue" disabled={generate.isPending} onClick={() => generate.mutate()}>
-              {generate.isPending ? <><Loader size={18} className="spin" /> Building plans…</> : "Build 3 plans"}
-            </button>
-            <div style={{ marginTop: 10 }}><ErrorBox error={generate.error ? message(generate.error) : null} /></div>
+            <ErrorBox error={failure} />
             <p className="small" style={{ marginTop: 10 }}>No recommendations yet? <Link to={`/trips/${id}/places`}>Go to Places</Link></p>
           </div>
+          <OptimizationForm tripId={id} view={v} />
+          {exclusions}
         </main>
         <TabBar tripId={id} />
       </>
@@ -73,10 +68,13 @@ export default function Plan() {
 
   return (
     <>
-      <TopBar title="Choose a plan" back={`/trips/${id}`}
-        right={<button className="iconbtn" aria-label="Rebuild plans" title="Rebuild plans" disabled={generate.isPending} onClick={() => generate.mutate()}>
-          <RefreshCw size={17} className={generate.isPending ? "spin" : ""} /></button>} />
+      <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
+        <ErrorBox error={failure} />
+        {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
+        <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
+        {exclusions}
+        <p className="muted small">Verified schedule · {selected.stats.solver_status === "OPTIMAL" ? "Best result proved" : "A better plan may exist"}. Based on the saved operating and route information.</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {v.plans.map((p) => {
             const on = p.id === selected.id;
@@ -94,7 +92,7 @@ export default function Plan() {
 
         <div className="card" style={{ marginTop: 10, padding: "11px 0", display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
           <div className="stat"><b style={{ color: "var(--green-d)" }}>{pct(selected.stats.group_fit)}</b><span className="muted tiny">group fit</span></div>
-          <div className="stat"><b>{selected.stats.cost_unknown_count ? "?" : won(selected.stats.cost_per_person)}</b><span className="muted tiny">{selected.stats.cost_unknown_count ? `${selected.stats.cost_unknown_count} prices unknown` : "per person"}</span></div>
+          <div className="stat"><b>₩{selected.stats.total_cost.toLocaleString()}</b><span className="muted tiny">whole group</span></div>
           <div className="stat"><b>{stops}</b><span className="muted tiny">stops</span></div>
         </div>
 
@@ -112,13 +110,13 @@ export default function Plan() {
         )}
 
         <div className="tl">
-          {d.items.map((it, k) => {
-            const l = k > 0 ? leg(d.items[k - 1], it) : null;
+          <p className="muted small">Leave {d.start_label} at {d.start}</p>
+          {d.items.map((it) => {
             const moved = !!it.moved_from;
             const col = moved ? "#E0A21B" : "var(--blue)";
             return (
               <div key={it.poi_id + it.start}>
-                {l && <div className="leg"><l.Icon size={12} />{l.min} min</div>}
+                <div className="leg"><Clock size={12} />{it.travel_minutes} min travel · arrive {it.arrival}</div>
                 <div className="tl-item">
                   <div className="tl-time" style={moved ? { color: "var(--amber)" } : undefined}>{it.start}</div>
                   <div className="tl-dot" style={{ borderColor: col, background: it.locked ? col : "#fff" }} />
@@ -127,6 +125,7 @@ export default function Plan() {
                       <div className="b" style={{ fontSize: 14 }}>{mealLabel(it)}{it.place?.name ?? it.poi_id}</div>
                       {it.locked && <Lock size={15} color="var(--muted)" />}
                     </div>
+                    <div className="muted tiny">{it.start}–{it.end} · {it.stay_minutes} min stay · group visit fees ₩{it.visit_cost.toLocaleString()}</div>
                     {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>Reserved · locked</div>}
                     {moved ? (
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
@@ -146,12 +145,14 @@ export default function Plan() {
               </div>
             );
           })}
+          <p className="muted small">Return: {d.return_travel_minutes} min to {d.end_label} · arrive {d.end_arrival}</p>
           {d.items.length === 0 && <p className="muted small">Nothing fits this day — try rebuilding the plans.</p>}
         </div>
 
         <div style={{ height: 14 }} />
-        <ErrorBox error={vote.error ? message(vote.error) : generate.error ? message(generate.error) : null} />
-        {chosen ? (
+        <p className="muted tiny">Run #{selected.stats.optimization_run_id} · data {selected.stats.dataset_version} · routes {selected.stats.routing_version}</p>
+        <ErrorBox error={vote.error ? message(vote.error) : null} />
+        {selected.stale ? <p className="muted small">Approval is paused until the itinerary is rebuilt for the current group.</p> : chosen ? (
           <div className="banner green" style={{ border: "1px solid #BFE8D6" }}>
             <CircleCheck size={20} color="var(--green)" />
             <span><b>Plan {chosen.letter} chosen</b> · {chosen.votes} of {v.members} votes. It's now the trip plan.</span>
