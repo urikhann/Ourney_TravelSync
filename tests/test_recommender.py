@@ -95,16 +95,17 @@ class PipelineTests(unittest.TestCase):
         np.testing.assert_array_equal(group.poi_features, self.places.features[indices])
 
     def test_full_pipeline_gfar_and_awm(self):
-        group = prepare_group(self.places, self.users, individual_top_n=30)
+        group = prepare_group(self.places, self.users, individual_top_n=30, individual_method='feature_mean')
         self.assertLessEqual(len(group.poi_ids), 60)
         group.validate(require_scores=True)
         self.assertTrue(((group.individual_scores >= 1) & (group.individual_scores <= 5)).all())
-        results = recommend_group(self.places, self.users, individual_top_n=30, top_k=10)
+        results = recommend_group(self.places, self.users, individual_top_n=30, top_k=10, individual_method='feature_mean')
         self.assertEqual(len(results), 10)
         self.assertEqual(len({result.poi_id for result in results}), 10)
         self.assertTrue(all(result.poi_id in group.poi_ids for result in results))
         self.assertEqual(results, GFAR().recommend(group, top_k=10))
         self.assertEqual(recommend_group(self.places, self.users, individual_top_n=30,
+                                        individual_method='feature_mean',
                                         recommender=AverageWithoutMisery()),
                          AverageWithoutMisery().recommend(group))
 

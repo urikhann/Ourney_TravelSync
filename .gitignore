@@ -50,6 +50,12 @@ dvclive/
 .venv-review/
 .venv-wheel-review/
 
+# Local encoder downloads and generated embeddings are never source artifacts.
+**/.model-cache/
+**/cache/*.npy
+**/cache/*.npz
+/.cache/
+
 # Web app + backend (Bat)
 node_modules/
 dist/

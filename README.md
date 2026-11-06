@@ -3,9 +3,10 @@
 Different tastes, one itinerary. Inha University CSE capstone, team Ourney.
 
 This repository implements Python group recommendations, Busan POI collection and
-cleaning, immutable PostgreSQL dataset/run snapshots, and an optional Streamlit
-viewer. Frontend, authentication API, LLM agent, routing and itinerary optimization
-are planned, not implemented here.
+cleaning, immutable PostgreSQL dataset/run snapshots, an authentication API/web
+workflow, and an optional Streamlit viewer. E5 hybrid relevance is the default
+individual scorer feeding GFAR, with transparent feature fallback. See
+[E5 architecture, operations and verification](docs/e5_hybrid.md).
 
 ## Install and run
 
@@ -31,11 +32,18 @@ uv run --locked --extra viewer streamlit run apps/data_viewer.py
 ```
 
 Extras: `ingestion` (requests/pandas), `postgres` (psycopg/python-dotenv), `viewer`
-(Streamlit/pandas/PostgreSQL), `experiments` (MLflow/DVC). Core requires NumPy and
-scikit-learn for Method C. See [versioned metadata integration](docs/poi_metadata.md)
+(Streamlit/pandas/PostgreSQL), `experiments` (MLflow/DVC), `semantic` (pinned
+SentenceTransformer/CPU E5 support). Core requires NumPy, SciPy and
+scikit-learn for legacy Method C. See [versioned metadata integration](docs/poi_metadata.md)
 for sidecar imports, JOINs, preference text and historical binary replay.
 Development tools are in the `dev` group. Existing environments and local experiment
 records are not cleanup targets.
+
+For operational E5 scoring, install `--extra semantic` and prewarm with
+`ourney-travelsync e5-cache --download` before serving requests. Without an
+available cache, recommendations use labeled feature-percentile fallback.
+`recommend --diagnostics` reports the effective method. Use
+`--individual-method feature_mean` for explicit 1-5 feature scores.
 
 `users.json` maps user IDs to ten named preferences from 1 to 5:
 
@@ -44,7 +52,7 @@ records are not cleanup targets.
 ```
 
 Without `--users`, the CLI uses two example profiles. `--csv PATH` selects an
-external CSV; otherwise it loads the installed official v2 resource independently
+external CSV; otherwise it loads the installed official enriched v3 resource independently
 of the current working directory. Python use:
 
 ```python
@@ -93,8 +101,10 @@ Existing API databases require an explicit CSV import with the new version
 
 Feature order: `food, cafe, nature, history, art, shopping, activity,
 entertainment, relax, festival`. POIs have independent binary labels, at least one
-per row. Individual scores average preferences over active labels, on the original
-1-5 scale. Candidates are the union of each member's top-N (default 100).
+per row. Explicit `feature_mean` averages preferences over active labels on the
+original 1-5 scale. Default E5 hybrid combines full-catalogue feature and semantic
+percentiles with alpha=.5 and beta=1. Candidates are the union of each member's
+separate top-N (default 100); hybrid values are relative relevance.
 
 Candidate cutoffs and persisted individual rankings break ties using seeded SHA256
 of stable POI identities (default seed 0). Unequal scores retain descending score
@@ -102,14 +112,17 @@ order. Candidate output rows use the identity order, making fixed-seed results
 independent of CSV ordering. AWM/GFAR themselves break ties by supplied input order;
 the standard pipeline supplies the seeded order.
 
-AWM vetoes a POI if any member scores below 2.5 by default, then ranks by mean.
+AWM comparison mode uses feature mean and vetoes below 2.5, then ranks by mean.
+Raw semantic/TF-IDF and hybrid percentiles cannot be used as misery ratings.
 GFAR uses normalized Borda relevance (default depth 20) and greedy coverage gains.
 Its score is selection gain, not mean satisfaction. Compare algorithms using
-`evaluation.evaluate_satisfaction`, which reads original member scores. Empty
+`evaluation.evaluate_satisfaction` only with suitable feature-rating proxies;
+do not interpret its output on hybrid scores as satisfaction. Empty
 lists have undefined satisfaction. The notebook demonstrates this comparison.
 AGREE is unimplemented; see `docs/agree_design.md`.
 
-The pipeline filters explicit eligible/excluded IDs before scoring. Database runs
+The pipeline normalizes the full catalogue, then filters explicit eligible/excluded
+IDs before candidate selection and aggregation. Database runs
 also filter captured member exclusions by database UUID or exact category/category_name.
 Budget, dates, operating hours, accessibility and routing feasibility are **not
 enforced**. Undefined utility/feasible-date fields remain SQL NULL. No itinerary is

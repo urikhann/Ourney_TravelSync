@@ -9,7 +9,8 @@ Rules for everyone
   `feature_schema_version` = `fs-1.0`. Requests and responses carry it plus `dataset_version`; a mismatch is an error.
 - Member `ratings` remain **raw 1–5 integers**. Optional `tastes.keywords` from the onboarding survey supplies the query for Method C.
 - Place features remain **binary 0/1**, several can be 1. `options.individual_method="tfidf"` uses enriched text
-  and cosine scores on 0–1. The historical `binary` method uses 1–5 in the package service and 0–1 in the SDD mock.
+  and cosine scores on 0–1. The default `e5_hybrid` emits relative relevance
+  (`score_scale=relative_relevance_0_1`); `feature_mean`/historical `binary` use 1–5 in the real service.
   Consumers must use the returned `score_scale`; thresholds must match that scale.
 - Personal exclusions (`exclusions.tags`, `exclusions.poi_ids`) are E1 hard rules. A low rating (1) is **not** an exclusion.
   Tags today: `hiking`, `raw_fish`, `alcohol` (derived from the place category at import).
@@ -32,14 +33,16 @@ Reference implementation of the scoring + GFAR from the SDD: `services/mocks/gro
 (tests: `api/tests/test_group_rec.py` — score 10/30 and the GFAR fixture A, C, B).
 
 The backend supplies `poi_snapshot` for the real recommender: an array of
-`{place_id, dataset_version, latitude, longitude, enriched_metadata, food, cafe,
+`{place_id, place_name, category_name, dataset_version, latitude, longitude, enriched_metadata, food, cafe,
 nature, history, art, shopping, activity, entertainment, relax, festival}`.
 It comes from the database's version-aware LEFT JOIN. Each row must have the
 request's exact `dataset_version`. The request (including taste keywords, options and POI
 snapshot) is stored with the run. Direct legacy calls without this field use the
 service's configured CSV and require its dataset version. Existing
 `recommend.request.json` remains a legacy binary example; API requests default to
-Method C. See [metadata integration](../docs/poi_metadata.md).
+E5 hybrid. Additive scoring/fallback/status diagnostics are described in
+[E5 integration](../docs/e5_hybrid.md). Group/list/utility fields are preserved;
+hybrid satisfaction display fields are null. AWM comparisons require feature scores.
 
 Availability checks carry `dataset_version` on each check (or at request level).
 Omitting it uses ACTIVE only for standalone current-place checks. Responses use

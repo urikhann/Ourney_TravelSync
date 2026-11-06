@@ -12,6 +12,9 @@ jobs:
       - run: uv run --locked pytest -q
       - run: uv sync --locked --extra ingestion --extra postgres --extra viewer
       - run: uv run --locked --extra ingestion --extra postgres --extra viewer pytest -q
+      - run: uv pip install -r api/requirements.txt -r services/recommender/requirements.txt
+      - run: uv run --no-sync pytest -q services/recommender/tests
+      - run: uv run --no-sync pytest -q api/tests
       - run: uv build
       - run: uv venv .wheel-test --python 3.13
       - run: uv pip install --python .wheel-test/bin/python dist/*.whl

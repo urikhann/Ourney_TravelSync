@@ -24,6 +24,10 @@ class AverageWithoutMisery:
         
         validate_top_k(top_k)
         data.validate(require_scores=True)
+        if data.score_scale not in (None, '1-5'):
+            raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
+        if data.scoring is not None and data.scoring.diagnostics['score_scale'] != '1-5':
+            raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
         
         ratings = data.individual_scores
         assert ratings is not None  # Established by validation.

@@ -7,7 +7,7 @@ WORKDIR /app
 # 1. The team package (numpy + the place CSVs that ship inside it)
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir '.[semantic]'
 
 # 2. The service itself
 COPY services/recommender/requirements.txt ./requirements.txt

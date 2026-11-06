@@ -4,8 +4,8 @@ import numpy as np
 from ..features import FEATURE_NAMES, feature_vector
 from ..places import PlaceDataset
 from ..recommenders.pipeline import prepare_group
-from ..recommenders.individual_scoring import score_individuals
 from ..recommenders.ties import ranking
+from ..recommenders.hybrid import ScoringConfig, score_catalogue
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,8 @@ def adapt_run_inputs(inputs):
             excluded.add(pid)
         if row.get('category') in categories or row.get('category_name') in categories:
             excluded.add(pid)
-        records.append(dict(row)); ids.append(pid); features.append(vector); coordinates.append(coord)
+        records.append(dict(row) | {'source_place_id': row['place_id'], 'place_id': pid})
+        ids.append(pid); features.append(vector); coordinates.append(coord)
     places = PlaceDataset(tuple(records), tuple(ids), np.asarray(features, dtype=float).reshape(-1, 10),
                           np.asarray(coordinates, dtype=float).reshape(-1, 2))
     return SnapshotInput(places, preferences, tuple(sorted(excluded)), dataset)
@@ -87,14 +88,20 @@ def compute_snapshot(inputs):
     preference_texts.update(config.get('preference_texts', {}))
     if algorithm not in ('awm', 'gfar'):
         raise ValueError('UNKNOWN_ALGORITHM')
+    if algorithm == 'awm' and individual_method not in ('binary', 'feature_mean'):
+        raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
+    scoring_config = ScoringConfig.from_env(**{k: config[k] for k in ('alpha', 'beta') if k in config})
+    users = np.asarray([[v[f] for f in FEATURE_NAMES] for v in snapshot.preferences.values()], dtype=float)
+    scoring = (None if individual_method == 'tfidf' else
+               score_catalogue(snapshot.places, users, method=individual_method, config=scoring_config))
     group = prepare_group(snapshot.places, snapshot.preferences,
                           excluded_place_ids=snapshot.excluded_ids,
                           individual_top_n=config['candidate_top_n'], tie_seed=seed,
-                          individual_method=individual_method, preference_texts=preference_texts)
+                          individual_method=individual_method, preference_texts=preference_texts,
+                          scoring_config=scoring_config, _catalogue_scoring=scoring)
     model = (GFAR(config['gfar_depth']) if algorithm == 'gfar'
              else AverageWithoutMisery(config['misery_threshold']))
     results = model.recommend(group, top_k=config['top_k'])
-    users = np.asarray([[v[f] for f in FEATURE_NAMES] for v in snapshot.preferences.values()], dtype=float)
     if individual_method == 'tfidf':
         # Fit exactly the same eligible corpus used for candidate generation.
         from ..recommenders.tfidf import score_texts
@@ -103,7 +110,7 @@ def compute_snapshot(inputs):
         scores[:, eligible] = score_texts([snapshot.places.records[i] for i in eligible],
                                           [preference_texts.get(uid, '') for uid in snapshot.preferences])
     else:
-        scores = score_individuals(users, snapshot.places.features)
+        scores = scoring.scores
     individual, excluded = [], set(snapshot.excluded_ids)
     for u, uid in enumerate(snapshot.preferences):
         eligible = [i for i, pid in enumerate(snapshot.places.place_ids) if pid not in excluded]
@@ -111,7 +118,15 @@ def compute_snapshot(inputs):
         ranks = {eligible[index]: rank for rank, index in enumerate(order, 1)}
         for p, pid in enumerate(snapshot.places.place_ids):
             individual.append(dict(user_id=uid, poi_id=pid, score=float(scores[u, p]),
-                                   rank=ranks.get(p), eligible=pid not in excluded))
+                                   rank=ranks.get(p), eligible=pid not in excluded,
+                                   scoring_details=({**scoring.components(u, p),
+                                                     **scoring.diagnostics['members'][u],
+                                                     'score_scale': scoring.diagnostics['score_scale'],
+                                                     'model_id': scoring.diagnostics['model_id'],
+                                                     'model_revision': scoring.diagnostics['model_revision'],
+                                                     'alpha': scoring_config.alpha, 'beta': scoring_config.beta,
+                                                     'cache_identity': scoring.diagnostics['cache_identity']}
+                                                    if scoring else {'score_scale': '0-1', 'scoring_method': 'tfidf'})))
     columns = {pid: i for i, pid in enumerate(snapshot.places.place_ids)}
     rows = [dict(poi_id=r.poi_id, mean_score=float(scores[:, columns[r.poi_id]].mean()),
                  group_rank=rank, selection_gain=r.score if algorithm == 'gfar' else None,
