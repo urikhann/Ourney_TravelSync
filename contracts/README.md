@@ -57,6 +57,8 @@ Missing production facts must not be copied from them. The legacy request cannot
 be upgraded by adding defaults. See [optimizer integration requirements](../docs/optimizer.md).
 
 **Still outside the live API contract:** async runs (`POST /groups/{id}/runs` →
-202 + run_id, `GET /runs/{id}`) and wiring the production app to enriched Module H
-snapshots. The new optimizer `/runs` is a synchronous internal budget coordinator,
+202 + run_id, `GET /runs/{id}`). The production app now sends enriched Module H
+snapshots via a configurable trusted planning-data adapter; see
+[the app contract and configuration](../docs/optimizer_app_integration.md).
+The new optimizer `/runs` is a synchronous internal budget coordinator,
 not the planned asynchronous group-run API.

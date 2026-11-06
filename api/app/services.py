@@ -12,14 +12,20 @@ from . import config
 TEST_TRANSPORTS: dict[str, httpx.AsyncBaseTransport] = {}
 
 
-async def _post(base_url: str, path: str, payload: dict, service: str) -> dict:
+async def _post(base_url: str, path: str, payload: dict, service: str, timeout: float | None = None,
+                headers: dict | None = None) -> dict:
     transport = TEST_TRANSPORTS.get(base_url)
     try:
-        async with httpx.AsyncClient(base_url=base_url, timeout=config.SERVICE_TIMEOUT_SECONDS,
-                                     transport=transport) as client:
+        async with httpx.AsyncClient(base_url=base_url, timeout=timeout or config.SERVICE_TIMEOUT_SECONDS,
+                                     transport=transport, headers=headers) as client:
             r = await client.post(path, json=payload)
             r.raise_for_status()
-            return r.json()
+            body = r.json()
+            if not isinstance(body, dict):
+                raise ValueError("object response required")
+            return body
+    except ValueError:
+        raise HTTPException(502, f"{service}_invalid_response") from None
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"{service}_error_{e.response.status_code}")
     except httpx.HTTPError:
@@ -31,7 +37,15 @@ async def recommend(payload: dict) -> dict:
 
 
 async def build_plans(payload: dict) -> dict:
-    return await _post(config.OPTIMIZER_URL, "/plans", payload, "optimizer")
+    return await _post(config.OPTIMIZER_URL, "/plans", payload, "optimizer", config.OPTIMIZER_TIMEOUT_SECONDS)
+
+
+async def planning_data(payload: dict) -> dict:
+    if not config.PLANNING_DATA_URL:
+        raise HTTPException(503, "planning_data_not_configured")
+    return await _post(config.PLANNING_DATA_URL, "/snapshot", payload, "planning_data",
+                       config.PLANNING_DATA_TIMEOUT_SECONDS,
+                       {"Authorization": f"Bearer {config.PLANNING_DATA_TOKEN}"} if config.PLANNING_DATA_TOKEN else None)
 
 
 async def check_availability(payload: dict) -> dict:

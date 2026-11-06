@@ -25,7 +25,12 @@ WEB_URL = _env("WEB_URL", WEB_ORIGIN)  # used in invite links
 
 # Teammates' services. Default: the mock service in services/mocks.
 RECOMMENDER_URL = _env("RECOMMENDER_URL", "http://localhost:8001")
-OPTIMIZER_URL = _env("OPTIMIZER_URL", "http://localhost:8001")
+OPTIMIZER_URL = _env("OPTIMIZER_URL", "http://localhost:8003")
+PLANNING_DATA_URL = _env("PLANNING_DATA_URL")  # trusted enrichment/routing adapter; no mock fallback
+PLANNING_DATA_TOKEN = _env("PLANNING_DATA_TOKEN")  # header only; never stored in snapshots
+PLANNING_DATA_TIMEOUT_SECONDS = float(_env("PLANNING_DATA_TIMEOUT_SECONDS", "20"))
+OPTIMIZER_TIMEOUT_SECONDS = float(_env("OPTIMIZER_TIMEOUT_SECONDS", "45"))
+OPTIMIZER_SEARCH_SECONDS = 30
 AVAILABILITY_URL = _env("AVAILABILITY_URL", "http://localhost:8001")
 AGENT_URL = _env("AGENT_URL", "http://localhost:8001")
 SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))

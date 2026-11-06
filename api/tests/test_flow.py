@@ -33,7 +33,7 @@ def prefs(n):
     return {"ratings": dict(zip(FEATURES, RATINGS[n][0]))}
 
 
-def test_full_trip_flow():
+def test_full_trip_flow(planning_adapter):
     h = {n: signup(n) for n in RATINGS}
 
     # Bat creates the trip
@@ -100,20 +100,25 @@ def test_full_trip_flow():
     assert avg["method"] == "average" and len(avg["group"]) == 4
     awm = c.post(f"/trips/{tid}/recommendations", headers=h["Bat"], json={"method": "awm", "awm_threshold": 0.1}).json()
     assert all(min(x["member_scores"].values()) >= 0.1 for x in awm["group"])
-    c.post(f"/trips/{tid}/recommendations", headers=h["Bat"])  # back to the default GFAR run for the plans
+    c.post(f"/trips/{tid}/recommendations", headers=h["Bat"], json={"group_k": 3})
 
-    # plans: 3 variants, vote, majority picks the winner
-    r = c.post(f"/trips/{tid}/itineraries/generate", headers=h["Bat"])
+    # Real optimizer: every member must explicitly confirm each requested date.
+    from .test_optimizer_integration import configuration
+    days = ["2026-10-09", "2026-10-10", "2026-10-11"]
+    for header in h.values():
+        c.put(f"/trips/{tid}/availability", headers=header, json={"dates": days})
+    r = c.post(f"/trips/{tid}/itineraries/generate", headers=h["Bat"], json=configuration(days))
     assert r.status_code == 200, r.text
     plans = r.json()
-    assert [p["letter"] for p in plans["plans"]] == ["A", "B", "C"]
+    assert [p["letter"] for p in plans["plans"]] == ["A"]
     a = plans["plans"][0]
     assert len(a["days"]) == 3 and a["days"][0]["items"][0]["place"]["name"]
-    assert plans["availability_checked"] is False and plans["holidays"] == []
+    assert plans["availability_checked"] is True and plans["holidays"] == []
+    assert a["stats"]["validation_status"] == "PASSED"
     for n in ["Bat", "Jaehoon"]:
         c.post(f"/itineraries/{a['id']}/vote", headers=h[n])
-    r = c.post(f"/itineraries/{plans['plans'][1]['id']}/vote", headers=h["Sora"]).json()
-    assert r["voted"] == 3 and r["chosen_id"] is None
+    r = c.post(f"/itineraries/{a['id']}/vote", headers=h["Sora"]).json()
+    assert r["voted"] == 3 and r["chosen_id"] == a["id"]
     r = c.post(f"/itineraries/{a['id']}/vote", headers=h["Minho"]).json()
     assert r["chosen_id"] == a["id"] and r["my_vote"] == a["id"]
 
@@ -123,7 +128,7 @@ def test_full_trip_flow():
     assert a["stats"]["cost_unknown_count"] == 0
     assert c.get("/pois/gamcheon/availability", headers=h["Bat"], params={"date": "2026-10-10"}).status_code == 404
     assert c.get("/meta/features").json() == {"availability": False}
-    assert all(i["availability"] is None for d in a["days"] for i in d["items"])
+    assert all(i["availability"]["available"] for d in a["days"] for i in d["items"])
 
 
 def test_availability_checker_logic_for_later():

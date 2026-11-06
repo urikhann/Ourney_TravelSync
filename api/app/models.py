@@ -154,6 +154,28 @@ class Vote(Base):
     voted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class OptimizationRun(Base):
+    """Private optimizer audit. Additive table; existing itinerary schema is unchanged.
+
+    Includes failed attempts so unknown-data/timeout outcomes are reproducible
+    without publishing a fake or empty itinerary. Never serialize these private
+    snapshots directly into group-facing responses.
+    """
+    __tablename__ = "itinerary_optimization_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
+    recommendation_run_id: Mapped[int] = mapped_column(ForeignKey("recommendation_runs.id"))
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    itinerary_id: Mapped[int | None] = mapped_column(ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="RUNNING")
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    input: Mapped[dict] = mapped_column(JSON, default=dict)
+    planning_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    optimizer_request: Mapped[dict] = mapped_column(JSON, default=dict)
+    response: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 # ---------------------------------------------------------------- places (data pipeline owns these)
 class DatasetVersion(Base):
     """An imported, validated set of places (SDD 6.11). Exactly one is ACTIVE; a run pins the version it used."""

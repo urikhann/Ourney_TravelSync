@@ -32,7 +32,15 @@ services:
       interval: 5s
       retries: 20
 
-  mocks:  # stand-ins for the services not built yet (itinerary optimizer, availability checker, AI agent)
+  optimizer:
+    build: {context: ., dockerfile: services/optimizer/Dockerfile}
+    ports: ["127.0.0.1:8003:8003"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 5s
+      retries: 20
+
+  mocks:  # availability checker and AI agent stand-ins; never used for production planning
     build: ./services/mocks
     environment:
       PYTHONPATH: /package/src
@@ -43,7 +51,7 @@ services:
     volumes: ["./services/mocks:/code", "./src:/package/src:ro"]
 
   api:  # Bat — backend
-    build: ./api
+    build: {context: ., dockerfile: api/Dockerfile}
     env_file: [{path: .env, required: false}]
     environment:
       <<: *places
@@ -51,7 +59,11 @@ services:
       HOURS_CSV: /data/travelsync_poi_operating_info_v1.csv
       PLACES_FOLLOW_ENV: "true"   # import / activate PLACES_VERSION on start, so switching to the demo pool just works
       RECOMMENDER_URL: http://recommender:8002
-      OPTIMIZER_URL: http://mocks:8001
+      OPTIMIZER_URL: http://optimizer:8003
+      PLANNING_DATA_URL: ${PLANNING_DATA_URL:-}
+      PLANNING_DATA_TOKEN: ${PLANNING_DATA_TOKEN:-}
+      PLANNING_DATA_TIMEOUT_SECONDS: ${PLANNING_DATA_TIMEOUT_SECONDS:-20}
+      OPTIMIZER_TIMEOUT_SECONDS: "45"
       AVAILABILITY_URL: http://mocks:8001
       AGENT_URL: http://mocks:8001
       FEATURE_AVAILABILITY: ${FEATURE_AVAILABILITY:-true}
@@ -60,6 +72,7 @@ services:
     depends_on:
       db: {condition: service_healthy}
       recommender: {condition: service_healthy}
+      optimizer: {condition: service_healthy}
     volumes: ["./api/app:/code/app", "./src/ourney_travelsync/data:/data:ro"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:

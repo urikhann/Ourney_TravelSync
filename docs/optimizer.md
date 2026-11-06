@@ -1,5 +1,11 @@
 # Module H — itinerary optimizer
 
+Update 2026-11-06: the authenticated production app is now wired to Module H;
+see [app integration and planning-data setup](optimizer_app_integration.md).
+The standalone implementation and its original integration requirements are
+described below; the new app guide identifies completed wiring and remaining
+external-provider dependencies.
+
 Implements TS SRS 1.1 FR-ITIN-OPT-01 and SDD 1.1 sections 10–11. Source
 specifications inspected: `TravelSync_요구사항명세서_v1.1.txt` and
 `TravelSync_상세설계서_v1.1.txt` in the project-chat workspace (2026-10-07).
@@ -70,9 +76,11 @@ explicitly included by the adapter if they are part of the user's budget.
 The legacy `/plans` mock and `plans.*.json` describe three themed greedy plans.
 They cannot supply routing, party budget, common availability or verified
 operating snapshots. The new versioned service must reject that old payload.
-The app must collect these inputs and call the new service explicitly; switching
-OPTIMIZER_URL alone is insufficient. No production records or schema are changed.
-No synthetic facts are used by the implementation.
+The app now collects these inputs, loads pinned recommendation/member data and
+calls the new service explicitly; switching OPTIMIZER_URL alone is insufficient.
+Its trusted planning-data adapter must be configured before it can schedule
+real places. No synthetic facts are used by the implementation. The necessary
+additive API audit table is documented in the app integration guide.
 
 Candidate expansion belongs to the recommendation/enrichment orchestrator: it
 must retain original GFAR ranks/utilities, expand at most once (L=200, K=60),
@@ -142,9 +150,10 @@ control and must not be sent wholesale to group-facing public screens.
   of embedding coordinates in every solver request. Member availability is
   explicit, and service calls are synchronous. Legacy three themed variants are
   retained only in the existing mock; Module H returns one optimized itinerary.
-- Not wired here: recommendation expansion generation, enrichment/provider calls,
-  route refresh, async jobs, production persistence/UI publication. These are
-  integration dependencies; the current app still uses the legacy mock.
+- Production app wiring is implemented in `api/` and `web/`, including the
+  configurable planning-data call, private persistence and local E3 publication
+  gate. Actual enrichment/routing provider deployment, recommendation expansion,
+  route refresh and async jobs remain integration dependencies.
 - Acceptance remains unverified: real-provider/operating-data freshness and
   correctness, deployment startup, live authenticated optimized trip flow,
   performance at 10,000 source POIs / prescribed 20-run fixed-environment p95.
