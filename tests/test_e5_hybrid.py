@@ -13,6 +13,7 @@ from ourney_travelsync import FEATURE_NAMES, GFAR, AverageWithoutMisery
 from ourney_travelsync.places import PlaceDataset
 from ourney_travelsync.recommenders import hybrid as h
 from ourney_travelsync.recommenders.pipeline import prepare_group, recommend_group
+from ourney_travelsync.recommenders.ties import ranking
 
 
 def catalogue():
@@ -37,13 +38,28 @@ def config(tmp_path, monkeypatch):
     return h.ScoringConfig(cache_dir=str(tmp_path), regenerate=True)
 
 
-def test_frozen_reference(config):
+@pytest.mark.parametrize('embedding_dtype', ['float32', 'float64'])
+def test_frozen_reference(config, monkeypatch, embedding_dtype):
     fixture = json.loads((Path(__file__).parent/'fixtures/e5_reference.json').read_text(encoding='utf-8'))
-    result = h.score_catalogue(catalogue(), np.array(fixture['users']), config=config)
-    for key, attr in [('feature', 'feature_raw'), ('semantic', 'semantic_raw'),
+    def encode(texts, config):
+        # Keep the same fixture vectors; exercise both float32 BLAS reductions
+        # and higher-precision accumulation without changing expected scores.
+        return tuple(a.astype(embedding_dtype) for a in fake_encode(texts, config))
+    monkeypatch.setattr(h, '_encode', encode)
+    places = catalogue()
+    result = h.score_catalogue(places, np.array(fixture['users']), config=config)
+    # The reference uses float32 embedding dot products. CPU/BLAS reduction
+    # order can change their last bits (CI observed 2.6e-8), even though the
+    # weighted user arithmetic subsequently promotes scores to float64.
+    np.testing.assert_allclose(result.semantic_raw, fixture['semantic'],
+                               atol=np.finfo(np.float32).eps, rtol=0)
+    for key, attr in [('feature', 'feature_raw'),
                       ('feature_normalized', 'feature_normalized'), ('semantic_normalized', 'semantic_normalized'),
                       ('hybrid', 'hybrid')]:
         np.testing.assert_allclose(getattr(result, attr), fixture[key], atol=1e-14, rtol=1e-14)
+    for actual, expected in ((result.semantic_raw, fixture['semantic']), (result.scores, fixture['hybrid'])):
+        for row, reference in zip(actual, expected):
+            np.testing.assert_array_equal(ranking(row, places.place_ids), ranking(reference, places.place_ids))
     assert fixture['source_commit'] == '29018ce'
 
 

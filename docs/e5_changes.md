@@ -97,3 +97,23 @@ use the production recommender; regression comparisons hold frozen embeddings
 fixed and separately report fresh-encoding drift. No failing test remains.
 
 See [architecture, formulas, commands and limitations](e5_hybrid.md).
+
+## CI portability correction
+
+The first Linux CI run exposed an overly strict `1e-14` comparison of raw
+semantic values produced from float32 embeddings. Switching local OpenBLAS
+from Haswell to Prescott reproduced it: max raw-score drift about 2.11e-8,
+compared with 2.61e-8 reported by Linux CI. The scoring formula, original frozen
+fixture, runtime code and model configuration are unchanged.
+
+Only raw semantic comparisons now allow one float32 epsilon of absolute error
+(`1.1920929e-7`, zero relative tolerance). Feature scores, normalized components
+and hybrid scores retain the strict `1e-14` comparison. Explicit semantic and
+hybrid ranking equality checks remain mandatory. The frozen-reference test also
+checks higher-precision accumulation of the same vectors, and CI runs it with
+the Prescott kernel to catch backend-sensitive regressions.
+
+Validation after the correction: 88 core/service tests and 21 subtests passed;
+all 20 E5 tests also passed with `OPENBLAS_CORETYPE=Prescott`. Workflow YAML and
+the staged diff whitespace check passed. The hosted Linux CI result still needs
+to be confirmed after this correction is pushed.
