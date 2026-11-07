@@ -20,14 +20,19 @@ def configuration(days=("2026-11-06",)):
                 budget_total=10000, transport_mode="walk")
 
 
-def ready():
+def ready(*, individual_method=None, ratings=None):
     h = signup("Opt" + uuid4().hex[:10])
     trip = c.post("/trips", headers=h, json=dict(name="Optimizer integration", start_date="2026-11-06",
                                                 end_date="2026-11-06")).json()
     tid = trip["id"]
-    c.put(f"/trips/{tid}/preferences/me", headers=h, json={"ratings": dict.fromkeys(FEATURES, 3)})
+    c.put(f"/trips/{tid}/preferences/me", headers=h, json={"ratings": ratings or dict.fromkeys(FEATURES, 3)})
     c.put(f"/trips/{tid}/availability", headers=h, json={"dates": ["2026-11-06"]})
-    rec = c.post(f"/trips/{tid}/recommendations", headers=h, json={"group_k": 3}).json()
+    options = {"group_k": 3}
+    if individual_method is not None:
+        options["individual_method"] = individual_method
+    response = c.post(f"/trips/{tid}/recommendations", headers=h, json=options)
+    assert response.status_code == 200, response.text
+    rec = response.json()
     return h, tid, rec
 
 
@@ -40,8 +45,21 @@ def audits(tid):
         return db.scalars(select(OptimizationRun).where(OptimizationRun.trip_id == tid).order_by(OptimizationRun.id)).all()
 
 
-def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(planning_adapter):
-    h, tid, rec = ready()
+@pytest.mark.parametrize("individual_method", [None, "e5_hybrid", "tfidf", "feature_mean"])
+def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(planning_adapter, monkeypatch, individual_method):
+    import numpy as np
+    from ourney_travelsync.recommenders import hybrid
+
+    def embeddings(places, config):
+        rng = np.random.default_rng(17)
+        vectors = rng.normal(size=(len(places.place_ids) + 10, 384)).astype("float32")
+        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        return vectors[:-10], vectors[-10:], {"dataset_content_hash": "synthetic optimizer integration"}
+
+    monkeypatch.setattr(hybrid, "embeddings", embeddings)
+    ratings = dict.fromkeys(FEATURES, 3)
+    ratings["nature"] = 5
+    h, tid, rec = ready(individual_method=individual_method, ratings=ratings)
     res = generate(h, tid)
     assert res.status_code == 200, res.text
     plan = res.json()["plans"][0]
@@ -49,6 +67,10 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
     assert plan["days"][0]["return_travel_minutes"] == 10
     assert plan["days"][0]["items"][0]["arrival"]
     assert plan["stats"]["total_cost"] > 0
+    if individual_method in (None, "e5_hybrid"):
+        assert rec["individual_method"] == "e5_hybrid"
+        assert all(m["effective_scoring_method"] == "e5_hybrid" for m in rec["scoring"]["members"].values())
+        assert plan["stats"]["group_fit"] is None
     assert "input_snapshot" not in res.text and "personal_scores" not in res.text
     audit = audits(tid)[0]
     assert audit.status == "PASSED" and audit.itinerary_id == plan["id"]
@@ -56,6 +78,13 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
     assert audit.optimizer_request["dataset_version"] == rec["dataset_version"]
     assert audit.optimizer_request == audit.response["input_snapshot"]
     assert audit.optimizer_request["budget_total"] == 10000
+    source = {p["poi_id"]: p for p in rec["group"]}
+    for candidate in audit.optimizer_request["candidates"]:
+        row = source[candidate["poi_id"]]
+        expected = {u: (v - 1) / 4 if individual_method == "feature_mean" else v
+                    for u, v in row["member_scores"].items()}
+        assert candidate["personal_scores"] == expected
+        assert candidate["relevance"] == row["member_relevance"]
     assert planning_adapter.calls[0]["group_size"] == 1
     assert c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"][0] == plan
 

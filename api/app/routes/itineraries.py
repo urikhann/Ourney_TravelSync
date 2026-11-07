@@ -155,7 +155,8 @@ async def generate(body: GenerateInput, trip: Trip = Depends(member_trip), user:
                              "availability": {"available": True}} for v in d.items]
             days.append(raw)
         plan = Itinerary(trip_id=trip_id, run_id=run_id, letter="A", variant="optimized", days=days,
-                         stats={"group_fit": checked.metrics["mean_personal_fit"],
+                         stats={"group_fit": (None if run.response.get("score_scale") == "relative_relevance_0_1"
+                                              else checked.metrics["mean_personal_fit"]),
                                 "total_cost": checked.metrics["total_cost"], "cost_unknown_count": 0,
                                 "budget_total": req.budget_total, "transport_mode": req.transport_mode,
                                 "travel_minutes": checked.metrics["travel_minutes"],

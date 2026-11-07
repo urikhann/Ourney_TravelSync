@@ -1,7 +1,10 @@
 """Shared data contract; candidate filtering happens before this layer."""
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .recommenders.hybrid import ScoreResult
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,6 +31,8 @@ class GroupInput:
     user_features: FloatArray
     poi_features: FloatArray
     individual_scores: FloatArray | None = None
+    scoring: 'ScoreResult | None' = None
+    score_scale: str | None = None  # Legacy manually constructed inputs may omit it.
 
     def validate(self, *, require_scores: bool = False) -> None:
         """Reject ambiguous alignment, missing scores, and nonfinite values."""

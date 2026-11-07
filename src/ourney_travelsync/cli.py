@@ -9,6 +9,9 @@ from pathlib import Path
 def parser():
     p = argparse.ArgumentParser(description='TravelSync recommendations and versioned POI data')
     commands = p.add_subparsers(dest='command', required=True)
+    c = commands.add_parser('e5-cache', help='Prewarm the pinned E5 POI cache before serving requests')
+    c.add_argument('--csv')
+    c.add_argument('--download', action='store_true', help='Explicitly allow downloading the pinned model')
     r = commands.add_parser('recommend', help='Recommend from the packaged v2 CSV or an external CSV')
     r.add_argument('--csv'); r.add_argument('--users', help='JSON object: user ID to ten named preferences')
     for name in ('recommend', 'db-recommend'):
@@ -19,7 +22,10 @@ def parser():
         target.add_argument('--tie-seed', type=int, default=0)
         target.add_argument('--gfar-depth', type=int, default=20)
         target.add_argument('--misery-threshold', type=float)
-        target.add_argument('--individual-method', choices=['binary', 'tfidf'], default='tfidf')
+        target.add_argument('--individual-method', choices=['binary', 'tfidf', 'feature_mean', 'e5_hybrid'], default='e5_hybrid')
+        target.add_argument('--alpha', type=float, default=None)
+        target.add_argument('--beta', type=float, default=None)
+        target.add_argument('--diagnostics', action='store_true', help='Include scorer configuration and fallback details')
         target.add_argument('--preference-texts', help='JSON object mapping user IDs to explicit preference text')
         if name == 'db-recommend':
             target.add_argument('group_id'); target.add_argument('constraint_id'); target.add_argument('--dataset-version')
@@ -46,26 +52,45 @@ def recommendation_config(a):
     from .common import validate_top_k
     from . import GFAR, AverageWithoutMisery
     validate_top_k(a.top_k); validate_top_k(a.candidate_top_n)
-    threshold = a.misery_threshold if a.misery_threshold is not None else (0.25 if a.individual_method == 'tfidf' else 2.5)
+    from .recommenders.hybrid import ScoringConfig, SCORING_VERSION
+    scoring = ScoringConfig.from_env(**{k: getattr(a, k) for k in ('alpha', 'beta') if getattr(a, k) is not None})
+    method = a.individual_method
+    if a.algorithm == 'awm':
+        if method == 'tfidf':
+            raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
+        method = 'feature_mean'
+    threshold = a.misery_threshold if a.misery_threshold is not None else 2.5
     GFAR(a.gfar_depth); AverageWithoutMisery(threshold)
-    if a.individual_method == 'tfidf' and not 0 <= threshold <= 1:
-        raise ValueError('TFIDF_THRESHOLD_MUST_BE_BETWEEN_0_AND_1')
+    if a.algorithm == 'awm' and not 1 <= threshold <= 5:
+        raise ValueError('AWM_THRESHOLD_MUST_BE_BETWEEN_1_AND_5')
     texts = json.loads(Path(a.preference_texts).read_text(encoding='utf-8')) if a.preference_texts else {}
     if not isinstance(texts, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in texts.items()):
         raise ValueError('PREFERENCE_TEXTS_MUST_MAP_USER_IDS_TO_STRINGS')
     return dict(algorithm=a.algorithm, top_k=a.top_k, candidate_top_n=a.candidate_top_n,
                 tie_seed=a.tie_seed, gfar_depth=a.gfar_depth, misery_threshold=threshold,
                 algorithm_version=version('ourney-travelsync'), numpy_version=version('numpy'),
-                tie_policy='sha256-identity-v1', individual_method=a.individual_method,
-                preference_texts=texts, scorer_version='method-c-char23-v1' if a.individual_method == 'tfidf' else 'active-feature-mean-v1',
-                sklearn_version=version('scikit-learn') if a.individual_method == 'tfidf' else None,
-                score_scale='0-1' if a.individual_method == 'tfidf' else '1-5')
+                tie_policy='sha256-identity-v1', individual_method=method, requested_scoring_method=a.individual_method,
+                alpha=scoring.alpha, beta=scoring.beta,
+                preference_texts=texts, scorer_version=SCORING_VERSION if method == 'e5_hybrid' else
+                'method-c-char23-v1' if method == 'tfidf' else 'active-feature-mean-v1',
+                sklearn_version=version('scikit-learn') if method == 'tfidf' else None,
+                score_scale='relative_relevance_0_1' if method == 'e5_hybrid' else '0-1' if method == 'tfidf' else '1-5')
 
 
 def dispatch(a):
+    if a.command == 'e5-cache':
+        from .places import load_places
+        from .recommenders.hybrid import ScoringConfig, embeddings
+        from .recommenders.hybrid import SemanticUnavailable
+        try:
+            _, _, metadata = embeddings(load_places(a.csv), ScoringConfig.from_env(local_files_only=not a.download, regenerate=True))
+        except SemanticUnavailable as exc:
+            raise ValueError(str(exc)) from None
+        return metadata
     if a.command == 'recommend':
         from . import load_places, FEATURE_NAMES, GFAR, AverageWithoutMisery
-        from .recommenders import recommend_group
+        from .recommenders import prepare_group
+        from .recommenders.hybrid import ScoringConfig
         config = recommendation_config(a)
         users = json.loads(Path(a.users).read_text(encoding='utf-8')) if a.users else {
             'alice': dict(zip(FEATURE_NAMES, [4,5,3,2,2,3,3,3,4,1])),
@@ -74,12 +99,18 @@ def dispatch(a):
             raise ValueError('USERS_JSON_MUST_MAP_IDS_TO_NAMED_PREFERENCES')
         places = load_places(a.csv)
         model = GFAR(a.gfar_depth) if a.algorithm == 'gfar' else AverageWithoutMisery(config['misery_threshold'])
-        results = recommend_group(places, users, top_k=a.top_k, individual_top_n=a.candidate_top_n,
-                                  tie_seed=a.tie_seed, recommender=model, individual_method=a.individual_method,
-                                  preference_texts=config['preference_texts'])
+        group = prepare_group(places, users, individual_top_n=a.candidate_top_n,
+                              tie_seed=a.tie_seed, individual_method=config['individual_method'],
+                              scoring_config=ScoringConfig.from_env(alpha=config['alpha'], beta=config['beta']),
+                              preference_texts=config['preference_texts'])
+        results = model.recommend(group, top_k=a.top_k)
         metadata = {r['place_id']: r for r in places.records}
-        return [dict(place_id=r.poi_id, place_name=metadata[r.poi_id]['place_name'],
+        rows = [dict(place_id=r.poi_id, place_name=metadata[r.poi_id]['place_name'],
                      **({'selection_gain': r.score} if a.algorithm == 'gfar' else {'mean_score': r.score})) for r in results]
+        if a.diagnostics:
+            return dict(group=rows, config=config, scoring=group.scoring.diagnostics if group.scoring else None,
+                        status='ok' if rows else 'exhausted', exhaustion_reason=None if rows else 'no_candidates')
+        return rows
     if a.command == 'reprocess':
         from .ingestion.processing import reprocess
         return reprocess(a.tour_json, a.kakao_json, a.output)

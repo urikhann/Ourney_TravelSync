@@ -7,7 +7,7 @@ authors = [
     { name = "Urikhan Purevjav", email = "140320983+urikhann@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = ["numpy>=2.1", "scikit-learn>=1.6,<2"]
+dependencies = ["numpy>=2.1", "scipy>=1.14,<2", "scikit-learn>=1.6,<2"]
 
 [project.scripts]
 ourney-travelsync = "ourney_travelsync.cli:main"
@@ -18,9 +18,10 @@ ingestion = ["requests", "pandas"]
 postgres = ["psycopg[binary]", "python-dotenv"]
 viewer = ["streamlit", "altair", "pandas", "psycopg[binary]", "python-dotenv"]
 experiments = ["mlflow", "dvc"]
+semantic = ["sentence-transformers==5.1.2", "transformers==4.57.1", "torch==2.14.1", "huggingface-hub==0.36.2"]
 
 [dependency-groups]
-dev = ["pytest", "ipykernel"]
+dev = ["pytest", "ipykernel", "psutil>=6"]
 
 [build-system]
 requires = ["uv_build>=0.12.21,<0.13.0"]

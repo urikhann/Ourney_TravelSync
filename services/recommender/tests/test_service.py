@@ -44,7 +44,7 @@ def test_method_c_uses_versioned_join_snapshot():
 
 @pytest.mark.parametrize("method", ["gfar", "average", "awm"])
 def test_contract_shape_and_scale(method):
-    r = client.post("/recommend", json=req(method))
+    r = client.post("/recommend", json=req(method, individual_method='binary'))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v3" and body["method"] == method
@@ -60,8 +60,8 @@ def test_contract_shape_and_scale(method):
 def test_same_order_as_the_package():
     users = {m["user_id"]: m["ratings"] for m in EXAMPLE["members"]}
     for method, model in [("gfar", None), ("awm", AverageWithoutMisery(2.5))]:
-        body = client.post("/recommend", json=req(method, tie_seed=0)).json()
-        direct = recommend_group(load_places(), users, top_k=30, tie_seed=0, recommender=model)
+        body = client.post("/recommend", json=req(method, tie_seed=0, individual_method='feature_mean')).json()
+        direct = recommend_group(load_places(), users, top_k=30, tie_seed=0, recommender=model, individual_method='feature_mean')
         assert [g["poi_id"] for g in body["group"]] == [x.poi_id for x in direct]
 
 

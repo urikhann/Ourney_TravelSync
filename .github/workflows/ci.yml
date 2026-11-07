@@ -8,7 +8,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.13"}
-      # API tests run the mock recommender in-process, including Method C from the team package.
+      # API tests run the production recommender and OR-Tools optimizer in-process.
       - run: pip install -e '.[optimizer]' -r api/requirements.txt
       - run: cd api && pytest -q
   web:

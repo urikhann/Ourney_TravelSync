@@ -1,0 +1,9 @@
+{
+  "samples": 5,
+  "members": 2,
+  "catalogue_size": 3570,
+  "warm_median_ms": 1187.8144999936922,
+  "warm_p95_ms": 1238.6206599971047,
+  "process_peak_working_set_mib": 445.6953125,
+  "scope": "API route, SQLite versioned JOIN, in-process HTTP recommender, actual E5 cache, GFAR, request/response persistence; auth dependency overridden, no network or cold encoding"
+}

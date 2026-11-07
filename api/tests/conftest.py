@@ -31,6 +31,14 @@ optimizer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(optimizer)
 services.TEST_TRANSPORTS[config.OPTIMIZER_URL] = httpx.ASGITransport(app=optimizer.app)
 
+# Exercise main's production recommender alongside the real optimizer.
+# Keep its transport distinct even when local configuration shares mock URLs.
+config.RECOMMENDER_URL = 'http://production-recommender-test'
+spec_rec = importlib.util.spec_from_file_location('production_recommender_test', ROOT.parent/'services/recommender/main.py')
+real_rec = importlib.util.module_from_spec(spec_rec)
+spec_rec.loader.exec_module(real_rec)
+services.TEST_TRANSPORTS[config.RECOMMENDER_URL] = httpx.ASGITransport(app=real_rec.app)
+
 
 def pytest_sessionfinish(session, exitstatus):
     from app.db import engine

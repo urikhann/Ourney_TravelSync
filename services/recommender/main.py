@@ -6,11 +6,11 @@
 This file only translates. All scoring and group aggregation is done by the `ourney_travelsync`
 package (src/ourney_travelsync, owned by the recommender teammate):
 
-    ratings (1-5) --score_individuals--> member x place scores (1-5)
+    ratings (1-5) --E5 hybrid / feature fallback--> member x place relevance
                   --prepare_group------> candidates = union of each member's top-L (seeded ties)
                   --GFAR / AWM---------> group list
 
-Scores stay on the package's 1-5 scale; the response says so in "score_scale".
+The response declares score semantics. GFAR gains and itinerary utility are separate.
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from ourney_travelsync.recommenders.average_without_misery import AverageWithout
 from ourney_travelsync.recommenders.gfar import GFAR
 from ourney_travelsync.recommenders.ties import ranking
 from ourney_travelsync.recommenders.tfidf import taste_query
+from ourney_travelsync.recommenders.hybrid import ScoringConfig
 
 FEATURE_SCHEMA_VERSION = "fs-1.0"
 # The dataset version name the backend uses for the packaged enriched CSV (api/app/config.py PLACES_VERSION).
@@ -102,7 +103,7 @@ def check(req: dict) -> None:
         raise HTTPException(409, f"dataset_version_mismatch: service has {DATASET_VERSION}")
     if not req.get("members"):
         raise HTTPException(422, "no_members")
-    if (req.get('options') or {}).get('individual_method', 'binary') not in ('binary', 'tfidf'):
+    if (req.get('options') or {}).get('individual_method', 'e5_hybrid') not in ('binary', 'tfidf', 'feature_mean', 'e5_hybrid'):
         raise HTTPException(422, 'unknown_individual_method')
     try:
         for member in req['members']:
@@ -113,23 +114,42 @@ def check(req: dict) -> None:
         r = m.get("ratings") or {}
         if set(r) != set(FEATURE_NAMES) or any(type(v) is not int or not 1 <= v <= 5 for v in r.values()):
             raise HTTPException(422, f"invalid_ratings: {m.get('user_id')}")
+    if len({m['user_id'] for m in req['members']}) != len(req['members']):
+        raise HTTPException(422, 'duplicate_members')
 
 
 @app.post("/recommend")
 def recommend(req: dict):
     check(req)
     members, opts = req["members"], req.get("options") or {}
+    for field in ('top_l', 'group_k'):
+        if field in opts and (type(opts[field]) is not int or opts[field] < 1):
+            raise HTTPException(422, 'invalid_candidate_limit')
+    if opts.get('tie_seed') is not None and type(opts['tie_seed']) is not int:
+        raise HTTPException(422, 'invalid_tie_seed')
     method = opts.get("method", "gfar")
     if method not in ("gfar", "average", "awm"):
         raise HTTPException(422, "unknown_method")
     top_l, group_k = int(opts.get("top_l") or 100), int(opts.get("group_k") or 30)
     seed = int(opts["tie_seed"]) if opts.get("tie_seed") is not None else trip_seed(str(req.get("trip_id", "")))
-    individual_method = opts.get('individual_method', 'binary')
-    scale = '0-1' if individual_method == 'tfidf' else '1-5'
-    if individual_method == 'tfidf' and opts.get('awm_threshold') is not None:
-        threshold = opts['awm_threshold']
-        if not isinstance(threshold, (int, float)) or not 0 <= threshold <= 1:
-            raise HTTPException(422, 'tfidf_threshold_must_be_between_0_and_1')
+    requested_method = opts.get('individual_method', 'e5_hybrid')
+    individual_method = requested_method
+    if method == 'awm':
+        if requested_method == 'tfidf':
+            raise HTTPException(422, 'awm_requires_feature_mean')
+        individual_method = 'feature_mean'  # Explicit documented comparison route.
+        threshold = opts.get('awm_threshold', None)
+        if threshold is not None and (isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+                                      or not np.isfinite(threshold) or not 1 <= threshold <= 5):
+            raise HTTPException(422, 'awm_threshold_must_be_between_1_and_5')
+    if method == 'average' and requested_method == 'e5_hybrid':
+        individual_method = 'feature_mean'  # Means of member percentiles are not rating proxies.
+    scale = ('relative_relevance_0_1' if individual_method == 'e5_hybrid'
+             else '0-1' if individual_method == 'tfidf' else '1-5')
+    try:
+        config = ScoringConfig.from_env(**{k: opts[k] for k in ('alpha', 'beta') if k in opts})
+    except (TypeError, ValueError):
+        raise HTTPException(422, 'invalid_scoring_configuration') from None
     if req.get('poi_snapshot') is not None:
         try:
             records = tuple(req['poi_snapshot'])
@@ -165,6 +185,7 @@ def recommend(req: dict):
     try:
         data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded,
                              individual_method=individual_method,
+                             scoring_config=config,
                              preference_texts={m['user_id']: taste_query(m.get('tastes')) for m in members})
     except ValueError as e:
         raise HTTPException(422, f"invalid_input: {e}")
@@ -175,7 +196,7 @@ def recommend(req: dict):
     if method == "gfar":
         picks = GFAR(individual_top_n=GFAR_DEPTH).recommend(data, top_k=group_k)
     elif method == "awm":
-        threshold = float(opts["awm_threshold"]) if opts.get("awm_threshold") is not None else (0.25 if scale == '0-1' else AWM_THRESHOLD)
+        threshold = float(opts["awm_threshold"]) if opts.get("awm_threshold") is not None else AWM_THRESHOLD
         picks = AverageWithoutMisery(threshold).recommend(data, top_k=group_k)
         for pid in data.poi_ids:  # show which candidates the veto removed, and for whom
             j = col[pid]
@@ -183,8 +204,13 @@ def recommend(req: dict):
                 u = int(S[:, j].argmin())
                 removed.append({"poi_id": pid, "stage": "AWM", "rule": "misery",
                                 "detail": f"{uids[u]} {S[u, j]:.2f} < {threshold}"})
-    else:  # plain average = AWM with no veto (all scores are >= 1)
-        picks = AverageWithoutMisery(0.0).recommend(data, top_k=group_k)
+    else:
+        # Legacy TF-IDF average is retained; it applies no satisfaction veto.
+        if individual_method == 'tfidf':
+            from ourney_travelsync.common import ranked_results
+            picks = ranked_results(data.poi_ids, S.mean(axis=0), group_k)
+        else:
+            picks = AverageWithoutMisery(0.0).recommend(data, top_k=group_k)
 
     # Who each GFAR pick mainly served (the member with the largest share of its gain at selection time).
     rel = borda(S, GFAR_DEPTH)
@@ -199,6 +225,12 @@ def recommend(req: dict):
             picked_for = uids[int(np.argmax(share))] if share.max() > 0 else None
             uncovered *= 1.0 - rel[:, j]
         feats = {f: int(float(rows[p.poi_id][f])) for f in FEATURE_NAMES}
+        scoring_reasons = []
+        if individual_method == 'e5_hybrid':
+            any_hybrid = any(s['effective_scoring_method']=='e5_hybrid' for s in data.scoring.diagnostics['members'])
+            scoring_reasons = [{'code':'hybrid_relevance' if any_hybrid else 'feature_fallback',
+                                'text': ('Structured preferences and semantic relevance guide the ranking; fallback is recorded per member.'
+                                         if any_hybrid else 'Feature preferences guide this ranking because semantic scoring was unavailable or neutral.')}]
         group.append({
             "poi_id": p.poi_id, "group_rank": rank,
             "mean_score": round(float(S[:, j].mean()), 4),
@@ -207,16 +239,18 @@ def recommend(req: dict):
             "member_scores": {u: round(float(S[i, j]), 4) for i, u in enumerate(uids)},
             "member_relevance": {u: float(rel[i, j]) for i, u in enumerate(uids)},
             "picked_for": picked_for,
-            "reasons": reasons(feats, members, picked_for),
+            "reasons": reasons(feats, members, picked_for) + scoring_reasons,
         })
 
     individual = {}
     for i, u in enumerate(uids):
         order = ranking(S[i], data.poi_ids, seed)[:top_l]
-        individual[u] = [{"poi_id": data.poi_ids[j], "score": round(float(S[i, j]), 4), "rank": r}
+        individual[u] = [{"poi_id": data.poi_ids[j], "score": round(float(S[i, j]), 4), "rank": r,
+                          **(data.scoring.components(i, j) if data.scoring else {}),
+                          **({'description_backed': data.scoring.description_backed[j]} if data.scoring else {})}
                          for r, j in enumerate(order, start=1)]
     chosen = [col[g["poi_id"]] for g in group]
-    sat = {u: (round(float(S[i, chosen].mean()), 4) if chosen else None) for i, u in enumerate(uids)}
+    sat = {u: (round(float(S[i, chosen].mean()), 4) if chosen and scale == '1-5' else None) for i, u in enumerate(uids)}
     cover = {u: round(float(rel[i, chosen].sum()), 4) if chosen else 0.0 for i, u in enumerate(uids)}
 
     return {
@@ -224,7 +258,14 @@ def recommend(req: dict):
         "dataset_version": req['dataset_version'], "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "method": method, 'individual_method': individual_method, "score_scale": scale, "tie_seed": seed,
         "relevance_version": f"gfar-borda-depth-{GFAR_DEPTH}",
-        'scorer_version': 'method-c-char23-v1' if individual_method == 'tfidf' else 'active-feature-mean-v1',
+        'scorer_version': data.scoring.diagnostics['scoring_version'] if data.scoring else 'method-c-char23-v1',
+        'requested_scoring_method': requested_method,
+        'scoring': ({**data.scoring.diagnostics,
+                     'members': dict(zip(uids, data.scoring.diagnostics['members']))} if data.scoring else None),
+        'score_semantics': 'relative ranking relevance, not satisfaction' if scale != '1-5' else 'feature-preference fit proxy',
+        'status': 'ok' if k else 'exhausted',
+        'exhaustion_reason': None if k else ('hard_constraints' if len(excluded) == len(P.place_ids)
+                                            else 'awm_threshold' if method == 'awm' else 'no_candidates'),
         "group": group, "removed": removed, "individual": individual,
         "metrics": {
             "eligible": len(P.place_ids) - len(excluded), "candidate_pool": len(data.poi_ids), "returned": k,

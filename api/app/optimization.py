@@ -106,7 +106,7 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         if any(d.date.isoformat() not in m["dates"] for d in body.days):
             raise HTTPException(409, "optimizer_member_unavailable")
     scale = run.response.get("score_scale")
-    if scale not in ("0-1", "1-5") or not run.response.get("relevance_version"):
+    if scale not in ("0-1", "1-5", "relative_relevance_0_1") or not run.response.get("relevance_version"):
         raise HTTPException(409, "optimizer_recommendation_data_missing")
     group = run.response.get("group", [])
     if not group or len(group) > 60 or len({r["poi_id"] for r in group}) != len(group):

@@ -104,9 +104,12 @@ that meaning. Granular member-hour entry is still outside this app's model.
 Do not treat an absent availability row as consent for the whole trip.
 
 The API pins the latest GFAR recommendation, dataset/mapping/schema, captured
-member preference versions, exclusions and confirmed dates. Scores are converted
-from the declared 1–5 scale to 0–1 without clamping invalid data. Mean is computed
-from the captured member scores to avoid the recommender's display rounding.
+member preference versions, exclusions and confirmed dates. Scores on the declared
+1–5 scale are converted to 0–1 without clamping invalid data. E5's
+`relative_relevance_0_1` and legacy `0-1` scores retain their captured values.
+Mean is computed from the captured member scores to avoid the recommender's
+display rounding. E5 remains the default individual scorer, including its explicit
+feature fallback; its ranking relevance is not displayed as group-fit percentages.
 Each candidate carries the actual GFAR Borda relevance exported by its producing
 recommender; missing relevance requires recommendation regeneration, not a
 fabricated zero vector. This adds metadata without changing GFAR selection.

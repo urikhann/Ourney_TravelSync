@@ -151,8 +151,9 @@ def save_individual_scores(conn,run_id,rows):
     with conn.transaction():
         ds=_dataset(conn,run_id)
         with conn.cursor() as cur:
-            cur.executemany('INSERT INTO individual_scores(run_id,user_id,poi_id,dataset_version,score,rank,eligible) VALUES(%s,%s,%s,%s,%s,%s,%s)',
-                            [(run_id,r['user_id'],r['poi_id'],ds,r['score'],r.get('rank'),r['eligible']) for r in rows])
+            cur.executemany('INSERT INTO individual_scores(run_id,user_id,poi_id,dataset_version,score,rank,eligible,scoring_details) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',
+                            [(run_id,r['user_id'],r['poi_id'],ds,r['score'],r.get('rank'),r['eligible'],
+                              Jsonb(r.get('scoring_details', {}))) for r in rows])
 
 
 def save_group_scores(conn,run_id,rows):
