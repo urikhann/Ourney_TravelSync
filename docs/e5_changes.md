@@ -110,10 +110,24 @@ Only raw semantic comparisons now allow one float32 epsilon of absolute error
 (`1.1920929e-7`, zero relative tolerance). Feature scores, normalized components
 and hybrid scores retain the strict `1e-14` comparison. Explicit semantic and
 hybrid ranking equality checks remain mandatory. The frozen-reference test also
-checks higher-precision accumulation of the same vectors, and CI runs it with
-the Prescott kernel to catch backend-sensitive regressions.
+checks higher-precision accumulation of the same vectors. Both precision
+variants run as part of the normal offline CI suite.
 
 Validation after the correction: 88 core/service tests and 21 subtests passed;
-all 20 E5 tests also passed with `OPENBLAS_CORETYPE=Prescott`. Workflow YAML and
-the staged diff whitespace check passed. The hosted Linux CI result still needs
-to be confirmed after this correction is pushed.
+all 20 E5 tests also passed locally on Windows with `OPENBLAS_CORETYPE=Prescott`.
+That Windows result did not establish compatibility with Linux OpenBLAS builds.
+
+## CI native-crash correction
+
+The added forced-Prescott workflow step subsequently exited with Linux signal
+139 (segmentation fault) in the native matrix multiplication used by `semantic`.
+This is separate from the original float32 assertion failure. The workflow now
+leaves CPU-kernel selection to NumPy/OpenBLAS instead of forcing an old kernel
+through `OPENBLAS_CORETYPE`. Production code, expected fixture values and the
+float32 tolerance correction are unchanged. The normal offline suite still
+executes both float32 and float64 frozen-reference cases, including strict
+normalized/hybrid scores and semantic/hybrid ranking equality.
+
+Validation with native CPU dispatch: 88 core/service tests and 21 subtests passed;
+workflow YAML and diff whitespace checks passed. Hosted Linux CI must still rerun
+after this correction is pushed.

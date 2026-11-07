@@ -10,10 +10,6 @@ jobs:
           python-version: '3.13'
       - run: uv sync --locked
       - run: uv run --locked pytest -q
-      - name: Check frozen reference with a different BLAS reduction kernel
-        env:
-          OPENBLAS_CORETYPE: Prescott
-        run: uv run --locked pytest -q tests/test_e5_hybrid.py::test_frozen_reference
       - run: uv sync --locked --extra ingestion --extra postgres --extra viewer
       - run: uv run --locked --extra ingestion --extra postgres --extra viewer pytest -q
       - run: uv pip install -r api/requirements.txt -r services/recommender/requirements.txt
