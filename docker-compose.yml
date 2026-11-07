@@ -25,10 +25,10 @@ services:
     environment:
       <<: *places
       DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v3}
-        TRAVELSYNC_E5_CACHE: /e5-cache
-        TRAVELSYNC_E5_MODEL_CACHE: /e5-models
+      TRAVELSYNC_E5_CACHE: /e5-cache
+      TRAVELSYNC_E5_MODEL_CACHE: /e5-models
     ports: ["8002:8002"]
-      volumes: ["./src/ourney_travelsync/data:/data:ro", "./output/e5-cache:/e5-cache", "./output/e5-models:/e5-models"]
+    volumes: ["./src/ourney_travelsync/data:/data:ro", "./output/e5-cache:/e5-cache", "./output/e5-models:/e5-models"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 5s

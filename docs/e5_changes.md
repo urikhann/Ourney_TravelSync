@@ -131,3 +131,14 @@ normalized/hybrid scores and semantic/hybrid ranking equality.
 Validation with native CPU dispatch: 88 core/service tests and 21 subtests passed;
 workflow YAML and diff whitespace checks passed. Hosted Linux CI must still rerun
 after this correction is pushed.
+
+## Docker Compose syntax correction
+
+The E5 cache environment entries and recommender volume mounts were indented
+too deeply, causing Compose's YAML scanner to fail at line 28 before any build
+started. The environment variables now align with `DATASET_VERSION`, and
+`volumes` aligns with the service's `ports` and `healthcheck` keys. YAML parsing
+and the expected service/environment/mount structure were verified locally.
+Docker/Compose is unavailable in this execution environment, so an actual image
+build was not verified. Validate with `docker compose config --quiet`, then run
+`docker compose up --build` on the Docker host.
