@@ -2,8 +2,8 @@
 
 Flow (TS SDD 1.1, chapters 5, 8, 9): pin the ACTIVE dataset version and each member's latest preference version,
 send them to the recommender (contracts/recommend.request.json), store the run, return the result with place details.
-The recommender computes P(u,i) = sum_k w(u,k)·x(i,k) (0–1), removes excluded places (E1), and picks the
-group list with GFAR. "average" and "awm" are comparison methods only (SRS: Should).
+The recommender computes per-member E5 hybrid relevance, removes explicit E1
+exclusions, and picks with GFAR. Feature-only comparison and fallback stay available.
 """
 from datetime import timedelta
 from typing import Literal
@@ -33,7 +33,9 @@ class RunIn(BaseModel):
     method: Literal["gfar", "average", "awm"] = "gfar"
     awm_threshold: float | None = Field(default=None, ge=0, le=5)  # on the recommender's score scale, only for "awm"
     group_k: int | None = Field(default=None, ge=1, le=100)
-    individual_method: Literal['binary', 'tfidf'] = 'tfidf'
+    individual_method: Literal['binary', 'tfidf', 'feature_mean', 'e5_hybrid'] = 'e5_hybrid'
+    alpha: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    beta: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 def tag_index(db: Session, version: str) -> dict[str, list[str]]:
@@ -84,6 +86,8 @@ def build_request(trip: Trip, db: Session, body: RunIn) -> tuple[dict, list[dict
         "members": members,
         "options": {"method": body.method, "top_l": config.REC_TOP_L, "group_k": body.group_k or config.REC_GROUP_K,
                     'individual_method': body.individual_method,
+                    **({"alpha": body.alpha} if body.alpha is not None else {}),
+                    **({"beta": body.beta} if body.beta is not None else {}),
                     "awm_threshold": body.awm_threshold if body.method == "awm" else None},
     }
     snapshot = [{"user_id": m["user_id"], "preference_version": m["preference_version"]} for m in members]
@@ -112,6 +116,8 @@ def enrich(run: RecommendationRun, trip: Trip, db: Session) -> dict:
         "group": [named(r) for r in group],
         "removed": [{**r, "place": places.get(r["poi_id"])} for r in removed],
         "metrics": res.get("metrics", {}),
+        **{key: res.get(key) for key in ('individual_method', 'requested_scoring_method', 'scorer_version',
+                                       'scoring', 'score_semantics', 'status', 'exhaustion_reason')},
     }
 
 
@@ -119,11 +125,14 @@ def enrich(run: RecommendationRun, trip: Trip, db: Session) -> dict:
 async def run_recommender(body: RunIn | None = None, trip: Trip = Depends(member_trip),
                           user: User = Depends(current_user), db: Session = Depends(get_db)):
     body = body or RunIn()
-    if body.individual_method == 'tfidf' and body.awm_threshold is not None and body.awm_threshold > 1:
-        raise HTTPException(422, 'tfidf_threshold_must_be_between_0_and_1')
+    if body.method == 'awm' and body.individual_method == 'tfidf':
+        raise HTTPException(422, 'awm_requires_feature_mean')
+    if body.method == 'awm' and body.awm_threshold is not None and body.awm_threshold < 1:
+        raise HTTPException(422, 'awm_threshold_must_be_between_1_and_5')
     req, snapshot, version = build_request(trip, db, body)
     # Transmit the JOIN result pinned by this request; never substitute the service's newest CSV.
     req['poi_snapshot'] = [{'place_id': p.id, 'dataset_version': p.dataset_version,
+                            'place_name': p.name, 'category_name': p.category,
                             'latitude': p.lat, 'longitude': p.lng,
                             'enriched_metadata': p.enriched_metadata, **p.features}
                           for p in db.scalars(select(Poi).where(Poi.dataset_version == version))]

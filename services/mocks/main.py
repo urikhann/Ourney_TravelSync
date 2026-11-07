@@ -187,7 +187,8 @@ def plans(req: dict):
         fit = {r["poi_id"]: r.get("fit", r["mean_score"]) for r in ranked}  # 0–1 fit (backend converts 1–5)
         costs = [pois[i["poi_id"]]["avg_cost_krw"] for i in all_items]
         out.append({"variant": variant, "days": days, "stats": {
-            "group_fit": round(sum(fit.get(i["poi_id"], 0) for i in all_items) / (len(all_items) or 1), 4),
+            "group_fit": (None if any(fit.get(i['poi_id']) is None for i in all_items) else
+                          round(sum(fit.get(i["poi_id"], 0) for i in all_items) / (len(all_items) or 1), 4)),
             "cost_per_person": sum(c for c in costs if c is not None),
             "cost_unknown_count": sum(1 for c in costs if c is None),  # unknown is never counted as free
             "walking_km_per_day": None}})

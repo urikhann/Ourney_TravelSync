@@ -22,3 +22,17 @@ def test_cli_actionable_errors(tmp_path):
     assert run('recommend', '--top-k', '-1').returncode == 1
     bad = tmp_path/'bad.json'; bad.write_text('[]')
     assert 'USERS_JSON' in run('recommend', '--users', str(bad)).stderr
+
+
+def test_hybrid_default_and_visible_offline_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv('TRAVELSYNC_E5_CACHE',str(tmp_path/'cache'))
+    monkeypatch.setenv('TRAVELSYNC_E5_REGENERATE','0')
+    process=run('recommend','--top-k','2','--diagnostics')
+    assert process.returncode==0,process.stderr
+    result=json.loads(process.stdout)
+    assert result['config']['individual_method']=='e5_hybrid'
+    assert len(result['group'])==2 and result['scoring']['model_revision']=='614241f622f53c4eeff9890bdc4f31cfecc418b3'
+    assert all(m['fallback_reason']=='semantic_cache_unavailable' for m in result['scoring']['members'])
+    awm=run('recommend','--algorithm','awm','--diagnostics')
+    assert json.loads(awm.stdout)['config']['individual_method']=='feature_mean'
+    assert run('recommend','--alpha','2').returncode==1

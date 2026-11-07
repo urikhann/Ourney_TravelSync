@@ -1,7 +1,8 @@
 import { Avatar } from "./Avatar";
 
 /** Circular group fit: 0–1 "fit" from the backend (1–5 scores are converted there), shown as a percentage. */
-export function ScoreRing({ score, bad }: { score: number; bad?: boolean }) {
+export function ScoreRing({ score, bad }: { score: number | null; bad?: boolean }) {
+  if (score == null) return <div className="tiny muted">Rank relevance</div>;
   const pct = Math.max(0, Math.min(100, score * 100));
   const col = bad ? "#E11D48" : "#0F9F6E";
   return (
@@ -14,13 +15,14 @@ export function ScoreRing({ score, bad }: { score: number; bad?: boolean }) {
 }
 
 /** Each member's 0–1 fit as a small bar. Optional threshold (same 0–1 scale) turns bars red. */
-export function MemberScores({ scores, names, threshold }: { scores: Record<string, number>; names: Record<string, string>; threshold?: number | null }) {
+export function MemberScores({ scores, names, threshold }: { scores: Record<string, number | null>; names: Record<string, string>; threshold?: number | null }) {
+  if (Object.values(scores).some(s => s == null)) return <div className="tiny muted">Individual rankings use relevance; satisfaction is not predicted.</div>;
   const ids = Object.keys(scores);
-  const max = Math.max(0.5, ...ids.map((u) => scores[u]));  // scale bars so small differences are visible
+  const max = Math.max(0.5, ...ids.map((u) => scores[u] ?? 0));  // scale bars so small differences are visible
   return (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(4, ids.length)}, 1fr)`, gap: 8 }}>
       {ids.map((u, i) => {
-        const s = scores[u], bad = threshold != null && s < threshold;
+        const s = scores[u] ?? 0, bad = threshold != null && s < threshold;
         return (
           <div key={u} className="row" style={{ gap: 6 }} title={names[u]}>
             <Avatar name={names[u] ?? "?"} i={i} size={22} />

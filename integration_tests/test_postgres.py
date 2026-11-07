@@ -50,6 +50,16 @@ def test_snapshot_import_run_and_immutability():
             assert len(results) == 3
             stored = conn.execute('SELECT * FROM group_scores WHERE run_id=%s',(rid,)).fetchall()
             assert all(r['mean_score']==3 and r['group_utility'] is None and r['feasible_dates'] is None for r in stored)
+            hybrid_config = config | {'individual_method':'e5_hybrid', 'alpha':.5, 'beta':1.}
+            # The captured run uses the latest all-5 profile; missing local
+            # embeddings must persist a labeled feature-percentile fallback.
+            hybrid_id, hybrid_results = recommend_database(conn,gid,cid,hybrid_config)
+            assert len(hybrid_results)==3
+            hybrid_rows=conn.execute('SELECT * FROM individual_scores WHERE run_id=%s',(hybrid_id,)).fetchall()
+            assert all(0 <= r['score'] <= 1 and r['scoring_details']['score_scale']=='relative_relevance_0_1' for r in hybrid_rows)
+            assert all(r['scoring_details']['effective_scoring_method']=='feature_mean' for r in hybrid_rows)
+            # Adding hybrid runs must not reinterpret historical feature scores.
+            assert all(r['mean_score']==3 for r in conn.execute('SELECT * FROM group_scores WHERE run_id=%s',(rid,)))
             with pytest.raises(psycopg.Error), conn.transaction():
                 conn.execute('UPDATE poi SET food=1 WHERE dataset_version=%s',(report['dataset_version'],))
             with pytest.raises(ValueError):

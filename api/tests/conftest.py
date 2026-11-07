@@ -23,3 +23,11 @@ mocks = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mocks)
 for url in {config.RECOMMENDER_URL, config.OPTIMIZER_URL, config.AVAILABILITY_URL, config.AGENT_URL}:
     services.TEST_TRANSPORTS[url] = httpx.ASGITransport(app=mocks.app)
+
+# The application now exercises its production recommender. Other service
+# transports remain unchanged. Use a distinct URL if local config shares mocks.
+config.RECOMMENDER_URL = 'http://production-recommender-test'
+spec_rec = importlib.util.spec_from_file_location('production_recommender_test', ROOT.parent/'services/recommender/main.py')
+real_rec = importlib.util.module_from_spec(spec_rec)
+spec_rec.loader.exec_module(real_rec)
+services.TEST_TRANSPORTS[config.RECOMMENDER_URL] = httpx.ASGITransport(app=real_rec.app)

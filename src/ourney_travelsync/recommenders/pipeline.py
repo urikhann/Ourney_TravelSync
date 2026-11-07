@@ -8,8 +8,8 @@ from ..common import GroupInput, GroupRecommender, Recommendation, validate_top_
 from ..features import feature_vector
 from ..places import PlaceDataset
 from .gfar import GFAR
-from .individual_scoring import score_individuals
 from .ties import ranking, tie_keys
+from .hybrid import ScoringConfig, ScoreResult, score_catalogue
 
 
 def generate_candidates(data: GroupInput, *, individual_top_n: int = 100, tie_seed: int = 0) -> GroupInput:
@@ -35,6 +35,8 @@ def generate_candidates(data: GroupInput, *, individual_top_n: int = 100, tie_se
         data.user_features,
         data.poi_features[indices],
         data.individual_scores[:, indices],
+        data.scoring.subset(indices) if data.scoring is not None else None,
+        data.score_scale,
     )
 
 
@@ -46,10 +48,12 @@ def prepare_group(
     tie_seed: int = 0,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
-    individual_method: str = 'binary',
+    individual_method: str = 'e5_hybrid',
     preference_texts: Mapping[str, str] | None = None,
+    scoring_config: ScoringConfig | None = None,
+    _catalogue_scoring: ScoreResult | None = None,
 ) -> GroupInput:
-    """Apply explicit eligibility/exclusions before scoring and candidate selection.
+    """Score the full catalogue, then apply explicit eligibility before candidates.
 
     External constraint logic may supply eligible IDs for known movement or
     other restrictions. Budget/date remain separate from the feature vector;
@@ -67,8 +71,15 @@ def prepare_group(
         for poi_id in places.place_ids
     ], dtype=bool)
     pois = places.features[mask]
-    if individual_method == 'binary':
-        scores = score_individuals(users, pois)
+    scoring = None
+    if individual_method in ('binary', 'feature_mean', 'e5_hybrid'):
+        # Percentiles MUST use the complete pinned catalogue before E1/E2 masks.
+        scoring = (_catalogue_scoring if _catalogue_scoring is not None else
+                   score_catalogue(places, users, method=individual_method, config=scoring_config))
+        if scoring.scores.shape != (len(users), len(places.place_ids)):
+            raise ValueError('INVALID_SCORE_ALIGNMENT')
+        scoring = scoring.subset(np.flatnonzero(mask))
+        scores = scoring.scores
     elif individual_method == 'tfidf':
         from .tfidf import score_texts
         scores = score_texts([r for r, keep in zip(places.records, mask) if keep],
@@ -79,7 +90,8 @@ def prepare_group(
     data = GroupInput(
         tuple(user_preferences),
         tuple(poi_id for poi_id, keep in zip(places.place_ids, mask) if keep),
-        users, pois, scores,
+        users, pois, scores, scoring,
+        scoring.diagnostics['score_scale'] if scoring is not None else '0-1',
     )
     return generate_candidates(data, individual_top_n=individual_top_n, tie_seed=tie_seed)
 
@@ -94,16 +106,21 @@ def recommend_group(
     recommender: GroupRecommender | None = None,
     excluded_place_ids: Collection[str] = (),
     eligible_place_ids: Collection[str] | None = None,
-    individual_method: str = 'binary',
+    individual_method: str = 'e5_hybrid',
     preference_texts: Mapping[str, str] | None = None,
+    scoring_config: ScoringConfig | None = None,
 ) -> list[Recommendation]:
     """Use GFAR by default; an AWM baseline may be passed as recommender."""
 
     validate_top_k(top_k)
+    from .average_without_misery import AverageWithoutMisery
+    if isinstance(recommender, AverageWithoutMisery) and individual_method not in ('binary', 'feature_mean'):
+        raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
     data = prepare_group(
         places, user_preferences, individual_top_n=individual_top_n, tie_seed=tie_seed,
         excluded_place_ids=excluded_place_ids, eligible_place_ids=eligible_place_ids,
         individual_method=individual_method, preference_texts=preference_texts,
+        scoring_config=scoring_config,
     )
 
     model = GFAR() if recommender is None else recommender

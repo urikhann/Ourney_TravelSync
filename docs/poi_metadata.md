@@ -80,9 +80,9 @@ fits only eligible POIs, after exclusions. Empty/missing metadata, empty/OOV que
 and null sentinels contribute no text. `representative_activity` is retained and
 displayed but is not silently substituted for the absent `activity_type` field.
 
-New CLI and API requests use Method C. The Python pipeline and legacy service
-requests retain the binary default for compatibility; existing DB configs lacking
-`individual_method` replay with binary scoring. For explicit historical behavior
+New CLI, API, service and Python requests default to E5 hybrid; Method C remains
+an explicit legacy option. Existing DB configs lacking `individual_method`
+replay with binary scoring. See [E5 integration](e5_hybrid.md). For explicit historical behavior
 use `--individual-method binary` or the equivalent request option. New CLI run
 configs store the method and score scale. The web/API uses upstream's per-user
 multiple-choice survey (`UserTaste`, `/me/tastes`) and keeps its keywords in the
@@ -95,8 +95,8 @@ schema does not add a free-text field to the web API's preferences table.
 No query is invented from the ten ratings. Skipped/missing tastes produce zero
 similarity; GFAR may still return deterministic tied candidates. This is not
 evidence of relevance. GFAR, candidate-union mechanics, constraints and itinerary
-algorithms are unchanged. AWM's default threshold is 0.25 for Method C and 2.5 for
-the binary 1–5 scorer; callers should set a threshold appropriate to their method.
+algorithms are unchanged. AWM now requires feature-mean 1–5 values (default
+threshold 2.5); Method C AWM requests are rejected to prevent cosine-scale vetoes.
 `avoid_keywords` remain in the captured request; they are not positive query terms
 and no new soft-dislike penalty is introduced. Upstream's existing exclusion tags
 still enforce the survey's hard rules. The API uses upstream's `PlaceAbout` and

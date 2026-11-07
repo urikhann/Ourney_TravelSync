@@ -8,3 +8,7 @@ def test_one_to_five_becomes_zero_to_one():
 
 def test_old_scale_and_missing_values_are_unchanged():
     assert to_fit(0.42, "0-1") == 0.42 and to_fit(0.42, None) == 0.42 and to_fit(None, "1-5") is None
+
+
+def test_hybrid_relevance_is_not_a_satisfaction_percentage():
+    assert to_fit(.82, 'relative_relevance_0_1') is None

@@ -18,3 +18,8 @@ supports Method C [0,1] alongside historical binary [1,5] run scores. It preserv
 stored scores and checks new score inserts against the run's method. See
 [metadata import and validation](../../docs/poi_metadata.md). The API owns a
 separate SQLAlchemy schema; these migrations are for the recommendation package.
+
+005_e5_score_semantics.sql adds individual scoring-details JSONB and validates
+feature_mean/binary [1,5] versus E5 hybrid/TF-IDF [0,1]. It preserves historical
+records and config snapshots. The API already stores full request/response JSON
+and needs no new table migration. See [E5 operations](../../docs/e5_hybrid.md).
