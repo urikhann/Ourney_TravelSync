@@ -68,9 +68,13 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
     assert plan["days"][0]["items"][0]["arrival"]
     assert plan["stats"]["total_cost"] > 0
     if individual_method in (None, "e5_hybrid"):
+        assert rec["score_scale"] == "relative_relevance_0_1"
         assert rec["individual_method"] == "e5_hybrid"
         assert all(m["effective_scoring_method"] == "e5_hybrid" for m in rec["scoring"]["members"].values())
         assert plan["stats"]["group_fit"] is None
+        assert all(item["mean_score"] is None for day in plan["days"] for item in day["items"])
+        assert all(row["fit"] is None for row in rec["group"])
+        assert all(value is None for value in rec["metrics"]["member_satisfaction"].values())
     assert "input_snapshot" not in res.text and "personal_scores" not in res.text
     audit = audits(tid)[0]
     assert audit.status == "PASSED" and audit.itinerary_id == plan["id"]
@@ -98,20 +102,39 @@ def test_no_adapter_fails_without_greedy_fallback(monkeypatch):
     assert c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"] == []
 
 
-def test_unknown_cost_keeps_previous_plan_and_votes(planning_adapter):
+@pytest.mark.parametrize("missing,reason", [
+    ("cost_per_person", "COST_UNKNOWN"),
+    ("duration_min", "DURATION_UNKNOWN"),
+    ("openings", "OPERATING_INFO_UNKNOWN"),
+    ("closed", "OPERATING_INFO_UNKNOWN"),
+    ("route_duration", "ROUTE_UNAVAILABLE"),
+    ("route_fare", "ROUTE_UNAVAILABLE"),
+])
+def test_missing_planning_evidence_keeps_previous_plan_and_votes(planning_adapter, missing, reason):
     h, tid, _ = ready()
     old = generate(h, tid).json()["plans"][0]
     c.post(f"/itineraries/{old['id']}/vote", headers=h)
     def unknown(req, response):
         for p in response["pois"]:
-            p["cost_per_person"] = {}
+            if missing in ("cost_per_person", "duration_min"):
+                p[missing] = {}
+            elif missing in ("openings", "closed"):
+                for op in p["operations"].values():
+                    op[missing] = {}
+        if missing.startswith("route_"):
+            field = "duration_minutes" if missing == "route_duration" else "group_fare"
+            for edge in response["edges"]:
+                edge[field] = None
         return response
     planning_adapter.transform = unknown
     failed = generate(h, tid)
     assert failed.status_code == 409 and failed.json()["detail"] == "optimizer_insufficient_candidates"
     view = c.get(f"/trips/{tid}/itineraries", headers=h).json()
     assert view["plans"][0]["id"] == old["id"] and view["voted"] == 1
-    assert audits(tid)[-1].response["eligibility"][0]["schedule_eligible"] is False
+    audit = audits(tid)[-1]
+    assert audit.status == "FAILED" and audit.itinerary_id is None
+    assert all(not row["schedule_eligible"] for row in audit.response["eligibility"])
+    assert all(any(reason in value for value in row["reasons"]) for row in audit.response["eligibility"])
 
 
 @pytest.mark.parametrize("field", ["context_id", "dataset_version", "transport_mode"])
@@ -127,6 +150,8 @@ def test_wrong_adapter_snapshot_is_rejected(planning_adapter, field):
 
 def test_service_claiming_passed_cannot_bypass_backend_e3(monkeypatch, planning_adapter):
     h, tid, _ = ready()
+    old = generate(h, tid).json()["plans"][0]
+    assert c.post(f"/itineraries/{old['id']}/vote", headers=h).status_code == 200
     original = services.build_plans
     async def forged(payload):
         result = await original(payload)
@@ -135,7 +160,9 @@ def test_service_claiming_passed_cannot_bypass_backend_e3(monkeypatch, planning_
     monkeypatch.setattr(services, "build_plans", forged)
     res = generate(h, tid)
     assert res.status_code == 502 and res.json()["detail"] == "optimizer_final_validation_failed"
-    assert not c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"]
+    view = c.get(f"/trips/{tid}/itineraries", headers=h).json()
+    assert view["plans"][0]["id"] == old["id"] and view["voted"] == 1
+    assert audits(tid)[-1].status == "FAILED"
 
 
 def test_changed_preferences_during_search_cannot_publish(monkeypatch, planning_adapter):

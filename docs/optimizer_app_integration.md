@@ -183,3 +183,35 @@ recommender relevance metadata (selection behavior preserved); Compose/API image
 and CI dependencies; web planning form, itinerary display/types/errors; configuration
 templates and integration documentation. Source datasets, existing databases,
 canonical CLI schemas and unrelated experiments were not changed or committed.
+
+## Hybrid integration review — 2026-11-08
+
+Reviewed merge `b6380ff` on `feature/ortools-optimizer`. The merge already
+contains the hybrid-to-optimizer wiring; this review adds regression coverage
+without changing production behavior.
+
+- `api/app/optimization.py::prepare` accepts `relative_relevance_0_1` unchanged.
+  Only declared `1-5` scores receive `(value - 1) / 4`. GFAR Borda relevance and
+  rank-derived group utility remain separate inputs to optimization.
+- The API integration test exercises actual E5 hybrid scoring with deterministic
+  synthetic embeddings, the real recommender, CP-SAT and backend E3. It checks
+  exact member-score transfer and ensures hybrid recommendation/itinerary fit
+  and satisfaction fields are null rather than percentages or 1–5 predictions.
+- Missing cost, duration, openings, closure status, route duration or route fare
+  makes candidates ineligible with explicit reasons. Each API regression checks
+  that a failed attempt preserves the previous published itinerary and vote.
+- A solver response claiming PASSED with a modified arrival time is rejected by
+  local E3; its failed audit does not replace the previous itinerary or vote.
+
+Fresh verification: root **187 passed plus 21 subtests**, API **73 passed**
+(including the opt-in four-process HTTP test), recommender service **18 passed**;
+TypeScript and Vite production build passed. Python suites reported deprecation
+warnings only. Initial runs hit Windows' shared temporary-directory cleanup
+permission error; reruns with separate workspace `--basetemp` paths exited cleanly.
+
+The HTTP flow uses a synthetic planning adapter and exercises the configured
+default scorer/fallback. The controlled in-process test explicitly verifies the
+effective E5 hybrid path without downloading or depending on a model checkpoint.
+These checks establish integration behavior, not real-provider verification,
+recommendation quality or satisfaction. Real operating/routing sources, Docker
+deployment and PostgreSQL integration were not exercised in this review.

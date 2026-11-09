@@ -294,3 +294,5 @@ def score_catalogue(places, users, *, method='e5_hybrid', config=None):
                        score_scale='relative_relevance_0_1' if method == 'e5_hybrid' else '1-5')
     return ScoreResult(output, feature, sr, fn, sn, hybrid, diagnostics,
                        tuple(document(row)[1] for row in places.records))
+
+
