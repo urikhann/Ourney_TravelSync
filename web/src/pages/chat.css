@@ -1,0 +1,77 @@
+/* Trip chat screen (pages/Chat.tsx). Uses the colour tokens from theme.css. */
+.content.chat { padding-bottom: 8px; }
+.chat-list { display: flex; flex-direction: column; gap: 4px; }
+
+.chat-intro { text-align: center; padding: 18px 22px 14px; margin-bottom: 6px; }
+.chat-intro .b { font: 800 16px var(--display); margin: 10px 0 4px; }
+.chat-intro p { margin: 0; line-height: 1.5; }
+
+/* one message row: avatar column + bubble column */
+.msg { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.msg.grouped { margin-top: 2px; }
+.msg.mine { justify-content: flex-end; }
+.msg-av { width: 28px; flex: 0 0 28px; display: flex; align-self: flex-start; padding-top: 18px; }
+.msg.grouped .msg-av { padding-top: 0; }
+.msg-col { display: flex; flex-direction: column; max-width: 78%; }
+.msg.mine .msg-col { align-items: flex-end; }
+.msg-name { font-size: 11.5px; font-weight: 650; color: var(--muted); margin: 0 0 3px 4px; display: flex; align-items: center; gap: 5px; }
+.msg-time { font-size: 10.5px; color: var(--soft, #9aa3b5); margin: 3px 6px 0; }
+.msg.grouped .msg-time { display: none; }
+
+.bubble { padding: 9px 13px; border-radius: 18px; background: var(--surface, #fff); border: 1px solid var(--line);
+  font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; border-top-left-radius: 6px; }
+.msg.mine .bubble { background: var(--ink); color: #fff; border-color: var(--ink); border-radius: 18px; border-top-right-radius: 6px; }
+.msg.mine .mention { color: #b9c7ff; }
+.mention { font-weight: 700; color: var(--purple, #7c3aed); }
+
+/* TravelSync (AI) */
+.agent-av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--purple, #7c3aed), var(--blue, #2563eb)); }
+.agent-av.lg { width: 48px; height: 48px; margin: 0 auto; border-radius: 16px; }
+.ai-tag { font-size: 9.5px; font-weight: 800; letter-spacing: .4px; padding: 1px 5px; border-radius: 6px;
+  color: var(--purple, #7c3aed); background: var(--purple-50, #f3ecff); }
+.msg.agent .bubble { background: var(--purple-50, #f3ecff); border-color: transparent; }
+.msg.agent .bubble.failed { background: var(--rose-50, #fff1f2); color: var(--rose-d, #be123c); }
+.agent-note { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.tools { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 2px 0; }
+.tool svg { color: var(--green, #0f9f6e); }
+.tool { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--fill, #f1f3f7); padding: 3px 8px; border-radius: 999px; }
+
+.bubble.thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.dots { display: inline-flex; gap: 3px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--purple, #7c3aed); opacity: .35; animation: chatdot 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .2s; }
+.dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes chatdot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* suggested change */
+.proposal { margin-top: 8px; padding: 12px; border-radius: 16px; background: var(--surface, #fff); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 6px; }
+.proposal .added { font-size: 13.5px; }
+.proposal .num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--purple, #7c3aed); }
+.proposal-actions { display: flex; gap: 8px; margin-top: 4px; }
+.proposal-actions .btn { flex: 1; }
+
+/* composer, docked above the tab bar */
+/* the tab bar is also sticky at the bottom (52px tabs + 12px padding + 14px margin), so the dock sits just above it */
+.chat-dock { position: sticky; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); z-index: 4; padding: 8px 16px 10px; background: var(--bg);
+  box-shadow: 0 78px 0 var(--bg); /* also hides messages scrolling past between the dock and the tab bar */ }
+.chat-dock::before { content: ""; position: absolute; left: 0; right: 0; top: -16px; height: 16px; pointer-events: none;
+  background: linear-gradient(to top, var(--bg), transparent); }
+.chat-quick { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.chat-quick::-webkit-scrollbar { display: none; }
+.chat-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface, #fff); color: var(--ink); font: 600 12.5px var(--body, inherit); cursor: pointer; }
+.chat-chip svg { color: var(--purple, #7c3aed); }
+.chat-chip:disabled { opacity: .5; }
+.chat-input { display: flex; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; background: var(--surface, #fff);
+  border: 1.5px solid var(--line); transition: border-color .15s; }
+.chat-input.asking { border-color: var(--purple, #7c3aed); }
+.chat-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 14px var(--body, inherit); padding: 6px 4px; }
+.chat-at, .chat-send { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; }
+.chat-at { background: var(--purple-50, #f3ecff); color: var(--purple, #7c3aed); }
+.chat-send { background: var(--ink); color: #fff; }
+.chat-send:disabled { opacity: .35; cursor: default; }
+.chat-hint { display: flex; align-items: center; gap: 5px; margin: 6px 8px 0; font-size: 11px; color: var(--purple, #7c3aed); }
+/* when scrolling to the newest message, leave room for the composer and tab bar that float over the list */
+.chat-end { height: 1px; scroll-margin-bottom: 230px; }

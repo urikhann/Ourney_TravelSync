@@ -242,3 +242,19 @@ class PublicHoliday(Base):
     __tablename__ = "public_holidays"
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     name: Mapped[str] = mapped_column(String(60))
+
+
+# ---------------------------------------------------------------- trip chat
+
+class ChatMessage(Base):
+    """One message in a trip's group chat. kind: "user" (a member) or "agent" (TravelSync's reply).
+    Agent replies keep the agent's answer in `agent` (state, tool_calls, proposal), see contracts/agent.*.json."""
+    __tablename__ = "chat_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(10), default="user")
+    text: Mapped[str] = mapped_column(String(2000))
+    agent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reply_to: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the member message an agent reply answers
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
