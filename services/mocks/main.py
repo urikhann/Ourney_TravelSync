@@ -196,6 +196,37 @@ def plans(req: dict):
 
 
 # ------------------------------------------------------------------ AI agent (keyword stub, no LLM)
+def _sample_proposal(itinerary_id, want: str) -> tuple[dict | None, str]:
+    """A believable example change so the chat screen can show a proposal card. Not a real planner:
+    swaps one outdoor (or long-walk) stop on the first day for an indoor (or easier) place of the same kind."""
+    if not itinerary_id:
+        return None, ""
+    with engine.connect() as c:
+        row = c.execute(text("SELECT i.days, r.dataset_version FROM itineraries i JOIN recommendation_runs r "
+                             "ON r.id = i.run_id WHERE i.id = :i"), {"i": itinerary_id}).first()
+    if row is None:
+        return None, ""
+    days, pois = _json(row.days) or [], load_pois(row.dataset_version)
+    if not days:
+        return None, ""
+    day = days[0]
+    used = {it["poi_id"] for d in days for it in d["items"]}
+    walk = lambda p: p.get("walking_level") if p.get("walking_level") is not None else 0.5
+    for it in day["items"]:
+        cur = pois.get(it["poi_id"])
+        if not cur or cur["kind"] == "food" or (want == "indoor" and cur["indoor"]):
+            continue
+        ok = [p for pid, p in pois.items() if pid not in used and p["kind"] == cur["kind"]
+              and (p["indoor"] if want == "indoor" else walk(p) < walk(cur))]
+        if not ok:
+            continue
+        pick = sorted(ok, key=lambda p: (walk(p), p["id"]))[0]
+        return ({"date": day["date"], "remove_item_ids": [f"{day['date']}@{it['start']}"],
+                 "add": [{"poi_id": pick["id"], "start": it["start"]}]},
+                f" For example, on {day['date']} I could swap {cur['name']} ({it['start']}) for {pick['name']}.")
+    return None, ""
+
+
 @app.post("/agent/turn")
 def agent_turn(req: dict):
     t = req["message"]["text"].lower()
@@ -203,8 +234,13 @@ def agent_turn(req: dict):
                                "cheaper": ["cheap", "budget"]}.items() if any(k in t for k in keys)]
     if not wants:
         return {"reply": "I can re-plan for rain, less walking or a lower budget. (mock agent)", "tool_calls": [], "proposal": None}
-    return {"reply": f"(mock agent) I would look for places that are {', '.join(wants)}. The real agent will propose changes.",
-            "tool_calls": [{"name": "understand_request", "summary": ", ".join(wants)}], "proposal": None}
+    proposal, example = (_sample_proposal(req.get("itinerary_id"), wants[0])
+                         if wants[0] in ("indoor", "low walking") else (None, ""))
+    calls = [{"name": "understand_request", "summary": ", ".join(wants)}]
+    if proposal:
+        calls.append({"name": "find_alternatives", "summary": "1 swap suggested"})
+    return {"reply": f"(mock agent) I would look for places that are {', '.join(wants)}.{example} The real agent will propose changes.",
+            "tool_calls": calls, "proposal": proposal}
 
 
 @app.get("/health")

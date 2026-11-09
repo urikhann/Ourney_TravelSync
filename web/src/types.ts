@@ -76,3 +76,13 @@ export type Tastes = {
   status: "done" | "skipped" | null; version: string; answers: Record<string, string[]>;
   keywords: string[]; avoid_keywords: string[]; exclusion_tags: string[];
 };
+
+// Trip chat (GET/POST /trips/{id}/chat). Agent replies follow contracts/agent.response.json.
+export type AgentState = "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_CLARIFICATION" | "FAILED" | "CANCELLED";
+export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string }[] };
+export type ChatMessage = {
+  id: number; kind: "user" | "agent"; text: string; reply_to: number | null; created_at: string;
+  author: { id: string | null; name: string } | null;
+  agent: { state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | null } | null;
+};
+export type ChatPage = { agent_name: string; messages: ChatMessage[] };

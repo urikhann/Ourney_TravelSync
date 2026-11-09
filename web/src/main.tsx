@@ -23,6 +23,7 @@ import Preferences from "./pages/Preferences";
 import Places from "./pages/Places";
 import Plan from "./pages/Plan";
 import Tastes from "./pages/Tastes";
+import Chat from "./pages/Chat";
 
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
@@ -45,6 +46,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/trips/:id/preferences" element={guard(<Preferences />)} />
             <Route path="/trips/:id/places" element={guard(<Places />)} />
             <Route path="/trips/:id/plan" element={guard(<Plan />)} />
+            <Route path="/trips/:id/chat" element={guard(<Chat />)} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

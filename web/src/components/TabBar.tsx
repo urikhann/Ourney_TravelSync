@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { House, Map, Sparkles, User } from "lucide-react";
+import { House, Map, MessageCircle, Sparkles, User } from "lucide-react";
 
 /** Bottom tabs inside a trip. NavLink knows which tab is active from the URL. */
 export default function TabBar({ tripId }: { tripId: string }) {
@@ -7,6 +7,7 @@ export default function TabBar({ tripId }: { tripId: string }) {
     { to: `/trips/${tripId}`, label: "Trip", Icon: House, end: true },
     { to: `/trips/${tripId}/places`, label: "Places", Icon: Sparkles, end: false },
     { to: `/trips/${tripId}/plan`, label: "Plan", Icon: Map, end: false },
+    { to: `/trips/${tripId}/chat`, label: "Chat", Icon: MessageCircle, end: false },
     { to: `/trips/${tripId}/preferences`, label: "Me", Icon: User, end: false },
   ];
   return (
