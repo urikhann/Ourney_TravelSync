@@ -1,0 +1,31 @@
+{
+  "checks": "PASS",
+  "deterministic_rerun": true,
+  "stable_artifact_sha256": {
+    "data_audit.json": "0aae13fa8331ee903ead1cb138bc95423e2899f999c364b6b0849e41d2eb2f35",
+    "field_missingness.csv": "e11745de62f42a0fa79b60bd6cfe62db2eda5fe01a556b86e4e8f71e3197a2f5",
+    "near_duplicate_review.csv": "14ef1b5ef65ea708a3b6ddc93c2d819e173423495b986e1b9bcc33c7bb720947",
+    "synthetic_profiles.csv": "eaa35db867c1c729c8a0e251ad4bac8dda54e94ecd8bbb5e2000fdda4e7556e2",
+    "structured_by_feature_count.csv": "029714fc00fb086fb8c6bd8046682cb62eff372fa4367b09748986b8659e6377",
+    "described_subset_controls.csv": "848c1fafb08cc409a8b246ef26bf59714878bf848e43b634576a3b250ae48f33",
+    "individual_diagnostics.csv": "89a9409bd6d518fbde848871ec83022ce7e65abd74303a28cfecad18cacca743",
+    "group_comparisons.csv": "63fd45805219e126ab1315f61c370f1fa0bba3e9f0804a0cc0a65601162ae1f2",
+    "group_recommendations.csv": "7d3303b19437745f40a25ac049436fcc27a4655e80b3b770a2907becc0c1d920",
+    "individual_top10.csv": "37f0c7b0f405b1a1e32a534b1ced531aeddbd17c9ae58211a289fed1800a0499",
+    "scale_mismatch_diagnostic.csv": "466b43214657de04634b75433def9101c6655aa0ba2a7158d04aa71a32817223",
+    "labeling_template.csv": "26f4afd0d1ffe2df3f4a1bc243ca714ebe448abd9ffbec9662d0e934c6311840",
+    "paired_description_ablation.csv": "0e5098218d6c84c1fda29351f0c5e16f4e091009a8b42d05e567e432ed444eac",
+    "normalization_sensitivity.csv": "6994a22fbbc5e765ed7411510890cb46be0cd7ed3aaff3b9a898a1cdb4113dc1",
+    "feature_count_bias.svg": "61d0d275f9bafcf0a71f851937c7a673bc258db108a5bb95f85e96fe91d7603c"
+  },
+  "protected_input_count": 235,
+  "models_executed": 2,
+  "scoring_configurations": 104,
+  "group_rows": 1248,
+  "actual_group_ranked_lists": 844,
+  "group_rows_by_status": {
+    "NOT_APPLICABLE_INCOMPATIBLE_SCALE": 396,
+    "TECHNICAL_ONLY": 852
+  },
+  "label_rows": 48
+}

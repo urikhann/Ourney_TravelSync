@@ -1,5 +1,9 @@
 # Mock services
 
+The production app now uses the real Module H service on port 8003. Its legacy
+`POST /plans` endpoint here is retained only as a mock fixture and is never a
+production fallback. See [production planning configuration](../../docs/optimizer_app_integration.md).
+
 Simple working stand-ins for the four teammate services, so the web app and backend work end to end from day one.
 They follow `contracts/` exactly. Replace each one with the real service and change its URL in `.env`.
 

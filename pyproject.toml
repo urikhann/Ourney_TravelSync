@@ -13,6 +13,7 @@ dependencies = ["numpy>=2.1", "scipy>=1.14,<2", "scikit-learn>=1.6,<2"]
 ourney-travelsync = "ourney_travelsync.cli:main"
 
 [project.optional-dependencies]
+optimizer = ["ortools>=9.15,<9.16", "pydantic>=2.12,<3"]
 ingestion = ["requests", "pandas"]
 postgres = ["psycopg[binary]", "python-dotenv"]
 viewer = ["streamlit", "altair", "pandas", "psycopg[binary]", "python-dotenv"]

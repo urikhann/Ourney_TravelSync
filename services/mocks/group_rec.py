@@ -112,17 +112,19 @@ def recommend(members: list[dict], places: dict[str, dict], top_l: int = 100, gr
         picked = gfar(tops, group_k, mean)
 
     k_actual = len(picked)
+    rel = {u: relevance(t) for u, t in tops.items()}
     group = []
     for rank, it in enumerate(picked, start=1):
         pid = it["poi_id"]
         group.append({"poi_id": pid, "group_rank": rank, "mean_score": round(mean[pid], 6),
                       "selection_gain": it["selection_gain"], "group_utility": utility(rank, k_actual),
                       "member_scores": {u: round(scores[u][pid], 6) for u in w},
+                      "member_relevance": {u: rel[u].get(pid, 0.0) for u in w},
                       "picked_for": it["picked_for"]})
-    rel = {u: relevance(t) for u, t in tops.items()}
     per_member = {u: round(sum(rel[u].get(g["poi_id"], 0.0) for g in group), 4) for u in w}
     return {
         "group": group, "removed": removed,
+        "relevance_version": "mock-gfar-top-l-v1",
         "individual": {u: [{"poi_id": pid, "score": round(scores[u][pid], 6), "rank": r}
                            for r, pid in enumerate(tops[u], start=1)] for u in w},
         "metrics": {"eligible": len(eligible), "candidate_pool": len(pool), "returned": k_actual,

@@ -69,6 +69,8 @@ def borda(scores: np.ndarray, depth: int) -> np.ndarray:
     n_users, n_pois = scores.shape
     rel = np.zeros_like(scores, dtype=float)
     length = min(depth, n_pois)
+    if length == 1:
+        return np.ones_like(scores, dtype=float)  # GFAR's explicit single-candidate extension
     if length < 2:
         return rel
     weights = np.arange(length - 1, -1, -1, dtype=float)
@@ -235,6 +237,7 @@ def recommend(req: dict):
             "selection_gain": round(p.score, 6) if method == "gfar" else None,
             "group_utility": utility(rank, k),
             "member_scores": {u: round(float(S[i, j]), 4) for i, u in enumerate(uids)},
+            "member_relevance": {u: float(rel[i, j]) for i, u in enumerate(uids)},
             "picked_for": picked_for,
             "reasons": reasons(feats, members, picked_for) + scoring_reasons,
         })
@@ -254,6 +257,7 @@ def recommend(req: dict):
         "schema_version": req.get("schema_version", "rec-1.0"), "model_version": MODEL_VERSION,
         "dataset_version": req['dataset_version'], "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "method": method, 'individual_method': individual_method, "score_scale": scale, "tie_seed": seed,
+        "relevance_version": f"gfar-borda-depth-{GFAR_DEPTH}",
         'scorer_version': data.scoring.diagnostics['scoring_version'] if data.scoring else 'method-c-char23-v1',
         'requested_scoring_method': requested_method,
         'scoring': ({**data.scoring.diagnostics,

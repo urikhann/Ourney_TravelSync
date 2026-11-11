@@ -1,0 +1,123 @@
+{
+  "run_id": "synthetic-run",
+  "dataset_version": "synthetic-v1",
+  "constraint_version": "c1",
+  "preference_version": "p1",
+  "mapping_version": "m1",
+  "feature_schema_version": "fs-1.0",
+  "operating_snapshot_id": "synthetic-ops",
+  "routing_version": "synthetic-routes",
+  "transport_mode": "walk",
+  "days": [
+    {
+      "date": "2026-11-05",
+      "start_min": 540,
+      "end_min": 1080,
+      "start_point": "hotel",
+      "end_point": "hotel"
+    }
+  ],
+  "members": [
+    {
+      "member_id": "u1",
+      "available": {
+        "2026-11-05": [
+          {
+            "start_min": 540,
+            "end_min": 1080
+          }
+        ]
+      }
+    },
+    {
+      "member_id": "u2",
+      "available": {
+        "2026-11-05": [
+          {
+            "start_min": 540,
+            "end_min": 1080
+          }
+        ]
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "poi_id": "A",
+      "dataset_version": "synthetic-v1",
+      "group_rank": 1,
+      "group_utility": 1000,
+      "mean_score": 0.5,
+      "personal_scores": {
+        "u1": 0.4,
+        "u2": 0.6
+      },
+      "relevance": {
+        "u1": 0.8,
+        "u2": 0.2
+      },
+      "duration_min": {
+        "value": 60,
+        "status": "KNOWN",
+        "source": "synthetic fixture",
+        "verified_at": "2026-11-01T00:00:00Z"
+      },
+      "cost_per_person": {
+        "value": 100,
+        "status": "KNOWN",
+        "source": "synthetic fixture",
+        "verified_at": "2026-11-01T00:00:00Z"
+      },
+      "operations": {
+        "2026-11-05": {
+          "openings": {
+            "value": [
+              {
+                "start_min": 600,
+                "end_min": 1020
+              }
+            ],
+            "status": "KNOWN",
+            "source": "synthetic fixture",
+            "verified_at": "2026-11-01T00:00:00Z"
+          },
+          "closed": {
+            "value": false,
+            "status": "KNOWN",
+            "source": "synthetic fixture",
+            "verified_at": "2026-11-01T00:00:00Z"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "date": "2026-11-05",
+      "origin": "hotel",
+      "destination": "A",
+      "status": "KNOWN",
+      "duration_minutes": 30,
+      "group_fare": 10,
+      "walk_minutes": 5,
+      "distance_m": 1000,
+      "provider": "synthetic fixture",
+      "fetched_at": "2026-11-01T00:00:00Z"
+    },
+    {
+      "date": "2026-11-05",
+      "origin": "A",
+      "destination": "hotel",
+      "status": "KNOWN",
+      "duration_minutes": 30,
+      "group_fare": 10,
+      "walk_minutes": 5,
+      "distance_m": 1000,
+      "provider": "synthetic fixture",
+      "fetched_at": "2026-11-01T00:00:00Z"
+    }
+  ],
+  "budget_total": 10000,
+  "search_seconds": 2,
+  "schema_version": "optimizer-1.0"
+}

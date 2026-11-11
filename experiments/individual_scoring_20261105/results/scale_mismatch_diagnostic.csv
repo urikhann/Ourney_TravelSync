@@ -1,0 +1,13 @@
+﻿method,threshold,group,surviving,interpretation
+legacy_weighted_reconstruction,0.25,0,30,Unvalidated threshold diagnostic; not misery or acceptance
+legacy_weighted_reconstruction,0.25,1,26,Unvalidated threshold diagnostic; not misery or acceptance
+legacy_weighted_reconstruction,0.25,2,30,Unvalidated threshold diagnostic; not misery or acceptance
+legacy_weighted_reconstruction,0.25,3,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_empty_actual,0.25,0,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_empty_actual,0.25,1,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_empty_actual,0.25,2,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_empty_actual,0.25,3,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_positive_profile_control,0.25,0,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_positive_profile_control,0.25,1,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_positive_profile_control,0.25,2,0,Unvalidated threshold diagnostic; not misery or acceptance
+tfidf_positive_profile_control,0.25,3,0,Unvalidated threshold diagnostic; not misery or acceptance

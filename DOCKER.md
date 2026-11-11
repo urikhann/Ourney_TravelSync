@@ -1,6 +1,7 @@
 # Run TravelSync with Docker
 
-One command starts everything: PostgreSQL, the real recommender, the mock services, the backend and the web app.
+One command starts PostgreSQL, the real recommender, the OR-Tools optimizer,
+the remaining mock services, the backend and the web app.
 You only need **Docker Desktop** (Mac / Windows) — no Python, Node or uv on your computer.
 
 ```bash
@@ -15,8 +16,18 @@ Then open **http://localhost:5173**. The first start takes a few minutes (it bui
 | web | 5173 | the web app (Vite dev server, reloads when you edit `web/src`) |
 | api | 8000 | backend (reloads when you edit `api/app`) — API docs at http://localhost:8000/docs |
 | recommender | 8002 | the team package (GFAR / AWM) — http://localhost:8002/health |
-| mocks | 8001 | stand-ins for the itinerary optimizer, availability checker and AI agent |
+| optimizer | 8003 (loopback) | real CP-SAT Module H with E2/E3; called internally by the API |
+| mocks | 8001 | availability checker and AI agent stand-ins; legacy mock planner is not used by the app |
 | db | 5432 | PostgreSQL (user / password / database: `travelsync`) |
+
+Itinerary generation requires `PLANNING_DATA_URL` to point to your trusted
+operating-data/routing service (`POST /snapshot`). Optional authentication uses
+`PLANNING_DATA_TOKEN`; keep real credentials in the ignored `.env` or exported
+environment. Without a configured source, the app explains that verified planning
+data is missing and preserves existing plans. It never substitutes synthetic or
+zero-time/zero-cost routes. See [adapter setup and contract](docs/optimizer_app_integration.md).
+API startup adds the private `itinerary_optimization_runs` audit table; existing
+tables and columns are unchanged.
 
 ## Everyday commands
 

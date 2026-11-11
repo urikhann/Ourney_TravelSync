@@ -1,22 +1,25 @@
-"""Build 3 candidate plans with the optimizer, list them, and vote."""
+"""Authenticated Module H generation, independent E3 publication, and approval."""
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from pydantic import ValidationError
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .. import config, services
 from ..db import get_db
 from ..deps import member_trip
-from ..models import Itinerary, PublicHoliday, RecommendationRun, Trip, User, Vote
+from ..models import Itinerary, OptimizationRun, PublicHoliday, RecommendationRun, Trip, User, Vote
+from ..optimization import GenerateInput, data_request, fingerprint, prepare, solver_request, state
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
+from ourney_travelsync.optimizer.contracts import PlanResponse
+from ourney_travelsync.optimizer.validation import validate_final
 
 router = APIRouter(tags=["itineraries"])
 
-VARIANTS = [("A", "best", "Best for everyone"), ("B", "culture", "Culture & views"), ("C", "food", "Food & cafés")]
-NAMES = {v: n for _, v, n in VARIANTS}
+NAMES = {"optimized": "Optimized itinerary"}
 
 
 def trip_dates(trip: Trip) -> list[str]:
@@ -25,8 +28,16 @@ def trip_dates(trip: Trip) -> list[str]:
 
 def plans_view(trip: Trip, user: User, db: Session) -> dict:
     """Everything the Plan screen needs in one response."""
-    its = db.scalars(select(Itinerary).where(Itinerary.trip_id == trip.id).order_by(Itinerary.letter)).all()
+    # Old greedy mock rows lack a private E3 publication audit and stay hidden.
+    its = db.scalars(select(Itinerary).join(OptimizationRun, OptimizationRun.itinerary_id == Itinerary.id)
+                     .where(Itinerary.trip_id == trip.id, OptimizationRun.status == "PASSED",
+                            Itinerary.variant == "optimized").order_by(Itinerary.id)).all()
     votes = db.scalars(select(Vote).where(Vote.trip_id == trip.id)).all()
+    votes = [v for v in votes if v.itinerary_id in {it.id for it in its}]
+    saved = {a.itinerary_id: a for a in db.scalars(select(OptimizationRun).where(
+        OptimizationRun.trip_id == trip.id, OptimizationRun.itinerary_id.in_([it.id for it in its])))}
+    current = state(db, trip.id)
+    current.pop("recommendation_run_id")  # an independent comparison run does not change member constraints
     run = db.get(RecommendationRun, its[0].run_id) if its else None
     ids = {i["poi_id"] for it in its for d in it.days for i in d["items"]}
     places = load_places(db, run.dataset_version, ids) if run else {}
@@ -43,44 +54,132 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     first, last = trip.start_date, trip.end_date
     holidays = db.scalars(select(PublicHoliday).where(PublicHoliday.day >= first, PublicHoliday.day <= last)).all()
     my_vote = next((v.itinerary_id for v in votes if v.user_id == user.id), None)
+    latest = db.scalar(select(OptimizationRun).where(OptimizationRun.trip_id == trip.id)
+                       .order_by(OptimizationRun.id.desc()))
+    rec = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
+                    .order_by(RecommendationRun.id.desc()))
+    points = load_places(db, rec.dataset_version, [r["poi_id"] for r in rec.response.get("group", [])]) if rec else {}
     return {
         "plans": [{
             "id": it.id, "letter": it.letter, "variant": it.variant, "name": NAMES.get(it.variant, it.variant),
+            "stale": {k: v for k, v in saved[it.id].input["state"].items() if k != "recommendation_run_id"} != current,
             "stats": it.stats, "votes": count[it.id],
-            "days": [{"date": d["date"], "items": [{**i, "place": places.get(i["poi_id"]), "mean_score": fit.get(i["poi_id"])}
+            "days": [{**d, "items": [{**i, "place": places.get(i["poi_id"]), "mean_score": fit.get(i["poi_id"])}
                                                    for i in d["items"]]} for d in it.days],
         } for it in its],
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
         "holidays": [{"date": h.day.isoformat(), "name": h.name} for h in holidays] if config.FEATURE_AVAILABILITY else [],
-        "availability_checked": config.FEATURE_AVAILABILITY,
+        "availability_checked": bool(its),
+        "setup": {"dates": trip_dates(trip), "is_owner": trip.created_by == user.id,
+                  "planning_data_configured": bool(config.PLANNING_DATA_URL),
+                  "recommendations_ready": bool(rec and rec.method == "gfar" and rec.response.get("relevance_version")),
+                  "points": list(points.values())},
+        "latest_optimization": ({"id": latest.id, "status": latest.status, "error_code": latest.error_code,
+                                 "solver_status": latest.response.get("solver_status", "NOT_RUN"),
+                                 "validation_status": latest.response.get("validation_status", "NOT_RUN"),
+                                 "eligibility": latest.response.get("eligibility", []),
+                                 "configuration": latest.input.get("configuration")}
+                                if latest else None),
     }
 
 
 @router.post("/trips/{trip_id}/itineraries/generate")
-async def generate(trip: Trip = Depends(member_trip), user: User = Depends(current_user), db: Session = Depends(get_db)):
+async def generate(body: GenerateInput, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
+                   db: Session = Depends(get_db)):
+    if trip.created_by != user.id:
+        raise HTTPException(403, "optimizer_owner_required")
     run = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
                     .order_by(RecommendationRun.id.desc()))
     if not run:
         raise HTTPException(409, "no_recommendations_yet")
-    scale = run.response.get("score_scale", "0-1")
-    req = {"trip_id": trip.id, "dates": trip_dates(trip), "day_window": {"start": "10:00", "end": "21:00"},
-           "dataset_version": run.dataset_version,
-           "candidates": [{"poi_id": r["poi_id"], "group_rank": r["group_rank"], "group_utility": r["group_utility"],
-                           "mean_score": r["mean_score"], "fit": to_fit(r["mean_score"], scale)}
-                          for r in run.response.get("group", [])],
-           "locked_items": [], "variants": [v for _, v, _ in VARIANTS],
-           "check_availability": config.FEATURE_AVAILABILITY}
-    res = await services.build_plans(req)
-    # New plans replace the old ones (and their votes).
-    db.execute(delete(Vote).where(Vote.trip_id == trip.id))
-    db.execute(delete(Itinerary).where(Itinerary.trip_id == trip.id))
-    by_variant = {p["variant"]: p for p in res.get("plans", [])}
-    for letter, variant, _ in VARIANTS:
-        if variant in by_variant:
-            p = by_variant[variant]
-            db.add(Itinerary(trip_id=trip.id, run_id=run.id, letter=letter, variant=variant, days=p["days"], stats=p["stats"]))
+    current = state(db, trip.id)
+    try:
+        prepared = prepare(trip, run, body, db, current)
+    except (ValidationError, ValueError, TypeError, KeyError):
+        raise HTTPException(409, "optimizer_recommendation_data_missing") from None
+    audit = OptimizationRun(trip_id=trip.id, recommendation_run_id=run.id, requested_by=user.id,
+                            input={"configuration": body.model_dump(mode="json"), "state": current})
+    db.add(audit)
     db.commit()
-    return plans_view(trip, user, db)
+    audit_id, trip_id, user_id, run_id = audit.id, trip.id, user.id, run.id
+    try:
+        context = data_request(run, audit_id, body, prepared[2], prepared[3], prepared[4])
+        audit.planning_data = {"request": context}
+        db.commit()
+        operational = await services.planning_data(context)
+        audit.planning_data = {"request": context, "response": operational}
+        try:
+            req = solver_request(run, audit_id, body, prepared, context, operational)
+        except (ValidationError, ValueError, TypeError, KeyError):
+            raise HTTPException(502, "planning_data_invalid_response") from None
+        audit.optimizer_request = req.model_dump(mode="json")
+        db.commit()
+        response = await services.build_plans(req.model_dump(mode="json"))
+        audit.response = response
+        try:
+            result = PlanResponse.model_validate(response)
+        except ValidationError:
+            raise HTTPException(502, "optimizer_invalid_response") from None
+        if result.input_snapshot != req or result.run_id != req.run_id:
+            raise HTTPException(502, "optimizer_snapshot_mismatch")
+        if result.validation_status != "PASSED" or result.solver_status not in ("OPTIMAL", "FEASIBLE") or result.error_code:
+            raise HTTPException(409, "optimizer_" + (result.error_code or "invalid_result").lower())
+        checked = validate_final(req, result.days)  # independent backend recheck, even if service says PASSED
+        if not checked.passed:
+            raise HTTPException(502, "optimizer_final_validation_failed")
+        # Do not publish an answer for preferences, exclusions, membership,
+        # availability or a recommendation run changed while the solver ran.
+        db.flush()
+        db.expire_all()
+        db.scalar(select(Trip).where(Trip.id == trip_id).with_for_update())
+        if fingerprint(state(db, trip_id)) != fingerprint(current):
+            raise HTTPException(409, "optimizer_inputs_changed")
+        newest = db.scalar(select(OptimizationRun.id).where(OptimizationRun.trip_id == trip_id)
+                           .order_by(OptimizationRun.id.desc()).limit(1))
+        if newest != audit_id:
+            raise HTTPException(409, "optimizer_inputs_changed")
+        audit = db.get(OptimizationRun, audit_id)
+        # All validation occurs before any old itinerary or vote is removed.
+        db.execute(update(OptimizationRun).where(OptimizationRun.trip_id == trip_id)
+                   .values(itinerary_id=None))
+        db.execute(delete(Vote).where(Vote.trip_id == trip_id))
+        db.execute(delete(Itinerary).where(Itinerary.trip_id == trip_id))
+        days = []
+        locked = {l.poi_id for l in req.locked_items}
+        for d in result.days:
+            raw = d.model_dump(mode="json")
+            raw.update(start_label=prepared[3][d.start_point]["label"], end_label=prepared[3][d.end_point]["label"],
+                       start=hhmm(d.start_min), end_arrival=hhmm(d.end_arrival_min))
+            raw["items"] = [{**v.model_dump(mode="json"), "start": hhmm(v.start_min), "end": hhmm(v.departure_min),
+                             "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked, "moved_from": None,
+                             "availability": {"available": True}} for v in d.items]
+            days.append(raw)
+        plan = Itinerary(trip_id=trip_id, run_id=run_id, letter="A", variant="optimized", days=days,
+                         stats={"group_fit": (None if run.response.get("score_scale") == "relative_relevance_0_1"
+                                              else checked.metrics["mean_personal_fit"]),
+                                "total_cost": checked.metrics["total_cost"], "cost_unknown_count": 0,
+                                "budget_total": req.budget_total, "transport_mode": req.transport_mode,
+                                "travel_minutes": checked.metrics["travel_minutes"],
+                                "walking_km_per_day": None, "solver_status": result.solver_status,
+                                "validation_status": "PASSED", "optimization_run_id": audit_id,
+                                "dataset_version": req.dataset_version, "routing_version": req.routing_version,
+                                "operating_snapshot_id": req.operating_snapshot_id,
+                                "objective_values": [p.model_dump(mode="json") for p in result.phases]})
+        db.add(plan)
+        db.flush()
+        audit.itinerary_id, audit.status = plan.id, "PASSED"
+        db.commit()
+        return plans_view(db.get(Trip, trip_id), db.get(User, user_id), db)
+    except HTTPException as exc:
+        # Keep both the previous published plan and this failed attempt's audit.
+        audit = db.get(OptimizationRun, audit_id)
+        audit.status, audit.error_code = "FAILED", str(exc.detail)
+        db.commit()
+        raise
+
+
+def hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
 @router.get("/trips/{trip_id}/itineraries")
@@ -94,6 +193,14 @@ def vote(itinerary_id: int, user: User = Depends(current_user), db: Session = De
     trip = db.get(Trip, it.trip_id) if it else None
     if not it or not any(m.user_id == user.id for m in trip.members):
         raise HTTPException(404, "plan_not_found")
+    published = db.scalar(select(OptimizationRun).where(OptimizationRun.itinerary_id == it.id,
+                                                        OptimizationRun.status == "PASSED"))
+    if not published or it.variant != "optimized":
+        raise HTTPException(409, "optimizer_unvalidated_plan")
+    current = state(db, trip.id)
+    current.pop("recommendation_run_id")
+    if {k: v for k, v in published.input["state"].items() if k != "recommendation_run_id"} != current:
+        raise HTTPException(409, "optimizer_inputs_changed")
     v = db.scalar(select(Vote).where(Vote.trip_id == trip.id, Vote.user_id == user.id))
     if v:
         v.itinerary_id = it.id

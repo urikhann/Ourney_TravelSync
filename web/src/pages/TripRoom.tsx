@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calendar, Check, Clock, Copy, Loader, SlidersHorizontal, Sparkles, Users } from "lucide-react";
 import { api, message } from "../api";
-import type { PlansView, Recommendations, Trip } from "../types";
+import type { Recommendations, Trip } from "../types";
 import { ErrorBox, Loading, Toast, fmtDate, useToast, weekday } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
@@ -40,15 +40,14 @@ export default function TripRoom() {
     mutationFn: () => api.post<{ nudged: string[] }>(`/trips/${id}/nudge`),
     onSuccess: (r) => toast.show(r.nudged.length ? `Reminder sent to ${r.nudged.join(", ")}` : "Nobody to remind"),
   });
-  // One tap runs both: the recommender, then the itinerary optimizer.
+  // Recommendations precede explicit dates/endpoints/budget and E2/E3 planning.
   const generate = useMutation({
     mutationFn: async () => {
       const recs = await api.post<Recommendations>(`/trips/${id}/recommendations`, {});
       qc.setQueryData(["recs", id], recs);
-      const plans = await api.post<PlansView>(`/trips/${id}/itineraries/generate`);
-      qc.setQueryData(["plans", id], plans);
+      await qc.invalidateQueries({ queryKey: ["plans", id] });
     },
-    onSuccess: () => nav(`/trips/${id}/places`),
+    onSuccess: () => nav(`/trips/${id}/plan`),
   });
 
   const t = trip.data;
@@ -114,7 +113,7 @@ export default function TripRoom() {
               );
             })}
           </div>
-          <div className="muted tiny" style={{ marginTop: 8 }}>Bar = how many friends are free (darker = more) · ✓ = you</div>
+          <div className="muted tiny" style={{ marginTop: 8 }}>Bar = how many friends are free (darker = more) · ✓ = you. Confirm each trip date for the agreed daily planning window.</div>
         </div>
 
         <div style={{ height: 14 }} />
@@ -124,7 +123,7 @@ export default function TripRoom() {
           <button className="btn blue" disabled><Clock size={17} /> Waiting for {waiting.join(", ")}</button>
         ) : (
           <button className="btn blue" disabled={generate.isPending} onClick={() => generate.mutate()}>
-            {generate.isPending ? <><Loader size={18} className="spin" /> Finding a plan nobody hates…</> : <><Sparkles size={18} /> Generate itineraries</>}
+            {generate.isPending ? <><Loader size={18} className="spin" /> Finding group recommendations…</> : <><Sparkles size={18} /> Recommend and plan</>}
           </button>
         )}
         <div style={{ marginTop: 10 }}><ErrorBox error={generate.error ? message(generate.error) : null} /></div>

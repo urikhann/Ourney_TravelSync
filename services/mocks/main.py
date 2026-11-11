@@ -67,6 +67,7 @@ def recommend(req: dict):
         g["reasons"] = reasons(places[g["poi_id"]], members, g["picked_for"])
     return {"schema_version": req.get("schema_version", "rec-1.0"), "model_version": "mock-gfar-0.2",
             "dataset_version": req["dataset_version"], "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "score_scale": "0-1",
             "method": opts.get("method", "gfar"), **res}
 
 

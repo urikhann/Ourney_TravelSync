@@ -12,6 +12,7 @@ jobs:
       - run: uv run --locked pytest -q
       - run: uv sync --locked --extra ingestion --extra postgres --extra viewer
       - run: uv run --locked --extra ingestion --extra postgres --extra viewer pytest -q
+      - run: uv sync --locked --inexact --extra ingestion --extra postgres --extra viewer --extra optimizer
       - run: uv pip install -r api/requirements.txt -r services/recommender/requirements.txt
       - run: uv run --no-sync pytest -q services/recommender/tests
       - run: uv run --no-sync pytest -q api/tests

@@ -1,4 +1,10 @@
 .git
+.uv-cache
+.pytest_cache
+.aws
+.secrets
+secrets
+experiments
 **/.venv
 **/.venv-*
 **/__pycache__

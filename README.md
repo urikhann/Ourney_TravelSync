@@ -7,6 +7,10 @@ cleaning, immutable PostgreSQL dataset/run snapshots, an authentication API/web
 workflow, and an optional Streamlit viewer. E5 hybrid relevance is the default
 individual scorer feeding GFAR, with transparent feature fallback. See
 [E5 architecture, operations and verification](docs/e5_hybrid.md).
+The authenticated API/web app calls the OR-Tools itinerary optimizer with an
+independent E3 publication gate. Verified operating/routing data requires a
+configured server-side adapter; the LLM agent remains a separate integration.
+See [optimizer app setup](docs/optimizer_app_integration.md).
 
 ## Install and run
 
@@ -124,9 +128,11 @@ AGREE is unimplemented; see `docs/agree_design.md`.
 The pipeline normalizes the full catalogue, then filters explicit eligible/excluded
 IDs before candidate selection and aggregation. Database runs
 also filter captured member exclusions by database UUID or exact category/category_name.
-Budget, dates, operating hours, accessibility and routing feasibility are **not
-enforced**. Undefined utility/feasible-date fields remain SQL NULL. No itinerary is
-produced or certified feasible.
+The recommendation-only CLI/database adapter does not enforce budget, dates,
+operating hours, accessibility or routing feasibility. Its undefined utility/
+feasible-date fields remain SQL NULL and it does not certify an itinerary.
+The production web API invokes [Module H and E3](docs/optimizer_app_integration.md)
+separately, using explicit conditions and verified planning-data inputs.
 
 ## Collection and PostgreSQL
 
