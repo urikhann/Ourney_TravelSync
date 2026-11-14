@@ -1,6 +1,10 @@
 """Synthetic schedules: real CP-SAT and independent composition validation."""
 from collections import Counter
 import pytest
+
+pytest.importorskip("ortools")
+pytest.importorskip("pydantic")
+
 from optimizer_fixtures import request_data
 from ourney_travelsync.optimizer.contracts import DailyComposition, PlanRequest
 from ourney_travelsync.optimizer.eligibility import check_eligibility

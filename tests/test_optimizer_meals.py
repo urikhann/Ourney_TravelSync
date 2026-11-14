@@ -3,6 +3,10 @@ from copy import deepcopy
 from datetime import date
 
 import pytest
+
+pytest.importorskip("ortools")
+pytest.importorskip("pydantic")
+
 from pydantic import ValidationError
 
 from optimizer_fixtures import DAY, fact, request_data

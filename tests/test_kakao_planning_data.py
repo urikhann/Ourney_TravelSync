@@ -3,8 +3,14 @@ import asyncio
 import importlib.util
 from pathlib import Path
 
-import httpx
 import pytest
+
+pytest.importorskip("httpx")
+pytest.importorskip("fastapi")
+pytest.importorskip("sqlalchemy")
+pytest.importorskip("pydantic")
+
+import httpx
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
