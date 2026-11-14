@@ -8,5 +8,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with: {python-version: '3.13'}
       - run: uv sync --locked --extra optimizer
-      - run: uv pip install -r services/optimizer/requirements.txt httpx
+      # Root tests include the planning-data adapter and its database imports.
+      - run: uv pip install -r services/optimizer/requirements.txt -r services/planning_data/requirements.txt
       - run: uv run --no-sync python -m pytest -q tests
