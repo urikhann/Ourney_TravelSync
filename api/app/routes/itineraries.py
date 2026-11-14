@@ -14,7 +14,7 @@ from ..optimization import GenerateInput, catalogue_request, data_request, finge
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
-from ourney_travelsync.optimizer.contracts import PlanResponse
+from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride, PlanResponse
 from ourney_travelsync.optimizer.validation import validate_final
 
 router = APIRouter(tags=["itineraries"])
@@ -76,7 +76,7 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
         "holidays": [{"date": h.day.isoformat(), "name": h.name} for h in holidays] if config.FEATURE_AVAILABILITY else [],
         "availability_checked": bool(its),
-        "setup": {"dates": trip_dates(trip), "is_owner": trip.created_by == user.id,
+        "setup": {"dates": trip_dates(trip), "default_composition": DailyComposition().model_dump(mode="json"), "is_owner": trip.created_by == user.id,
                   "planning_data_configured": bool(config.PLANNING_DATA_URL),
                   "recommendations_ready": bool(rec and rec.method == "gfar" and rec.response.get("relevance_version")),
                   "points": list(points.values())},
@@ -93,6 +93,32 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
 @router.post("/trips/{trip_id}/itineraries/generate")
 async def generate(body: GenerateInput, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
                    db: Session = Depends(get_db)):
+    return await _generate(body, trip, user, db)
+
+
+class MealProposalInput(Contract):
+    configuration: GenerateInput
+    change: MealOverride
+
+
+@router.post("/trips/{trip_id}/itineraries/meal-proposals")
+async def propose_meal_change(body: MealProposalInput, trip: Trip = Depends(member_trip),
+                              user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Future tool boundary: authorize, resolve, re-optimize and preview only."""
+    if trip.created_by != user.id:
+        raise HTTPException(403, "optimizer_owner_required")
+    raw = body.configuration.model_dump(mode="json")
+    changes = body.configuration.daily_composition.meal_overrides
+    raw["daily_composition"]["meal_overrides"] = [o.model_dump(mode="json") for o in changes
+        if (o.date, o.name) != (body.change.date, body.change.name)] + [body.change.model_dump(mode="json")]
+    try:
+        updated = GenerateInput.model_validate(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, detail=str(exc)) from None
+    return await _generate(updated, trip, user, db, preview=True)
+
+
+async def _generate(body, trip, user, db, *, preview=False):
     if trip.created_by != user.id:
         raise HTTPException(403, "optimizer_owner_required")
     run = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
@@ -153,7 +179,11 @@ async def generate(body: GenerateInput, trip: Trip = Depends(member_trip), user:
         if result.input_snapshot != req or result.run_id != req.run_id:
             raise HTTPException(502, "optimizer_snapshot_mismatch")
         if result.validation_status != "PASSED" or result.solver_status not in ("OPTIMAL", "FEASIBLE") or result.error_code:
-            raise HTTPException(409, "optimizer_" + (result.error_code or "invalid_result").lower())
+            code = "optimizer_" + (result.error_code or "invalid_result").lower()
+            if preview:
+                raise HTTPException(409, {"code": code, "conflicts": list(result.validation_errors),
+                                          "message": "Meal proposal is infeasible; saved itinerary is unchanged."})
+            raise HTTPException(409, code)
         checked = validate_final(req, result.days)  # independent backend recheck, even if service says PASSED
         if not checked.passed:
             raise HTTPException(502, "optimizer_final_validation_failed")
@@ -169,6 +199,15 @@ async def generate(body: GenerateInput, trip: Trip = Depends(member_trip), user:
         if newest != audit_id:
             raise HTTPException(409, "optimizer_inputs_changed")
         audit = db.get(OptimizationRun, audit_id)
+        if preview:
+            audit.status = "PREVIEWED"
+            db.commit()
+            return {"proposal_id": audit_id, "status": "AWAITING_APPROVAL",
+                    "configuration": body.model_dump(mode="json"),
+                    "constraint_version": req.constraint_version,
+                    "days": [d.model_dump(mode="json") for d in result.days],
+                    "metrics": checked.metrics, "validation_status": "PASSED",
+                    "enforcement": {"budget": req.enforce_cost, "opening_hours": req.enforce_opening_hours}}
         # All validation occurs before any old itinerary or vote is removed.
         db.execute(update(OptimizationRun).where(OptimizationRun.trip_id == trip_id)
                    .values(itinerary_id=None))

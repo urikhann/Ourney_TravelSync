@@ -31,7 +31,8 @@ def request_data(count=3, days=1):
                 transport_mode="walk", days=[dict(date=d, start_min=540, end_min=1080,
                                                  start_point="hotel", end_point="hotel") for d in dates],
                 members=members, candidates=candidates, edges=edges,
-                budget_total=10000, search_seconds=2)
+                # Legacy objective/oracle fixtures explicitly opt out of composition.
+                daily_composition=None, budget_total=10000, search_seconds=2)
 
 
 def prepared(data):

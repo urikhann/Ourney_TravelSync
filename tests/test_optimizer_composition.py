@@ -42,14 +42,14 @@ def test_daily_caps_meal_windows_activity_variety_and_interleaving():
     visits=result.days[0].items
     roles=[p[v.poi_id].visit_category for v in visits]
     assert roles.count("cafe") == 2
-    assert roles.count("meal") == 3
+    assert roles.count("meal") == 2
     assert len({p[v.poi_id].activity_category for v in visits if p[v.poi_id].visit_category == "activity"}) >= 2
     assert all(a=="activity" or b=="activity" for a,b in zip(roles,roles[1:]))
     used=[]
     for v in visits:
         if p[v.poi_id].visit_category == "meal":
             used += [w.name for w in req.daily_composition.meal_windows if w.start_min<=v.start_min and v.departure_min<=w.end_min]
-    assert sorted(used)==["breakfast","dinner","lunch"]
+    assert sorted(used)==["dinner","lunch"]
 
 
 def test_caps_apply_per_day_and_pois_do_not_repeat_across_days():

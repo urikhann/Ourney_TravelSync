@@ -6,6 +6,7 @@ from ortools.sat.python import cp_model
 
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
 from .eligibility import common_bounds, usable_cost
+from .meals import effective_meals
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     edges = {(e.date, e.origin, e.destination): e for e in req.edges if e.usable}
     visits, times, day_arcs = {}, {}, {}
     total_cost = []
+    meal_preferences = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes = [day.start_point, *pois, day.end_point]
         end = len(nodes) - 1
@@ -60,7 +62,6 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             activity_ids = [pid for pid,p in pois.items() if p.visit_category == "activity"]
             model.add(sum(visits[day.date,pid] for pid in cafe_ids) <= composition.max_cafes)
             meal_count = sum(visits[day.date,pid] for pid in meal_ids)
-            model.add(meal_count >= composition.min_meals)
             model.add(meal_count <= composition.max_meals)
             model.add(sum(visits[day.date,pid] for pid in activity_ids) >= composition.min_activities)
             covered = []
@@ -70,18 +71,30 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                                           if pois[pid].activity_category == category])
                 covered.append(z)
             model.add(sum(covered) >= composition.min_activity_categories)
-            assigned = {k: [] for k in range(len(composition.meal_windows))}
+            meals = effective_meals(day, composition)
+            assigned = {k: [] for k in range(len(meals))}
             for pid in meal_ids:
                 choices = []
-                for k,w in enumerate(composition.meal_windows):
+                for k,w in enumerate(meals):
                     z = model.new_bool_var(f"meal_{day.date}_{pid}_{w.name}")
                     model.add(times[day.date,pid] >= w.start_min).only_enforce_if(z)
                     model.add(times[day.date,pid] + pois[pid].duration_min.value <= w.end_min).only_enforce_if(z)
+                    if w.fixed_start_min is not None:
+                        model.add(times[day.date,pid] == w.fixed_start_min).only_enforce_if(z)
+                    if w.preferred_start_min is not None:
+                        deviation = model.new_int_var(0, 1440, f"preference_{day.date}_{pid}_{w.name}")
+                        delta = model.new_int_var(0, 1440, f"delta_{day.date}_{pid}_{w.name}")
+                        model.add_abs_equality(delta, times[day.date,pid] - w.preferred_start_min)
+                        model.add(deviation == delta).only_enforce_if(z)
+                        model.add(deviation == 0).only_enforce_if(z.Not())
+                        meal_preferences.append(deviation)
                     choices.append(z)
                     assigned[k].append(z)
                 model.add(sum(choices) == visits[day.date,pid])
-            for choices in assigned.values():
+            for k, choices in assigned.items():
                 model.add(sum(choices) <= 1)
+                if meals[k].required:
+                    model.add(sum(choices) >= 1)
 
         for i in range(end):
             for j in range(1, end + 1):
@@ -129,6 +142,9 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     objectives = [("group_utility", utility, True, 0.7),
                   ("minimum_relevance", minimum, True, 0.2),
                   ("travel_minutes", travel, False, 0.1)]
+    if meal_preferences:
+        objectives[-1] = ("travel_minutes", travel, False, 0.05)
+        objectives.append(("meal_preference", sum(meal_preferences), False, 0.05))
     for name, expression, maximize, fraction in objectives:
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:
@@ -171,7 +187,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             model.add_hint(var, solver.value(var))
     if not incumbent:
         return RawSolution("UNKNOWN", phases=tuple(phases))
-    return RawSolution("OPTIMAL" if all_optimal and len(phases) == 3 else "FEASIBLE",
+    return RawSolution("OPTIMAL" if all_optimal and len(phases) == len(objectives) else "FEASIBLE",
                        incumbent, tuple(phases))
 
 

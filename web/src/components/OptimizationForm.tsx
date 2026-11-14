@@ -13,6 +13,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const qc = useQueryClient();
   const prior = view.latest_optimization?.configuration;
   const points = view.setup.points;
+  const composition = prior?.daily_composition ?? view.setup.default_composition;
   const [budget, setBudget] = useState(prior ? String(prior.budget_total) : "");
   const [mode, setMode] = useState(prior?.transport_mode ?? "");
   const [leg, setLeg] = useState(prior?.max_leg_minutes == null ? "" : String(prior.max_leg_minutes));
@@ -52,7 +53,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     {view.latest_optimization?.candidate_selection && <p className="small">
       Reviewed {view.latest_optimization.candidate_selection.catalogue_count.toLocaleString()} places &middot; selected {view.latest_optimization.candidate_selection.selected_count} candidates across the trip.
     </p>}
-    <p className="small">New plans: at most {prior?.daily_composition?.max_cafes ?? 2} caf&eacute;s, {prior?.daily_composition?.min_meals ?? 2}&ndash;{prior?.daily_composition?.max_meals ?? 3} meals in distinct meal windows, and at least {prior?.daily_composition?.min_activities ?? 2} activities from {prior?.daily_composition?.min_activity_categories ?? 2} categories each day. {(prior?.daily_composition?.separate_food_drink ?? true) && "An activity separates food/drink stops."} Meal windows: {(prior?.daily_composition?.meal_windows ?? [{ name: "breakfast", start_min: 420, end_min: 660 }, { name: "lunch", start_min: 660, end_min: 900 }, { name: "dinner", start_min: 1020, end_min: 1260 }]).map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}.</p>
+    <p className="small">New plans: at most {composition.max_cafes} caf&eacute;s and {composition.max_meals} meals, and at least {composition.min_activities} activities from {composition.min_activity_categories} categories each day. A meal is required when that day's travel hours overlap its window by at least {composition.meal_overlap_min} minutes. {composition.separate_food_drink && "An activity separates food/drink stops."} Base meal windows: {composition.meal_windows.map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}. Day-specific overrides take precedence.</p>
     <p className="small">Demo routes reuse saved Kakao results without expiry. Travel times may come from an earlier request.</p>
     <p className="small">Planning test mode: opening hours, closures, and budget limits are bypassed.</p>
     <p className="muted small">Times are local. Budget covers the whole group: supplied visit fees and route fares. Every member must confirm every trip date.</p>

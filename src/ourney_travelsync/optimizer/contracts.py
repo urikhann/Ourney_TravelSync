@@ -48,28 +48,52 @@ class MealWindow(Window):
     name: Literal["breakfast", "lunch", "dinner"]
 
 
+DEFAULT_MEAL_WINDOWS = (
+    MealWindow(name="lunch", start_min=690, end_min=870),
+    MealWindow(name="dinner", start_min=1050, end_min=1230),
+)
+
+
+class MealOverride(Contract):
+    date: date
+    name: Literal["lunch", "dinner", "breakfast"]
+    window: Window | None = None
+    preferred_start_min: Minute | None = None
+    fixed_start_min: Minute | None = None
+    required: bool = False
+
+    @model_validator(mode="after")
+    def sensible(self):
+        if self.preferred_start_min is not None and self.fixed_start_min is not None:
+            raise ValueError("choose preferred or fixed meal start, not both")
+        return self
+
+
 class DailyComposition(Contract):
     max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
-    min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = 2
+    # Accepted for old clients; named requirements now determine the minimum.
+    min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = Field(default=0, deprecated=True)
     max_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = 3
     min_activities: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
     min_activity_categories: Annotated[int, Field(strict=True, ge=0, le=9)] = 2
     separate_food_drink: bool = True
-    meal_windows: tuple[MealWindow, ...] = (
-        MealWindow(name="breakfast", start_min=420, end_min=660),
-        MealWindow(name="lunch", start_min=660, end_min=900),
-        MealWindow(name="dinner", start_min=1020, end_min=1260),
-    )
+    meal_windows: tuple[MealWindow, ...] = DEFAULT_MEAL_WINDOWS
+    meal_overlap_min: Annotated[int, Field(strict=True, ge=1, le=1440)] = 45
+    meal_timezone: Literal["Asia/Seoul"] = "Asia/Seoul"
+    meal_policy_version: Literal["meal-1.0"] = "meal-1.0"
+    meal_overrides: tuple[MealOverride, ...] = ()
 
     @model_validator(mode="after")
     def sensible(self):
-        if self.min_meals > self.max_meals or self.min_meals > len(self.meal_windows):
-            raise ValueError("invalid meal count bounds")
         if self.min_activity_categories > self.min_activities:
             raise ValueError("activity category minimum exceeds activity minimum")
         windows = sorted(self.meal_windows, key=lambda w: w.start_min)
         if len({w.name for w in windows}) != len(windows) or any(a.end_min > b.start_min for a,b in zip(windows,windows[1:])):
             raise ValueError("meal windows must be distinct and non-overlapping")
+        if len({(o.date, o.name) for o in self.meal_overrides}) != len(self.meal_overrides):
+            raise ValueError("duplicate day/meal override")
+        if any(o.name not in {w.name for w in windows} for o in self.meal_overrides):
+            raise ValueError("override references unconfigured meal")
         return self
 
 
@@ -155,7 +179,7 @@ class PlanRequest(Contract):
     candidates: Annotated[tuple[Candidate, ...], Field(max_length=60)]
     edges: Annotated[tuple[Edge, ...], Field(max_length=12000)]
     budget_total: NonNegative
-    daily_composition: DailyComposition | None = None
+    daily_composition: DailyComposition | None = Field(default_factory=DailyComposition)
     enforce_cost: bool = True
     enforce_opening_hours: bool = True
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
@@ -192,6 +216,9 @@ class PlanRequest(Contract):
             raise ValueError("lock references unknown POI/date")
         if any(e.date not in dates for e in self.edges):
             raise ValueError("edge references unknown date")
+        if self.daily_composition is not None:
+            from .meals import validate_meal_overrides
+            validate_meal_overrides(self.days, self.daily_composition)
         return self
 
 
@@ -227,7 +254,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "minimum_relevance", "travel_minutes"]
+    objective: Literal["group_utility", "minimum_relevance", "travel_minutes", "meal_preference"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

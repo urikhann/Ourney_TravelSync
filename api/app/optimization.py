@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,12 @@ class GenerateInput(Contract):
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     required_access: Annotated[tuple[Annotated[str, Field(min_length=1, max_length=60)], ...], Field(max_length=20)] = ()
     locked_items: Annotated[tuple[Lock, ...], Field(max_length=60)] = ()
+
+    @model_validator(mode="after")
+    def valid_meals(self):
+        from ourney_travelsync.optimizer.meals import validate_meal_overrides
+        validate_meal_overrides(self.days, self.daily_composition)
+        return self
 
 
 class OperatingInput(Contract):

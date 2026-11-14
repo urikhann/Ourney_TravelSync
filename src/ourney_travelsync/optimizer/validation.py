@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from .contracts import DayPlan, PlanRequest
+from .meals import effective_meals, meals_can_be_assigned
 
 
 @dataclass(frozen=True)
@@ -122,20 +123,20 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             activities = [p for v,p in actual if p.visit_category == "activity"]
             if len(cafes) > composition.max_cafes:
                 problem("CAFE_LIMIT", day.date)
-            if not composition.min_meals <= len(meals) <= composition.max_meals:
+            if len(meals) > composition.max_meals:
                 problem("MEAL_COUNT", day.date)
             if len(activities) < composition.min_activities:
                 problem("ACTIVITY_COUNT", day.date)
             if len({p.activity_category for p in activities}) < composition.min_activity_categories:
                 problem("ACTIVITY_CATEGORY_COUNT", day.date)
-            assigned = set()
+            effective = effective_meals(day, composition)
+            if not meals_can_be_assigned(effective, meals):
+                problem("REQUIRED_MEAL_MISSING_OR_CONFLICT", day.date)
+            # All selected meal visits must fit an effective slot; matching of
+            # required meals above uses distinct visits even if overrides overlap.
             for visit in meals:
-                matching = [w.name for w in composition.meal_windows
-                            if w.start_min <= visit.start_min and visit.departure_min <= w.end_min]
-                if len(matching) != 1 or matching[0] in assigned:
+                if not any(w.matches(visit.start_min, visit.departure_min) for w in effective):
                     problem("MEAL_WINDOW", day.date, visit.poi_id)
-                else:
-                    assigned.add(matching[0])
             if composition.separate_food_drink and any(
                     p.visit_category in ("meal", "cafe") and next_p.visit_category in ("meal", "cafe")
                     for (_,p),(_,next_p) in zip(actual,actual[1:])):

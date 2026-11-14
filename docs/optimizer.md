@@ -1,5 +1,9 @@
 # Module H — itinerary optimizer
 
+Meal policy update (2026-11-14): see [dynamic meal scheduling](dynamic_meals.md)
+for day-specific requirements, typed overrides, preview-only proposals and the
+app's retained budget/opening-hours bypass.
+
 Update 2026-11-06: the authenticated production app is now wired to Module H;
 see [app integration and planning-data setup](optimizer_app_integration.md).
 The standalone implementation and its original integration requirements are

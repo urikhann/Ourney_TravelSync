@@ -245,6 +245,7 @@
         "fetched_at": "2026-11-01T00:00:00Z"
       }
     ],
+    "daily_composition": null,
     "budget_total": 10000,
     "max_leg_minutes": null,
     "max_total_walk_minutes": null,

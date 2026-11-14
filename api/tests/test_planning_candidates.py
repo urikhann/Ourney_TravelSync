@@ -115,12 +115,12 @@ def test_app_composition_reserves_restaurants_and_validates_published_day(planni
     audit=audits(tid)[0]
     req=audit.optimizer_request
     assert req["daily_composition"]["max_cafes"]==2
-    assert req["daily_composition"]["min_meals"]==2
+    assert req["daily_composition"]["min_meals"]==0
     assert req["enforce_cost"] is False and req["enforce_opening_hours"] is False
     p={x["poi_id"]:x for x in req["candidates"]}
     assert sum(x["visit_category"]=="meal" for x in p.values()) >= 2
     visits=response.json()["plans"][0]["days"][0]["items"]
     roles=[v["visit_category"] for v in visits]
-    assert roles.count("cafe")<=2 and 2<=roles.count("meal")<=3
+    assert roles.count("cafe")<=2 and 1<=roles.count("meal")<=2
     assert len({v["activity_category"] for v in visits if v["visit_category"]=="activity"})>=2
     assert all(a=="activity" or b=="activity" for a,b in zip(roles,roles[1:]))
