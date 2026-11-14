@@ -45,7 +45,7 @@ def test_infeasible_is_distinct_from_timeout():
 
 def test_missing_data_and_member_conflict_are_not_solver_infeasibility():
     data = request_data(1)
-    data["candidates"][0]["cost_per_person"] = {}
+    data["candidates"][0]["duration_min"] = {}
     res = api.optimize(data)
     assert res.error_code == "INSUFFICIENT_CANDIDATES" and res.solver_status == "NOT_RUN"
     data = request_data(1)

@@ -53,16 +53,24 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
             why.append("EXPLICIT_EXCLUSION")
         if not usable_duration(p.duration_min):
             why.append("DURATION_UNKNOWN")
-        if not usable_cost(p.cost_per_person):
-            why.append("COST_UNKNOWN")
         if any(a not in p.access or not p.access[a].known or p.access[a].value is not True for a in access):
             why.append("ACCESS_UNVERIFIED_OR_UNSATISFIED")
         per_date = {}
         if not why:
             for day in req.days:
                 op = p.operations.get(day.date)
-                if day.date not in bounds:
+                if p.allowed_dates is not None and day.date not in p.allowed_dates:
+                    why.append(f"{day.date}:DAY_CANDIDATE_NOT_SELECTED")
+                elif day.date not in bounds:
                     why.append(f"{day.date}:CONSTRAINT_CONFLICT")
+                elif not req.enforce_opening_hours:
+                    bound = bounds[day.date]
+                    if p.is_festival and (op is None or not op.event_active.known or op.event_active.value is not True):
+                        why.append(f"{day.date}:EVENT_UNVERIFIED_OR_INACTIVE")
+                    elif bound.end_min - bound.start_min >= p.duration_min.value:
+                        per_date[day.date] = (bound,)
+                    else:
+                        why.append(f"{day.date}:NO_FULL_STAY_WINDOW")
                 elif op is None or not op.openings.known or not op.closed.known:
                     why.append(f"{day.date}:OPERATING_INFO_UNKNOWN")
                 elif op.closed.value:

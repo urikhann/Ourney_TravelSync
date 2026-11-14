@@ -118,8 +118,7 @@ def check(req: dict) -> None:
         raise HTTPException(422, 'duplicate_members')
 
 
-@app.post("/recommend")
-def recommend(req: dict):
+def recommend(req: dict, *, planning=False):
     check(req)
     members, opts = req["members"], req.get("options") or {}
     for field in ('top_l', 'group_k'):
@@ -183,12 +182,23 @@ def recommend(req: dict):
 
     users = {m["user_id"]: m["ratings"] for m in members}
     try:
-        data = prepare_group(P, users, individual_top_n=top_l, tie_seed=seed, excluded_place_ids=excluded,
+        data = prepare_group(P, users, individual_top_n=max(1, len(P.place_ids)) if planning else top_l, tie_seed=seed, excluded_place_ids=excluded,
                              individual_method=individual_method,
                              scoring_config=config,
                              preference_texts={m['user_id']: taste_query(m.get('tastes')) for m in members})
     except ValueError as e:
         raise HTTPException(422, f"invalid_input: {e}")
+    selection = None
+    if planning:
+        from ourney_travelsync.recommenders.itinerary_candidates import select_days
+        try:
+            data, selection = select_days(data, {r["place_id"]: r for r in P.records},
+                                          req["planning_days"], req.get("planning_locks", []),
+                                          req.get("planning_composition"))
+        except (ValueError, KeyError, TypeError):
+            raise HTTPException(422, "invalid_planning_candidate_request") from None
+        group_k = len(data.poi_ids)
+
     S = data.individual_scores  # [members, candidates], on the declared score scale
     col = {pid: j for j, pid in enumerate(data.poi_ids)}
     uids = list(data.user_ids)
@@ -233,6 +243,8 @@ def recommend(req: dict):
                                          if any_hybrid else 'Feature preferences guide this ranking because semantic scoring was unavailable or neutral.')}]
         group.append({
             "poi_id": p.poi_id, "group_rank": rank,
+            **({"candidate_dates": [d for d, ids in selection["day_candidate_ids"].items() if p.poi_id in ids]}
+               if selection is not None else {}),
             "mean_score": round(float(S[:, j].mean()), 4),
             "selection_gain": round(p.score, 6) if method == "gfar" else None,
             "group_utility": utility(rank, k),
@@ -267,6 +279,7 @@ def recommend(req: dict):
         'exhaustion_reason': None if k else ('hard_constraints' if len(excluded) == len(P.place_ids)
                                             else 'awm_threshold' if method == 'awm' else 'no_candidates'),
         "group": group, "removed": removed, "individual": individual,
+        **({"planning_candidate_selection": {**selection, "catalogue_count": len(P.place_ids)}} if selection is not None else {}),
         "metrics": {
             "eligible": len(P.place_ids) - len(excluded), "candidate_pool": len(data.poi_ids), "returned": k,
             "per_member_relevance": cover, "min_member_relevance": min(cover.values()) if cover else 0,
@@ -274,6 +287,18 @@ def recommend(req: dict):
             "min_member_satisfaction": min((v for v in sat.values() if v is not None), default=None),
         },
     }
+
+
+@app.post("/recommend")
+def recommendation(req: dict):
+    return recommend(req)
+
+
+@app.post("/planning-candidates")
+def planning_candidates(req: dict):
+    if req.get("options", {}).get("method", "gfar") != "gfar":
+        raise HTTPException(422, "planning_requires_gfar")
+    return recommend(req, planning=True)
 
 
 @app.get("/health")

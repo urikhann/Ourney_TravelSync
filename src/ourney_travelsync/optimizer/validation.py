@@ -81,14 +81,16 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if p is None:
                 problem("UNKNOWN_POI", day.date, v.poi_id)
                 continue
+            if p.allowed_dates is not None and day.date not in p.allowed_dates:
+                problem("DAY_CANDIDATE_NOT_SELECTED", day.date, v.poi_id)
             e = leg(v.poi_id)
             if e is not None and (v.arrival_min != depart + e.duration_minutes or v.travel_minutes != e.duration_minutes):
                 problem("TRAVEL_CONNECTION", day.date, v.poi_id)
             if not supported(p.duration_min, "duration"):
                 problem("DURATION_UNVERIFIED", day.date, v.poi_id)
-            if not supported(p.cost_per_person, "cost"):
-                problem("COST_UNVERIFIED", day.date, v.poi_id)
-            stay, fee = p.duration_min.value, p.cost_per_person.value
+            # Unverified place fees are excluded from accounting, not verified as free.
+            stay = p.duration_min.value
+            fee = p.cost_per_person.value if supported(p.cost_per_person, "cost") else 0
             if stay is not None and (v.stay_minutes != stay or v.departure_min != v.start_min + stay):
                 problem("STAY_MISMATCH", day.date, v.poi_id)
             if fee is not None:
@@ -99,7 +101,7 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if v.start_min < v.arrival_min or v.start_min < day.start_min or v.departure_min > day.end_min:
                 problem("VISIT_TIME_ORDER", day.date, v.poi_id)
             op = p.operations.get(day.date)
-            if (op is None or not op.openings.known or not op.closed.known or op.closed.value is not False
+            if req.enforce_opening_hours and (op is None or not op.openings.known or not op.closed.known or op.closed.value is not False
                     or not any(w.start_min <= v.start_min and v.departure_min <= w.end_min
                                for w in (op.openings.value or ()))):
                 problem("OPERATING_WINDOW", day.date, v.poi_id)
@@ -112,6 +114,32 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
                        for a in m.required_access):
                     problem("REQUIRED_ACCESS", day.date, v.poi_id)
             prev, depart = v.poi_id, v.departure_min
+        composition = req.daily_composition
+        if composition is not None:
+            actual = [(v, pois[v.poi_id]) for v in plan.items if v.poi_id in pois]
+            cafes = [v for v,p in actual if p.visit_category == "cafe"]
+            meals = [v for v,p in actual if p.visit_category == "meal"]
+            activities = [p for v,p in actual if p.visit_category == "activity"]
+            if len(cafes) > composition.max_cafes:
+                problem("CAFE_LIMIT", day.date)
+            if not composition.min_meals <= len(meals) <= composition.max_meals:
+                problem("MEAL_COUNT", day.date)
+            if len(activities) < composition.min_activities:
+                problem("ACTIVITY_COUNT", day.date)
+            if len({p.activity_category for p in activities}) < composition.min_activity_categories:
+                problem("ACTIVITY_CATEGORY_COUNT", day.date)
+            assigned = set()
+            for visit in meals:
+                matching = [w.name for w in composition.meal_windows
+                            if w.start_min <= visit.start_min and visit.departure_min <= w.end_min]
+                if len(matching) != 1 or matching[0] in assigned:
+                    problem("MEAL_WINDOW", day.date, visit.poi_id)
+                else:
+                    assigned.add(matching[0])
+            if composition.separate_food_drink and any(
+                    p.visit_category in ("meal", "cafe") and next_p.visit_category in ("meal", "cafe")
+                    for (_,p),(_,next_p) in zip(actual,actual[1:])):
+                problem("CONSECUTIVE_FOOD_DRINK", day.date)
         e = leg(day.end_point)
         if e is not None and (plan.end_arrival_min != depart + e.duration_minutes
                               or plan.return_travel_minutes != e.duration_minutes):
@@ -134,7 +162,7 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
         total_cost += cost
         total_travel += travel
         total_walk += walk
-    if total_cost > req.budget_total:
+    if req.enforce_cost and total_cost > req.budget_total:
         errors.append("TOTAL_BUDGET_EXCEEDED")
     for lock in req.locked_items:
         actual = records.get(lock.poi_id)

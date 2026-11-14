@@ -27,6 +27,19 @@ async def _post(base_url: str, path: str, payload: dict, service: str, timeout: 
     except ValueError:
         raise HTTPException(502, f"{service}_invalid_response") from None
     except httpx.HTTPStatusError as e:
+        if service == "planning_data":
+            # Only forward our adapter's fixed codes; never expose provider bodies or credentials.
+            allowed = {"routing_credentials_rejected", "routing_quota_exceeded",
+                       "routing_provider_error", "routing_provider_unavailable",
+                       "routing_invalid_response", "routing_no_routes", "routing_request_rejected",
+                       "routing_start_point_unreachable", "routing_end_point_unreachable", "routing_cache_unavailable",
+                       "kakao_rest_api_key_not_configured"}
+            try:
+                detail = e.response.json().get("detail")
+            except (ValueError, AttributeError):
+                detail = None
+            if isinstance(detail, str) and detail in allowed:
+                raise HTTPException(503, detail) from None
         raise HTTPException(502, f"{service}_error_{e.response.status_code}")
     except httpx.HTTPError:
         raise HTTPException(503, f"{service}_unavailable")
@@ -34,6 +47,11 @@ async def _post(base_url: str, path: str, payload: dict, service: str, timeout: 
 
 async def recommend(payload: dict) -> dict:
     return await _post(config.RECOMMENDER_URL, "/recommend", payload, "recommender")
+
+
+async def planning_candidates(payload: dict) -> dict:
+    return await _post(config.RECOMMENDER_URL, "/planning-candidates", payload,
+                       "planning_candidates", config.PLANNING_DATA_TIMEOUT_SECONDS)
 
 
 async def build_plans(payload: dict) -> dict:

@@ -44,6 +44,35 @@ class Window(Contract):
         return self
 
 
+class MealWindow(Window):
+    name: Literal["breakfast", "lunch", "dinner"]
+
+
+class DailyComposition(Contract):
+    max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
+    min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = 2
+    max_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = 3
+    min_activities: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
+    min_activity_categories: Annotated[int, Field(strict=True, ge=0, le=9)] = 2
+    separate_food_drink: bool = True
+    meal_windows: tuple[MealWindow, ...] = (
+        MealWindow(name="breakfast", start_min=420, end_min=660),
+        MealWindow(name="lunch", start_min=660, end_min=900),
+        MealWindow(name="dinner", start_min=1020, end_min=1260),
+    )
+
+    @model_validator(mode="after")
+    def sensible(self):
+        if self.min_meals > self.max_meals or self.min_meals > len(self.meal_windows):
+            raise ValueError("invalid meal count bounds")
+        if self.min_activity_categories > self.min_activities:
+            raise ValueError("activity category minimum exceeds activity minimum")
+        windows = sorted(self.meal_windows, key=lambda w: w.start_min)
+        if len({w.name for w in windows}) != len(windows) or any(a.end_min > b.start_min for a,b in zip(windows,windows[1:])):
+            raise ValueError("meal windows must be distinct and non-overlapping")
+        return self
+
+
 class Day(Window):
     date: date
     start_point: Annotated[str, Field(min_length=1)]
@@ -74,6 +103,9 @@ class Candidate(Contract):
     mean_score: Unit
     personal_scores: dict[str, Unit]
     relevance: dict[str, Unit]
+    visit_category: Literal["cafe", "meal", "activity"] = "activity"
+    activity_category: Literal["nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival", "other"] = "other"
+    allowed_dates: tuple[date, ...] | None = None
     tags: tuple[str, ...] = ()
     is_festival: bool = False
     duration_min: Fact[Annotated[int, Field(strict=True, ge=1, le=1440)]] = Field(default_factory=Fact)
@@ -123,6 +155,9 @@ class PlanRequest(Contract):
     candidates: Annotated[tuple[Candidate, ...], Field(max_length=60)]
     edges: Annotated[tuple[Edge, ...], Field(max_length=12000)]
     budget_total: NonNegative
+    daily_composition: DailyComposition | None = None
+    enforce_cost: bool = True
+    enforce_opening_hours: bool = True
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     locked_items: tuple[Lock, ...] = ()
@@ -145,6 +180,8 @@ class PlanRequest(Contract):
         if any(d.start_point in ids or d.end_point in ids for d in self.days):
             raise ValueError("endpoint IDs must be separate from candidate IDs")
         for p in self.candidates:
+            if p.allowed_dates is not None and not set(p.allowed_dates).issubset(dates):
+                raise ValueError("candidate references unknown date")
             if p.dataset_version != self.dataset_version:
                 raise ValueError("dataset_version mismatch")
             if set(p.personal_scores) != members or set(p.relevance) != members:

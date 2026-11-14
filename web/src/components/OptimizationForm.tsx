@@ -42,11 +42,19 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     e.preventDefault();
     generate.mutate({ budget_total: Number(budget), transport_mode: mode as OptimizationInput["transport_mode"],
       max_leg_minutes: leg === "" ? null : Number(leg), max_total_walk_minutes: walk === "" ? null : Number(walk),
+      daily_composition: prior?.daily_composition,
       required_access: prior?.required_access ?? [], locked_items: prior?.locked_items ?? [],
       days: daily.map(d => ({ date: d.date, start_min: minute(d.start), end_min: d.end === "00:00" ? 1440 : minute(d.end),
         start_point: point(d.from, d, "from"), end_point: point(d.to, d, "to") })) });
   }}>
     <h2 style={{ fontSize: 17, marginTop: 0 }}>Planning conditions</h2>
+    <p className="muted small">Candidates are retrieved from the full catalogue for each day using group preferences, exclusions, start/end locations, nearby clusters, and visit duration.</p>
+    {view.latest_optimization?.candidate_selection && <p className="small">
+      Reviewed {view.latest_optimization.candidate_selection.catalogue_count.toLocaleString()} places &middot; selected {view.latest_optimization.candidate_selection.selected_count} candidates across the trip.
+    </p>}
+    <p className="small">New plans: at most {prior?.daily_composition?.max_cafes ?? 2} caf&eacute;s, {prior?.daily_composition?.min_meals ?? 2}&ndash;{prior?.daily_composition?.max_meals ?? 3} meals in distinct meal windows, and at least {prior?.daily_composition?.min_activities ?? 2} activities from {prior?.daily_composition?.min_activity_categories ?? 2} categories each day. {(prior?.daily_composition?.separate_food_drink ?? true) && "An activity separates food/drink stops."} Meal windows: {(prior?.daily_composition?.meal_windows ?? [{ name: "breakfast", start_min: 420, end_min: 660 }, { name: "lunch", start_min: 660, end_min: 900 }, { name: "dinner", start_min: 1020, end_min: 1260 }]).map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}.</p>
+    <p className="small">Demo routes reuse saved Kakao results without expiry. Travel times may come from an earlier request.</p>
+    <p className="small">Planning test mode: opening hours, closures, and budget limits are bypassed.</p>
     <p className="muted small">Times are local. Budget covers the whole group: supplied visit fees and route fares. Every member must confirm every trip date.</p>
     {!!prior?.locked_items?.length && <p className="small">{prior.locked_items.length} locked visits will be retained.</p>}
     {!!prior?.required_access?.length && <p className="small">Required access retained: {prior.required_access.join(", ")}</p>}

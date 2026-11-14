@@ -13,8 +13,10 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ourney_travelsync.optimizer.contracts import (Candidate, Contract, Edge, Fact, Lock, Member,
+from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyComposition, Edge, Fact, Lock, Member,
                                                   NonNegative, Operation, PlanRequest, Window)
+
+from ourney_travelsync.planning_categories import visit_role
 
 from . import config
 from .models import DatasetVersion, MemberAvailability, Poi, Preference, RecommendationRun, Trip, TripMember
@@ -37,6 +39,7 @@ class DailyInput(Window):
 
 
 class GenerateInput(Contract):
+    daily_composition: DailyComposition = Field(default_factory=DailyComposition)
     days: Annotated[tuple[DailyInput, ...], Field(min_length=1, max_length=3)]
     budget_total: NonNegative
     transport_mode: Literal["walk", "drive", "transit"]
@@ -87,7 +90,8 @@ def state(db: Session, trip_id: str) -> dict:
     return dict(start_date=first.isoformat(), end_date=last.isoformat(), members=members, recommendation_run_id=latest)
 
 
-def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session, current: dict):
+def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session, current: dict,
+            recommendation=None, preflight_only=False):
     if run.method != "gfar":
         raise HTTPException(409, "optimizer_requires_gfar")
     if sorted(d.date.isoformat() for d in body.days) != dates(trip):
@@ -105,16 +109,27 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
             raise HTTPException(409, "recommendations_stale")
         if any(d.date.isoformat() not in m["dates"] for d in body.days):
             raise HTTPException(409, "optimizer_member_unavailable")
-    scale = run.response.get("score_scale")
-    if scale not in ("0-1", "1-5", "relative_relevance_0_1") or not run.response.get("relevance_version"):
+    recommendation = run.response if recommendation is None else recommendation
+    scale = recommendation.get("score_scale")
+    if scale not in ("0-1", "1-5", "relative_relevance_0_1") or not recommendation.get("relevance_version"):
         raise HTTPException(409, "optimizer_recommendation_data_missing")
-    group = run.response.get("group", [])
-    if not group or len(group) > 60 or len({r["poi_id"] for r in group}) != len(group):
-        raise HTTPException(409, "optimizer_candidate_count_invalid")
+    group = recommendation.get("group", [])
     ids = {r["poi_id"] for r in group}
     if (len({l.poi_id for l in body.locked_items}) != len(body.locked_items)
-            or any(l.poi_id not in ids or l.date.isoformat() not in dates(trip) for l in body.locked_items)):
+            or any((not preflight_only and l.poi_id not in ids) or l.date.isoformat() not in dates(trip) for l in body.locked_items)):
         raise HTTPException(422, "optimizer_invalid_locks")
+    if preflight_only and body.locked_items:
+        locked_rows = db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version,
+            Poi.id.in_([l.poi_id for l in body.locked_items]))).all()
+        banned = {pid for m in current["members"] for pid in m["exclusions"].get("poi_ids", [])}
+        banned_tags = {tag for m in current["members"] for tag in m["exclusions"].get("tags", [])}
+        if (len(locked_rows) != len(body.locked_items)
+                or any(p.id in banned or banned_tags.intersection(p.tags or []) for p in locked_rows)):
+            raise HTTPException(422, "optimizer_invalid_locks")
+    if preflight_only:
+        return
+    if not group or len(group) > 60 or len({r["poi_id"] for r in group}) != len(group):
+        raise HTTPException(409, "optimizer_candidate_count_invalid")
     rows = {p.id: p for p in db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version,
                                                           Poi.id.in_([r["poi_id"] for r in group])))}
     if len(rows) != len(group):
@@ -133,11 +148,14 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         # Normalize the captured values without clamping invalid data into range.
         scores = {u: (v - 1) / 4 if scale == "1-5" else v for u, v in raw_scores.items()}
         p = rows[row["poi_id"]]
+        role, category = visit_role(p.features)
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
                                     personal_scores=scores, relevance=relevance, tags=tuple(p.tags),
-                                    is_festival=bool(p.features.get("festival"))))
+                                    is_festival=bool(p.features.get("festival")),
+                                    allowed_dates=row.get("candidate_dates"),
+                                    visit_category=role, activity_category=category))
     daily = [dict(date=d.date.isoformat(), start_min=d.start_min, end_min=d.end_min,
                   start_point=f"start:{d.date}", end_point=f"end:{d.date}") for d in sorted(body.days, key=lambda d: d.date)]
     points = {f"{kind}:{d.date}": getattr(d, f"{kind}_point").model_dump(mode="json")
@@ -145,7 +163,20 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
     return members, candidates, daily, points, rows, version.mapping_version
 
 
-def data_request(run, audit_id, body, daily, points, rows):
+def catalogue_request(run, body, db):
+    """Reuse pinned member preferences; retrieve all rows of the pinned dataset."""
+    rows = db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version).order_by(Poi.id)).all()
+    return {**run.request,
+        "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
+            category_name=p.category, latitude=p.lat, longitude=p.lng,
+            enriched_metadata=p.enriched_metadata, duration_min=p.duration_min,
+            field_status=p.field_status, **p.features) for p in rows],
+        "planning_days": [d.model_dump(mode="json") for d in body.days],
+        "planning_locks": [l.model_dump(mode="json") for l in body.locked_items],
+        "planning_composition": body.daily_composition.model_dump(mode="json")}
+
+
+def data_request(run, audit_id, body, daily, points, rows, selection=None):
     context = dict(schema_version="planning-data-1.0", run_id=f"{run.id}:{audit_id}",
                    dataset_version=run.dataset_version, transport_mode=body.transport_mode,
                    group_size=len(run.member_snapshot), days=daily, points=points,
@@ -153,6 +184,8 @@ def data_request(run, audit_id, body, daily, points, rows):
                    pois=[dict(poi_id=p.id, latitude=p.lat, longitude=p.lng,
                               metadata=p.enriched_metadata, field_status=p.field_status)
                          for p in sorted(rows.values(), key=lambda p: p.id)])
+    if selection is not None:
+        context["day_candidate_ids"] = selection["day_candidate_ids"]
     return {**context, "context_id": fingerprint(context)}
 
 
@@ -178,7 +211,9 @@ def solver_request(run, audit_id, body, prepared, request, response):
                    operating_snapshot_id=data.operating_snapshot_id, routing_version=data.routing_version,
                    transport_mode=body.transport_mode, days=daily, members=[m.model_dump(mode="json") for m in members],
                    candidates=[p.model_dump(mode="json") for p in enriched], edges=[e.model_dump(mode="json") for e in data.edges],
-                   budget_total=body.budget_total, max_leg_minutes=body.max_leg_minutes,
+                   daily_composition=body.daily_composition.model_dump(mode="json"),
+                   budget_total=body.budget_total, enforce_cost=False, enforce_opening_hours=False,
+                   max_leg_minutes=body.max_leg_minutes,
                    max_total_walk_minutes=body.max_total_walk_minutes,
                    locked_items=[l.model_dump(mode="json") for l in body.locked_items],
                    search_seconds=config.OPTIMIZER_SEARCH_SECONDS, seed=int(run.response.get("tie_seed", 0)) % (2**31))

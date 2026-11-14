@@ -15,7 +15,7 @@ def run(data):
     return solve_prepared(req, eligibility), eligibility
 
 
-@pytest.mark.parametrize("field", ["duration_min", "cost_per_person"])
+@pytest.mark.parametrize("field", ["duration_min"])
 def test_missing_required_field_excludes_without_mutating_recommendation(field):
     data = request_data(1)
     data["candidates"][0][field] = {}
@@ -36,12 +36,12 @@ def test_unknown_operating_data_never_becomes_all_day_open(what):
     assert any("OPERATING_INFO_UNKNOWN" in r for r in es[0].reasons)
 
 
-def test_estimates_require_explicit_provenance_and_cost_upper_bound():
+def test_duration_estimate_requires_provenance_but_cost_is_optional():
     data = request_data(1)
     p = data["candidates"][0]
     p["duration_min"].update(status="ESTIMATED", rule_version="fixture-rule1")
     p["cost_per_person"].update(status="ESTIMATED")
-    assert not run(data)[1][0].schedule_eligible
+    assert run(data)[1][0].schedule_eligible
     p["cost_per_person"]["user_upper_bound"] = True
     assert run(data)[1][0].schedule_eligible
 
@@ -140,3 +140,48 @@ def test_exact_closing_boundary_contains_full_stay():
     data["candidates"][0]["operations"][DAY]["openings"] = fact([dict(start_min=600, end_min=660)])
     result, _ = run(data)
     assert result.days[0].items[0].departure_min == 660
+
+
+@pytest.mark.parametrize("cost", [{}, {"status": "UNKNOWN", "value": 99999}])
+def test_unknown_cost_allows_planning_and_e3_without_changing_source(cost):
+    from ourney_travelsync.optimizer.validation import validate_final
+
+    data = request_data(1)
+    data["candidates"][0]["cost_per_person"] = cost
+    data["budget_total"] = 20  # Only the two verified route fares count.
+    original = deepcopy(data)
+    result, eligibility = run(data)
+    assert eligibility[0].schedule_eligible
+    assert result.status == "OPTIMAL"
+    assert result.days[0].items[0].visit_cost == 0
+    assert result.days[0].total_cost == 20
+    assert validate_final(PlanRequest.model_validate(data), result.days).passed
+    assert data == original
+    forged = [result.days[0].model_dump(mode="json")]
+    forged[0]["items"][0]["visit_cost"] = 1
+    assert not validate_final(PlanRequest.model_validate(data), forged).passed
+
+@pytest.mark.parametrize("operations", [{}, {DAY: {"openings": {}, "closed": fact(True)}}])
+def test_app_test_mode_ignores_hours_and_budget_without_changing_facts(operations):
+    from ourney_travelsync.optimizer.validation import validate_final
+
+    data = request_data(1)
+    data.update(enforce_cost=False, enforce_opening_hours=False, budget_total=0)
+    data["candidates"][0]["operations"] = operations
+    original = deepcopy(data)
+    result, eligibility = run(data)
+    assert eligibility[0].schedule_eligible
+    assert result.status == "OPTIMAL"
+    assert result.days[0].total_cost == 220
+    assert validate_final(PlanRequest.model_validate(data), result.days).passed
+    assert data == original
+
+
+def test_day_candidate_membership_survives_hours_and_budget_bypass():
+    data = request_data(1)
+    data["enforce_cost"] = data["enforce_opening_hours"] = False
+    data["candidates"][0]["allowed_dates"] = []
+    result, eligibility = run(data)
+    assert not eligibility[0].schedule_eligible
+    assert any("DAY_CANDIDATE_NOT_SELECTED" in reason for reason in eligibility[0].reasons)
+    assert result.status == "INFEASIBLE"

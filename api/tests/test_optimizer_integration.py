@@ -82,7 +82,7 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
     assert audit.optimizer_request["dataset_version"] == rec["dataset_version"]
     assert audit.optimizer_request == audit.response["input_snapshot"]
     assert audit.optimizer_request["budget_total"] == 10000
-    source = {p["poi_id"]: p for p in rec["group"]}
+    source = {p["poi_id"]: p for p in audit.input["candidate_retrieval"]["group"]}
     for candidate in audit.optimizer_request["candidates"]:
         row = source[candidate["poi_id"]]
         expected = {u: (v - 1) / 4 if individual_method == "feature_mean" else v
@@ -103,10 +103,7 @@ def test_no_adapter_fails_without_greedy_fallback(monkeypatch):
 
 
 @pytest.mark.parametrize("missing,reason", [
-    ("cost_per_person", "COST_UNKNOWN"),
     ("duration_min", "DURATION_UNKNOWN"),
-    ("openings", "OPERATING_INFO_UNKNOWN"),
-    ("closed", "OPERATING_INFO_UNKNOWN"),
     ("route_duration", "ROUTE_UNAVAILABLE"),
     ("route_fare", "ROUTE_UNAVAILABLE"),
 ])
@@ -257,3 +254,18 @@ def test_saved_snapshot_is_preserved_but_not_approvable_after_member_change(plan
     view = c.get(f"/trips/{tid}/itineraries", headers=h).json()
     assert view["plans"][0]["id"] == old["id"] and view["plans"][0]["stale"]
     assert c.post(f"/itineraries/{old['id']}/vote", headers=h).json()["detail"] == "optimizer_inputs_changed"
+
+
+def test_missing_place_cost_does_not_block_generation(planning_adapter):
+    h, tid, _ = ready()
+    def unknown_cost(req, response):
+        for p in response["pois"]:
+            p["cost_per_person"] = {}
+        return response
+    planning_adapter.transform = unknown_cost
+    response = generate(h, tid)
+    assert response.status_code == 200, response.text
+    plan = response.json()["plans"][0]
+    assert plan["stats"]["validation_status"] == "PASSED"
+    assert all(item["visit_cost"] == 0 for day in plan["days"] for item in day["items"])
+    assert all(p["cost_per_person"]["status"] == "UNKNOWN" for p in audits(tid)[-1].optimizer_request["candidates"])
