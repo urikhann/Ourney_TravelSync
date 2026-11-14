@@ -42,6 +42,24 @@ services:
       interval: 5s
       retries: 20
 
+  planning-data:
+    build: {context: ., dockerfile: services/planning_data/Dockerfile}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      KAKAO_ROUTE_RADIUS: ${KAKAO_ROUTE_RADIUS:-5000}
+      KAKAO_ROUTE_CONCURRENCY: ${KAKAO_ROUTE_CONCURRENCY:-8}
+      ROUTE_CACHE_PATH: /cache/routes.sqlite3
+      PLANNING_DATA_TOKEN: ${PLANNING_DATA_TOKEN:-}
+    volumes: ["route_cache:/cache"]
+    ports: ["127.0.0.1:8004:8004"]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 5s
+      retries: 20
+
   mocks:  # availability checker and AI agent stand-ins; never used for production planning
     build: ./services/mocks
     environment:
@@ -62,9 +80,9 @@ services:
       PLACES_FOLLOW_ENV: "true"   # import / activate PLACES_VERSION on start, so switching to the demo pool just works
       RECOMMENDER_URL: http://recommender:8002
       OPTIMIZER_URL: http://optimizer:8003
-      PLANNING_DATA_URL: ${PLANNING_DATA_URL:-}
+      PLANNING_DATA_URL: ${PLANNING_DATA_URL:-http://planning-data:8004}
       PLANNING_DATA_TOKEN: ${PLANNING_DATA_TOKEN:-}
-      PLANNING_DATA_TIMEOUT_SECONDS: ${PLANNING_DATA_TIMEOUT_SECONDS:-20}
+      PLANNING_DATA_TIMEOUT_SECONDS: ${PLANNING_DATA_TIMEOUT_SECONDS:-180}
       OPTIMIZER_TIMEOUT_SECONDS: "45"
       AVAILABILITY_URL: http://mocks:8001
       AGENT_URL: http://mocks:8001
@@ -75,6 +93,7 @@ services:
       db: {condition: service_healthy}
       recommender: {condition: service_healthy}
       optimizer: {condition: service_healthy}
+      planning-data: {condition: service_healthy}
     volumes: ["./api/app:/code/app", "./src/ourney_travelsync/data:/data:ro"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
@@ -94,4 +113,5 @@ services:
     volumes: ["./web:/web", "/web/node_modules"]
 
 volumes:
+  route_cache:
   pgdata:

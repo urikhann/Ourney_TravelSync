@@ -46,13 +46,25 @@ export type Recommendations = {
 };
 
 export type PlanItem = {
+  visit_category?: "cafe" | "meal" | "activity";
+  activity_category?: string;
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
   availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown
   place: Place | null; mean_score: number | null;
   arrival: string; travel_minutes: number; stay_minutes: number; visit_cost: number;
 };
 export type PlanningPoint = { label: string; latitude: number; longitude: number };
+export type DailyComposition = {
+  meal_overlap_min?: number; meal_timezone?: "Asia/Seoul"; meal_policy_version?: "meal-1.0";
+  meal_overrides?: { date: string; name: "breakfast" | "lunch" | "dinner";
+    window?: { start_min: number; end_min: number } | null;
+    preferred_start_min?: number | null; fixed_start_min?: number | null; required?: boolean }[];
+  max_cafes: number; min_meals: number; max_meals: number; min_activities: number;
+  min_activity_categories: number; separate_food_drink: boolean;
+  meal_windows: { name: "breakfast" | "lunch" | "dinner"; start_min: number; end_min: number }[];
+};
 export type OptimizationInput = {
+  daily_composition?: DailyComposition;
   days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint }[];
   budget_total: number; transport_mode: "walk" | "drive" | "transit";
   max_leg_minutes?: number | null; max_total_walk_minutes?: number | null;
@@ -70,9 +82,11 @@ export type PlansView = {
   plans: Plan[]; my_vote: number | null; voted: number; members: number; chosen_id: number | null;
   holidays: { date: string; name: string }[];
   availability_checked: boolean;
-  setup: { dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[] };
+  setup: { default_composition: DailyComposition; dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[] };
   latest_optimization: { id: number; status: string; error_code: string | null; solver_status: string;
     validation_status: string; configuration: OptimizationInput | null;
+    candidate_selection?: { catalogue_count: number; eligible_catalogue_count: number; selected_count: number;
+      day_candidate_ids: Record<string, string[]> } | null;
     eligibility: { poi_id: string; schedule_eligible: boolean; reasons: string[] }[] } | null;
 };
 export type Features = { availability: boolean };

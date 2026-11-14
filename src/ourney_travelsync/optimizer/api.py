@@ -9,6 +9,7 @@ from .contracts import Attempt, PlanRequest, PlanResponse, PlanRunRequest
 from .eligibility import check_eligibility, common_bounds
 from .solver import solve_prepared
 from .validation import validate_final
+from .meals import effective_meals
 
 
 def optimize(request: PlanRequest | dict) -> PlanResponse:
@@ -27,7 +28,12 @@ def optimize(request: PlanRequest | dict) -> PlanResponse:
     if not result.days:
         codes = {"INFEASIBLE": "NO_FEASIBLE_ITINERARY", "UNKNOWN": "SEARCH_TIMEOUT",
                  "MODEL_INVALID": "INVALID_SOLVER_MODEL"}
-        return PlanResponse(**base, error_code=codes.get(result.status, "SOLVER_FAILED"))
+        conflicts = tuple(f"{d.date}:{m.name}:REQUIRED_MEAL_UNSCHEDULED:{m.start_min}-{m.end_min}"
+                          for d in req.days
+                          for m in (effective_meals(d, req.daily_composition) if req.daily_composition else ())
+                          if m.required) if result.status == "INFEASIBLE" else ()
+        return PlanResponse(**base, error_code=codes.get(result.status, "SOLVER_FAILED"),
+                            validation_errors=conflicts)
     validation = validate_final(req, result.days)
     if not validation.passed:
         return PlanResponse(**base, validation_status="FAILED", error_code="FINAL_VALIDATION_FAILED",

@@ -35,8 +35,8 @@ export default function Plan() {
   const exclusions = excluded.length > 0 && <details className="card pad" style={{ marginTop: 12 }}><summary>Excluded from automatic planning ({excluded.length})</summary>
     {excluded.map(p => <p className="small" key={p.poi_id}><b>{v.setup.points.find(x => x.id === p.poi_id)?.name ?? p.poi_id}</b><br />{p.reasons.map(r => {
       const code = r.split(":").pop() ?? r;
-      const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", ROUTE_UNAVAILABLE: "Verified route unavailable", NO_FULL_STAY_WINDOW: "Visit does not fit the available opening hours", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
-      return names[code] ?? "Required information or conditions are not satisfied";
+      const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", ROUTE_UNAVAILABLE: "No usable route within travel limits", DAY_CANDIDATE_NOT_SELECTED: "Not shortlisted for this day", NO_FULL_STAY_WINDOW: "Visit does not fit the available time", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
+      return `${r.includes(":") ? r.slice(0, r.lastIndexOf(":")) + ": " : ""}${names[code] ?? "Required information or conditions are not satisfied"}`;
     }).join(" · ")}</p>)}</details>;
   if (v.plans.length === 0) {
     return (
@@ -46,7 +46,7 @@ export default function Plan() {
           <div className="empty">
             <div className="ic"><Map size={30} /></div>
             <div className="title" style={{ fontSize: 18 }}>No plans yet</div>
-            <p className="muted small">Plans are built from your group's recommendations.</p>
+            <p className="muted small">Plans use the full place catalogue and your group's preferences.</p>
             <ErrorBox error={failure} />
             <p className="small" style={{ marginTop: 10 }}>No recommendations yet? <Link to={`/trips/${id}/places`}>Go to Places</Link></p>
           </div>
@@ -71,6 +71,7 @@ export default function Plan() {
       <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
+        <div className="banner amber">Planning test mode: opening hours, closures, and budget limits are not enforced. Displayed fees include only available cost data; verify hours and actual spending before visiting.</div>
         {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
         <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
         {exclusions}
@@ -109,6 +110,9 @@ export default function Plan() {
           </div>
         )}
 
+        {d.items.every(it => it.visit_category) && <p className="muted small">
+          {d.items.filter(it => it.visit_category === "meal").length} meals &middot; {d.items.filter(it => it.visit_category === "cafe").length} caf&eacute;s &middot; {d.items.filter(it => it.visit_category === "activity").length} activities across {new Set(d.items.filter(it => it.visit_category === "activity").map(it => it.activity_category)).size} categories
+        </p>}
         <div className="tl">
           <p className="muted small">Leave {d.start_label} at {d.start}</p>
           {d.items.map((it) => {

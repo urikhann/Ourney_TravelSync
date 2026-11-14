@@ -93,3 +93,13 @@ def test_e3_revalidates_unchecked_model_copy():
     req, days = solved()
     forged = days[0].model_copy(update={"total_cost": -1})
     assert validate_final(req, (forged,)).errors == ("INVALID_VALIDATION_INPUT",)
+
+
+def test_e3_checks_day_candidate_membership_even_when_hours_and_cost_are_bypassed():
+    req, days = solved(1)
+    raw = req.model_dump(mode="json")
+    raw["enforce_cost"] = raw["enforce_opening_hours"] = False
+    raw["candidates"][0]["allowed_dates"] = []
+    result = validate_final(PlanRequest.model_validate(raw), days)
+    assert not result.passed
+    assert any("DAY_CANDIDATE_NOT_SELECTED" in error for error in result.errors)
