@@ -71,4 +71,4 @@ async def check_availability(payload: dict) -> dict:
 
 
 async def agent_turn(payload: dict) -> dict:
-    return await _post(config.AGENT_URL, "/agent/turn", payload, "agent")
+    return await _post(config.AGENT_URL, "/agent/turn", payload, "agent", config.AGENT_TIMEOUT_SECONDS)
