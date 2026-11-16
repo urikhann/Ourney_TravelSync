@@ -112,6 +112,6 @@ export type AgentProposal = { date: string; remove_item_ids: string[]; add: { po
 export type ChatMessage = {
   id: number; kind: "user" | "agent"; text: string; reply_to: number | null; created_at: string;
   author: { id: string | null; name: string } | null;
-  agent: { state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | null } | null;
+  agent: { state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | null; error?: string } | null;
 };
 export type ChatPage = { agent_name: string; messages: ChatMessage[] };

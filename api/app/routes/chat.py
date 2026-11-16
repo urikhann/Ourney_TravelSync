@@ -72,9 +72,9 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
     }
     try:
         out = await services.agent_turn(payload)
-    except HTTPException:
+    except HTTPException as e:  # e.detail: agent_unavailable (not running / too slow) or agent_error_500 (it crashed)
         return {"state": "FAILED", "reply": f"{AGENT_NAME} can't answer right now. Please try again in a moment.",
-                "tool_calls": [], "proposal": None}
+                "tool_calls": [], "proposal": None, "error": e.detail}
     return {"state": "NEEDS_CLARIFICATION" if out.get("needs_clarification") else "SUCCEEDED",
             "reply": out.get("reply") or "", "tool_calls": out.get("tool_calls") or [],
             "proposal": out.get("proposal")}

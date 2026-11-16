@@ -27,3 +27,11 @@ jobs:
       - run: uv sync --locked
       - run: uv pip install -r services/recommender/requirements.txt
       - run: cd services/recommender && uv run --no-sync python -m pytest -q
+  agent:  # services/agent: Gemini agent; tests use a fake Gemini, so no key or network is needed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r services/agent/requirements.txt
+      - run: cd services/agent && pytest -q

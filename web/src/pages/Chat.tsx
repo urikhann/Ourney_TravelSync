@@ -147,6 +147,7 @@ function AgentBubble({ m }: { m: ChatMessage }) {
         <div className={"bubble" + (failed ? " failed" : "")}>
           {m.text}
           {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">Reply with @{AGENT} to answer.</div>}
+          {failed && a?.error && <div className="agent-note">Error: {a.error}</div>}
         </div>
         {!!a?.tool_calls.length && (
           <div className="tools">
