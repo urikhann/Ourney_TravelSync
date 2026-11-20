@@ -10,7 +10,10 @@ def test_empty_and_populated_viewer_without_database(monkeypatch):
     from contextlib import nullcontext
     monkeypatch.setattr(connection, 'connect', lambda: nullcontext(object()))
     monkeypatch.setattr(repository, 'get_active_pois', lambda conn: [])
-    app = AppTest.from_file(Path(__file__).resolve().parents[1]/'apps/data_viewer.py').run()
+    # Allow cold imports in a fresh CI environment before checking rendered output.
+    app = AppTest.from_file(
+        Path(__file__).resolve().parents[1]/'apps/data_viewer.py', default_timeout=15,
+    ).run()
     assert not app.exception
     assert len(app.info) == 1
     # Refresh explicitly to clear the cache populated by the empty-data case.

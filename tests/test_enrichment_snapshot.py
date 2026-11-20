@@ -1,5 +1,8 @@
 import copy
 import pytest
+
+# SQLAlchemy is optional in the core install; ingestion CI exercises this suite.
+pytest.importorskip('sqlalchemy')
 from sqlalchemy import create_engine, text
 from scripts.promote_poi_enrichment import build_payload, apply_snapshot, fingerprint, get_state
 
