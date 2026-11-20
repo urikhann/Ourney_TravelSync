@@ -1,6 +1,7 @@
 """Protect provenance and conservative matching in the isolated enrichment pilot."""
 import sys
 from pathlib import Path
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.targeted_enrichment import (
@@ -82,7 +83,7 @@ def test_observed_frequency_controls_global_rank_without_changing_hours():
 
 def test_live_response_and_request_log_do_not_save_key(monkeypatch, tmp_path):
     import json
-    import requests
+    requests = pytest.importorskip('requests')
     sentinel = 'PRIVATE_API_KEY_SENTINEL_1234567890'
     payload = {'response': {'header': {'resultCode':'0000'}, 'body': {
         'items': {'item': [{'overview':sentinel}]}, 'totalCount':1}}}

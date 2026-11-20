@@ -22,14 +22,14 @@ def test_quota_resets_at_korean_midnight(tmp_path,monkeypatch):
 def test_exhausted_operation_does_not_send_or_spend_other_quota(tmp_path,monkeypatch):
  endpoint=daily.TOUR+'searchKeyword2'
  c,_=init(tmp_path,monkeypatch,[{'endpoint':endpoint,'params':{},'status':'RESERVED','fetched_at_utc':'2026-11-18T00:00:00+00:00'}]*1000)
- import requests
+ requests = pytest.importorskip('requests')
  monkeypatch.setattr(requests,'get',lambda *a,**k:pytest.fail('Quota guard must prevent network request'))
  assert c.get(endpoint,{'serviceKey':'private'},'keyword')[1]['status']=='DAILY_QUOTA_GUARD'
  assert c.counts[daily.TOUR+'detailIntro2']==0
 
 def test_request_is_reserved_before_network_and_credentials_redacted(tmp_path,monkeypatch):
  c,out=init(tmp_path,monkeypatch);sentinel='SECRET_KEY_SENTINEL_1234';c.secrets={sentinel}
- import requests
+ requests = pytest.importorskip('requests')
  def get(*a,**k):
   logs=json.loads((out/'requests.json').read_text());assert logs[-1]['status']=='RESERVED'
   return SimpleNamespace(status_code=200,text=json.dumps({'response':{'header':{'resultCode':'0000'},'body':{'items':{'item':[{'overview':sentinel}]},'totalCount':1}}}))
@@ -41,7 +41,7 @@ def test_request_is_reserved_before_network_and_credentials_redacted(tmp_path,mo
 
 def test_xml_quota_stops_followup_requests(tmp_path,monkeypatch):
  c,_=init(tmp_path,monkeypatch)
- import requests
+ requests = pytest.importorskip('requests')
  calls=[]
  monkeypatch.setattr(requests,'get',lambda *a,**k:(calls.append(1) or SimpleNamespace(status_code=200,text='<error>LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR</error>')))
  endpoint=daily.TOUR+'detailIntro2'
@@ -54,7 +54,7 @@ def test_cached_description_is_reused_without_quota(tmp_path,monkeypatch):
  payload={'response':{'header':{'resultCode':'0000'},'body':{'items':{'item':[{'overview':'A useful description'}]}}}}
  p.write_text(json.dumps(payload));e={'endpoint':daily.TOUR+'detailCommon2','params':{'contentId':'1','MobileApp':'old'},'response_file':'responses/a.json','response_sha256':daily.sha(p),'fetched_at_utc':'2026-11-17T00:00:00+00:00','status':'OK'}
  c.cache[daily.signature(e['endpoint'],e['params'])]=(out,e)
- import requests
+ requests = pytest.importorskip('requests')
  monkeypatch.setattr(requests,'get',lambda *a,**k:pytest.fail('Cache should avoid requests'))
  assert c.get(e['endpoint'],{'contentId':1,'MobileApp':'new','serviceKey':'different'},'common',30)[0]==payload
  assert c.new_calls==0

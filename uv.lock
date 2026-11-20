@@ -2668,6 +2668,7 @@ dependencies = [
     { name = "numpy" },
     { name = "scikit-learn" },
     { name = "scipy" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -2677,7 +2678,9 @@ experiments = [
 ]
 ingestion = [
     { name = "pandas" },
+    { name = "python-dotenv" },
     { name = "requests" },
+    { name = "sqlalchemy" },
 ]
 optimizer = [
     { name = "ortools" },
@@ -2721,15 +2724,18 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'viewer'" },
     { name = "pydantic", marker = "extra == 'optimizer'", specifier = ">=2.12,<3" },
+    { name = "python-dotenv", marker = "extra == 'ingestion'" },
     { name = "python-dotenv", marker = "extra == 'postgres'" },
     { name = "python-dotenv", marker = "extra == 'viewer'" },
     { name = "requests", marker = "extra == 'ingestion'" },
     { name = "scikit-learn", specifier = ">=1.6,<2" },
     { name = "scipy", specifier = ">=1.14,<2" },
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = "==5.1.2" },
+    { name = "sqlalchemy", marker = "extra == 'ingestion'", specifier = ">=2.0,<3" },
     { name = "streamlit", marker = "extra == 'viewer'" },
     { name = "torch", marker = "extra == 'semantic'", specifier = "==2.14.1" },
     { name = "transformers", marker = "extra == 'semantic'", specifier = "==4.57.1" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 provides-extras = ["optimizer", "ingestion", "postgres", "viewer", "experiments", "semantic"]
 

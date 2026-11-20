@@ -22,7 +22,8 @@ def test_preview_reoptimizes_without_changing_approved_plan_or_votes(planning_ad
     audit=audits(tid)[-1]
     assert audit.status=="PREVIEWED" and audit.itinerary_id is None
     assert audit.optimizer_request["enforce_cost"] is False
-    assert audit.optimizer_request["enforce_opening_hours"] is False
+    assert audit.optimizer_request["enforce_opening_hours"] is True
+    assert audit.optimizer_request["allow_unknown_opening_hours"] is True
     assert audit.optimizer_request==audit.response["input_snapshot"]
 
 

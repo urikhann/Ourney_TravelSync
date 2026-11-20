@@ -7,14 +7,14 @@ authors = [
     { name = "Urikhan Purevjav", email = "140320983+urikhann@users.noreply.github.com" }
 ]
 requires-python = ">=3.13"
-dependencies = ["numpy>=2.1", "scipy>=1.14,<2", "scikit-learn>=1.6,<2"]
+dependencies = ["numpy>=2.1", "scipy>=1.14,<2", "scikit-learn>=1.6,<2", "tzdata; sys_platform == 'win32'"]
 
 [project.scripts]
 ourney-travelsync = "ourney_travelsync.cli:main"
 
 [project.optional-dependencies]
 optimizer = ["ortools>=9.15,<9.16", "pydantic>=2.12,<3"]
-ingestion = ["requests", "pandas"]
+ingestion = ["requests", "pandas", "python-dotenv", "sqlalchemy>=2.0,<3"]
 postgres = ["psycopg[binary]", "python-dotenv"]
 viewer = ["streamlit", "altair", "pandas", "psycopg[binary]", "python-dotenv"]
 experiments = ["mlflow", "dvc"]

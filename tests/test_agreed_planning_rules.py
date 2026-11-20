@@ -3,6 +3,9 @@ from copy import deepcopy
 
 import pytest
 
+pytest.importorskip("ortools")
+pytest.importorskip("pydantic")
+
 from optimizer_fixtures import DAY, fact, request_data
 from ourney_travelsync.optimizer.api import optimize
 from ourney_travelsync.optimizer.contracts import PlanRequest

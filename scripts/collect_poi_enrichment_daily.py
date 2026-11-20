@@ -1,7 +1,7 @@
 """Daily resumable POI hours/description collection. No production DB or CSV writes.
 
 Usage: python scripts/collect_poi_enrichment_daily.py [--offline] [--max-new-calls N]
-Requires requests and python-dotenv, already used by targeted_enrichment.py.
+Install collection dependencies with: pip install -e '.[ingestion]'
 """
 from __future__ import annotations
 import argparse,collections,csv,hashlib,html,json,os,re,sys,time
@@ -144,11 +144,12 @@ class Client:
   return rows,{'complete':False,'retrieved':len(rows),'status':'PAGINATION_LIMIT'}
 
 def run(args):
- from dotenv import dotenv_values
- env={**dotenv_values(ROOT/'.env'),**os.environ}
- out=args.out.resolve();out.mkdir(parents=True,exist_ok=True)
+ out=args.out.resolve()
  data=ROOT/'src/ourney_travelsync/data'
  if out==data.resolve() or data.resolve() in out.parents:raise ValueError('Output cannot be packaged data')
+ from dotenv import dotenv_values
+ env={**dotenv_values(ROOT/'.env'),**os.environ}
+ out.mkdir(parents=True,exist_ok=True)
  with exclusive_run(out/'collection.lock'):
   return collect(args,out,env)
 def collect(args,out,env):

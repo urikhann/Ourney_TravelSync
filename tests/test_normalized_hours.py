@@ -55,6 +55,8 @@ def test_invalid_batch_is_atomic():
  with e.connect() as c:assert load_normalized(c,'v3',['p'])=={}
 
 def test_normalized_windows_reach_the_real_planning_adapter(monkeypatch):
+ pytest.importorskip('httpx')
+ pytest.importorskip('fastapi')
  import importlib.util
  root=Path(__file__).resolve().parents[1]
  monkeypatch.setenv('DATABASE_URL','sqlite://')
@@ -77,6 +79,7 @@ def test_normalized_windows_reach_the_real_planning_adapter(monkeypatch):
  assert adapter._load_operating('v1',['p'],[days[1]])['p']['operations']['2026-11-19']['openings']['status']=='UNKNOWN'
 
 def test_availability_respects_split_shifts_and_dataset_version(monkeypatch):
+ pytest.importorskip('fastapi')
  import importlib.util
  root=Path(__file__).resolve().parents[1]
  sys.path.insert(0,str(root/'services/mocks'));monkeypatch.setenv('DATABASE_URL','sqlite://')
