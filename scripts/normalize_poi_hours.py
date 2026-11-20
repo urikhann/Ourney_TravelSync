@@ -91,11 +91,11 @@ def build(evidence,inventory,metadata,oldops,effective_from):
   except (ValueError,KeyError) as exc:review.append({'place_id':pid,'place_name':meta.get(pid,{}).get('place_name',''),'reason':str(exc),'hours_text':' || '.join(e['hours_text'] for e in records),'closure_text':' || '.join(e['closure_text'] for e in records)})
  return accepted,review
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--effective-from',default=date.today().isoformat());ap.add_argument('--out',type=Path,default=ROOT/'output/normalized_hours_20261119');a=ap.parse_args()
+ ap=argparse.ArgumentParser();ap.add_argument('--effective-from',default=date.today().isoformat());ap.add_argument('--out',type=Path,default=ROOT/'output/normalized_hours_20261119');ap.add_argument('--dataset-version',default='busan-enriched-v3');a=ap.parse_args()
  date.fromisoformat(a.effective_from);a.out.mkdir(parents=True,exist_ok=True);data=ROOT/'src/ourney_travelsync/data';source=ROOT/'output/daily_poi_enrichment'
  files={'evidence':source/'evidence_latest.csv','inventory':source/'all_pois_latest.csv','metadata':data/'travelsync_poi_metadata_enriched_v3.csv','oldops':data/'travelsync_poi_operating_info_v1.csv'}
  accepted,review=build(**{k:read(p) for k,p in files.items()},effective_from=a.effective_from)
- manifest={'schema_version':'normalized-hours-batch-1.0','dataset_version':'busan-enriched-v3','effective_from':a.effective_from,'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files.values()},'records':sorted(accepted,key=lambda r:r['place_id'])}
+ manifest={'schema_version':'normalized-hours-batch-1.0','dataset_version':a.dataset_version,'effective_from':a.effective_from,'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files.values()},'records':sorted(accepted,key=lambda r:r['place_id'])}
  raw=json.dumps(manifest,ensure_ascii=False,sort_keys=True);manifest['batch_id']='normalized-hours-'+a.effective_from+'-'+hashlib.sha256(raw.encode()).hexdigest()[:12]
  (a.out/'normalized_hours.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
  with (a.out/'held_for_review.csv').open('w',encoding='utf-8-sig',newline='') as f:

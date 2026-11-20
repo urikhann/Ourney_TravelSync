@@ -15,7 +15,7 @@ Parsing and identity validation do not establish independent venue verification.
 ## Normalize and validate
 
 ```powershell
-.\.venv\Scripts\python.exe -B scripts/normalize_poi_hours.py --effective-from YYYY-MM-DD --out output/normalized_hours
+.\.venv\Scripts\python.exe -B scripts/normalize_poi_hours.py --effective-from YYYY-MM-DD --dataset-version busan-enriched-v4-20261121 --out output/normalized_hours
 .\.venv\Scripts\python.exe -B scripts/import_normalized_hours.py output/normalized_hours/normalized_hours.json
 ```
 
@@ -38,3 +38,7 @@ batch ID with different content is rejected.
 Retain the output directory, manifest, and source evidence. Collection does not
 automatically import or activate schedules. Rebuild API, mocks, and planning-data
 images after changing the shared reader code.
+
+The local active version after the 21 November enrichment import is
+`busan-enriched-v4-20261121`. Pass its version explicitly when preparing a new
+manual hours batch. Use a fresh output directory to retain prior manifests.
