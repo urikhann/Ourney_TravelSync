@@ -20,7 +20,7 @@ services:
       interval: 3s
       retries: 20
 
-  recommender:  # Urikhan — the team package (GFAR / AWM) behind contracts/recommend.*.json
+  recommender:  # Scoring and group aggregation behind contracts/recommend.*.json
     build: {context: ., dockerfile: services/recommender/Dockerfile}
     environment:
       <<: *places
@@ -81,14 +81,14 @@ services:
     depends_on:
       db: {condition: service_healthy}
 
-  api:  # Bat — backend
+  api:  # Backend API
     build: {context: ., dockerfile: api/Dockerfile}
     env_file: [{path: .env, required: false}]
     environment:
       <<: *places
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       HOURS_CSV: /data/travelsync_poi_operating_info_v1.csv
-      PLACES_FOLLOW_ENV: "true"   # import / activate PLACES_VERSION on start, so switching to the demo pool just works
+      PLACES_FOLLOW_ENV: "true"   # Import or activate PLACES_VERSION on startup.
       RECOMMENDER_URL: http://recommender:8002
       OPTIMIZER_URL: http://optimizer:8003
       PLANNING_DATA_URL: ${PLANNING_DATA_URL:-http://planning-data:8004}
@@ -112,7 +112,7 @@ services:
       interval: 5s
       retries: 60   # the first start imports 3,570 places + opening hours
 
-  web:  # Bat — web app
+  web:  # Web app
     image: node:22
     working_dir: /web
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"

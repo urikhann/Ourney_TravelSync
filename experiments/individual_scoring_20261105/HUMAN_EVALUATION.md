@@ -1,6 +1,6 @@
 # Blinded study protocol
 
-No participant responses have been collected for this study. The packet contains real catalogue POIs and stored source-linked metadata, not generated judgments. Stored text is not a live verification of a venue. Historical phase-one sheets concern a different frozen task and must not be relabeled as independent evidence for these numeric profiles.
+The packet contains catalogue POIs and stored source-linked metadata. Stored text is not live venue verification, and no generated judgments should be treated as participant responses. Labels from a different task or rubric cannot validate these numeric profiles.
 
 Recruit 10–20 participants and record their ten actual 1–5 preferences, explicit hard exclusions, participant ID, and intended travel group. Assign entire groups to development or held-out evaluation before collecting judgments. Use a 24-POI packet for each split from `results/labeling_template.csv`; POIs are disjoint between splits. Randomize presentation order per participant with a recorded seed. The template is stratified by feature count and description availability, not predicted scores. It is a pilot, not a representative population sample. Freeze and hash each participant packet before collection.
 

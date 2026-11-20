@@ -1,4 +1,4 @@
-"""Make a small demo place list: only the places named in the data teammate's demo-candidate file.
+"""Make a small demo place list: using the places named in a candidate file.
 
     cd api
     python -m app.make_demo_pool ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv \\

@@ -6,7 +6,7 @@ One turn:
   3. our code checks the suggestion (real stop, real place, not closed) before the group ever sees it
 
 If there is no GEMINI_API_KEY, or Gemini fails / runs out of quota, the rules fallback answers instead,
-so the chat never breaks during a demo.
+so chat remains available without the model service.
 """
 import json
 import logging
@@ -211,7 +211,7 @@ def turn(req: dict, client=None) -> dict:
     if client is not None or os.getenv("GEMINI_API_KEY"):
         try:
             return gemini_with_fallback(req, data, client)
-        except Exception as e:  # quota, network, bad key… -> the demo keeps working
+        except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
             out["tool_calls"].insert(0, {"name": "gemini_error", "summary": f"AI unavailable ({type(e).__name__})"})
             return out

@@ -1,31 +1,9 @@
-# E5 hybrid application integration — 2026-11-07
+# E5 hybrid scoring
 
-Implemented on `feat/e5-hybrid-recommender`; no merge into main. This document
-describes code and verification on that branch, rather than revising the older SRS/SDD.
-
-## Audit and source of truth
-
-The real flow is `api/app/routes/recommendations.py` -> the existing service
-`services/recommender/main.py::recommend` -> `prepare_group` -> GFAR. The CLI
-and PostgreSQL adapter call the same package pipeline. The previous API/CLI
-default was TF-IDF while service/package calls defaulted to binary feature mean.
-The API's pinned POI JOIN previously omitted name/category; those fields now
-travel with the snapshot. The packaged enriched v3 CSV has 3,570 POIs, 72 columns,
-and SHA256 `3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9`.
-It matches commit `a80f48a11210c75aeb2ea32581cd55814f529e32` (ignoring Git line endings).
-
-The November 5 source is available in commit `29018ce`, including
-`experiments/individual_scoring_20261105/scoring.py`, `run.py`, and `config.json`.
-Its source files are absent from this branch's working tree; its ignored local
-model and embedding caches remain available. Production code ports its exact
-`document`, weighted `semantic`, and percentile `normalize` semantics.
-
-The user supplied the November 7 report's chosen configuration: weighted E5,
-beta=1, alpha=.5, full-catalogue tied percentiles. The reported combined-pool
-NDCG@10=.690 / willingness@10=80% is exploratory historical evidence, not
-statistical superiority or a production acceptance threshold. Its original
-E01–E03 workbooks and generated predictions could not be located. No human
-labels enter the runtime or the new regression fixture.
+The API, recommender service, CLI, and PostgreSQL adapter share the package
+scoring pipeline. Each member receives a separate relevance vector before GFAR
+aggregation. The pinned POI snapshot supplies names, categories, features, and
+available source-backed descriptions.
 
 ## Equations and scales
 
@@ -68,9 +46,8 @@ Interest texts are exactly:
 Each has prefix `query: `. POIs have prefix `passage: ` and the evaluated
 space-joined `place_name category_name`, followed by cleaned stored
 `description_summary` only when `description_source_url` is nonempty and
-`detail_verification_status != CONFLICT`. The experiment uses `category_name`,
-not an untested substitution of the newer `detailed_category` field. The
-experiment's null-string cleanup and internal spaces are preserved. DB nested
+`detail_verification_status != CONFLICT`. Scoring uses `category_name`,
+not `detailed_category`. Null-string cleanup and internal spaces are preserved. DB nested
 metadata is mapped to those same keys. No hours, menus, or descriptions are invented.
 The current catalogue has 2,249 eligible descriptions and 1,321 name/category
 fallbacks; each emitted individual row records `description_backed`.
@@ -99,7 +76,7 @@ fall back, without loading a Transformer. Prewarming explicitly enables
 generation. `--download` permits downloading only the pinned checkpoint;
 ordinary requests always use local files only. An operator can enable request
 regeneration with `TRAVELSYNC_E5_REGENERATE=1`, but initial encoding then adds
-unbounded cold CPU latency. Prewarm before serving the demo. Transformer imports
+unbounded cold CPU latency. Prewarm before serving requests. Transformer imports
 are lazy; feature-only execution and ordinary tests need no model or network.
 Model downloads, embeddings, generated builds and local test clusters are ignored.
 
@@ -132,11 +109,9 @@ captured DB AWM calls reject non-feature scorers instead of silently rerouting.
 Plain average comparisons also use feature mean when hybrid was requested.
 Legacy TF-IDF remains selectable for GFAR/average, with no cosine misery veto.
 
-This branch has the existing E1 pipeline and stand-in itinerary service, not the
-later optimizer branch's complete E2/E3 implementation. Those modules were not
-ported or redesigned. Unknown hours/costs retain their prior handling. Verified
-downstream compatibility here is the existing itinerary contract and sample
-flow, not proof of real routing or E2/E3 feasibility.
+Itinerary feasibility is checked separately by the optimizer and the API's
+independent E3 validation. Scoring does not establish route or operating availability.
+See [planning rules](agreed_planning_implementation_20261117.md).
 
 ## API, CLI, persistence and display
 
@@ -152,10 +127,10 @@ and `exhaustion_reason`. Internal service individual lists carry component score
 the public API retains group results and method/fallback diagnostics without
 adding individual raw feature ratings to its public response. Hybrid satisfaction
 metrics and display fit percentages are null. UI score components render that
-absence as relevance rather than 0% satisfaction. The stand-in optimizer preserves
-null group fit rather than adding absent satisfaction values; its agent code is unchanged.
+absence as relevance rather than 0% satisfaction. Itinerary group-fit fields
+remain null for relative relevance scores.
 
-The application already stores complete request/response JSON: no SQLAlchemy
+The application stores complete request/response JSON: no SQLAlchemy
 table migration is needed. The separate PostgreSQL package requires additive
 `005_e5_score_semantics.sql`, adding individual `scoring_details` and validating
 the declared run's scale. Historical scores/config snapshots remain unchanged.
@@ -168,29 +143,23 @@ regeneration policy, this standalone path transparently uses feature fallback.
 From the repository root (PowerShell):
 
 ```powershell
-uv sync --locked --extra semantic
-# Optional: reuse the existing local HF model folder on this machine.
-$env:TRAVELSYNC_E5_MODEL_CACHE = (Resolve-Path experiments/individual_scoring_20261105/.model-cache).Path
-uv run --locked --extra semantic ourney-travelsync e5-cache
-# On a fresh machine instead: e5-cache --download
-uv run --locked --extra semantic ourney-travelsync recommend --diagnostics
-uv run --locked --extra semantic ourney-travelsync recommend --individual-method feature_mean
-uv pip install -r api/requirements.txt -r services/recommender/requirements.txt
+uv sync --locked --extra semantic --extra optimizer
+uv run --no-sync ourney-travelsync e5-cache --download
+uv run --no-sync ourney-travelsync recommend --diagnostics
+uv run --no-sync ourney-travelsync recommend --individual-method feature_mean
+uv pip install -r api/requirements.txt -r services/recommender/requirements.txt -r services/planning_data/requirements.txt
 uv run --no-sync uvicorn main:app --app-dir services/recommender --port 8002
 ```
 
 Point API `RECOMMENDER_URL` to `http://localhost:8002` for local runs. Start the
-existing API and web processes per their READMEs; do not point the new default
-at the legacy mock recommender. Docker Compose uses the real recommender, installs
+API and web processes using their setup instructions. Point the API at this
+service rather than the mock recommender. Docker Compose uses the real recommender, installs
 the semantic extra, and mounts `output/e5-cache` and `output/e5-models`; prewarm
-using the same directories/model cache before serving. Docker image build itself
-was not executed in this run.
+using the same directories/model cache before serving.
 
 ```powershell
 uv run --no-sync pytest tests services/recommender/tests -q
 uv run --no-sync pytest api/tests -q
-# Requires the preserved local November 5 caches and Git object 29018ce:
-uv run --no-sync python scripts/verify_e5_integration.py
 # Opt-in actual E5 application check (prewarmed cache required):
 $env:TRAVELSYNC_REAL_E5_INTEGRATION = '1'
 uv run --no-sync pytest api/tests/test_e5_application.py -q
@@ -201,44 +170,12 @@ uv run --no-sync pytest integration_tests -q
 uv run --no-sync ourney-travelsync db-migrate --directory database
 ```
 
-## Executed verification and limits
+## Reproducibility and limits
 
-See [machine-readable evidence](e5_validation.json). With preserved November 5
-embeddings, all 16 synthetic profiles / 3,570 POIs matched exactly: raw semantic
-and hybrid max error 0, all rankings, candidate order and GFAR Top-10 equal.
-The deterministic small fixture is generated from the recovered original scorer,
-not from integrated outputs or human labels. Fresh encoding differed by at most
-7.45e-8 per POI embedding and 6.71e-8 per interest embedding. All 16 Top-10 sets
-were unchanged, but only 2/16 complete rankings were identical; max hybrid
-difference was .00028019053. Do not promise bitwise reproducibility after cache
-regeneration or claim exact November 7 participant prediction equivalence.
+Retain the pinned model revision, embedding cache, code, and lockfile for replay.
+Regenerating embeddings can reorder close scores across runtime environments.
+See [numerical compatibility](e5_changes.md) for frozen-reference tolerances.
 
-Executed: 87 core/service tests plus 21 subtests; 48 API tests; 2 disposable
-PostgreSQL integration tests, including migration, historical-record preservation
-and labeled hybrid fallback; one additional real-E5/full-dataset API execution;
-TypeScript build and Vite production build. No tests remain failed. PostgreSQL
-initially skipped without a disposable URL, then passed on an isolated temporary
-local cluster (stopped after testing). Ordinary automated tests use mock embeddings.
-Warnings are pre-existing FastAPI/httpx, SQLite date-adapter and viewer metadata
-deprecations. The Docker image and live deployed app were not validated.
-
-Final four-member warm in-process HTTP measurement: median 329.9 ms, p95 459.9 ms
-over 10 requests; process peak working set 216.2 MiB. This includes catalogue
-fingerprinting, cache lookup, scoring, GFAR and JSON, but excludes API DB/auth,
-network transport and cold model loading/encoding. It is not a deployment SLA.
-
-The full API test also measured five warm two-member requests through SQLite
-JOIN, in-process HTTP, actual E5 cache, GFAR and run JSON persistence: median
-1187.8 ms, p95 1238.6 ms, test-process peak working set 445.7 MiB. Authentication
-was overridden and cold encoding/network excluded. The peak includes test setup
-and catalogue import, rather than being isolated incremental scorer memory. See
-[application measurement](e5_api_validation.json).
-
-The source-backed descriptions are partially reviewed and include uneven
-coverage and selection bias. Semantic relevance is not calibrated satisfaction.
-Future independent human/group evaluation remains necessary. Next SRS/SDD
-revision should capture full-catalogue normalization, score scales/fallbacks,
-cache operations, the newly transmitted text fields and null satisfaction display.
-
-The exact created/modified file inventory is recorded in
-[implementation changes](e5_changes.md).
+Source-backed descriptions have uneven coverage and are not independent venue
+verification. Hybrid relevance is not calibrated satisfaction. Use independent
+human judgments to assess recommendation quality.

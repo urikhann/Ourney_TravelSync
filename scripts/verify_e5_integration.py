@@ -1,6 +1,6 @@
-"""Local, label-free November 5 equivalence and real HTTP-service benchmark.
+"""Frozen-reference scoring equivalence and HTTP-service benchmark.
 
-Requires the preserved experiment cache and commit 29018ce. Does not alter it.
+Requires the reference source and embedding cache configured below.
 Run from the repository root using the application environment.
 """
 import argparse
@@ -66,7 +66,7 @@ def main():
     assert GFAR().recommend(group) == GFAR().recommend(original)
     h.embeddings = original_embeddings
 
-    # Actual service contract on the real valid catalogue, not a separate demo API.
+    # Benchmark the HTTP contract using the packaged catalogue.
     spec = importlib.util.spec_from_file_location('e5_service_validation', ROOT/'services/recommender/main.py')
     service = importlib.util.module_from_spec(spec); spec.loader.exec_module(service)
     from fastapi.testclient import TestClient

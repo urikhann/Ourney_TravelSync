@@ -1,7 +1,7 @@
-﻿# Seeded identity ties on the official v2 snapshot
+# Seeded identity ties on the official v2 snapshot
 
 Reproduce with `uv run python scripts/tie_diagnostics.py`. Machine-readable output
-is committed in `tie_diagnostics.json`. These measurements use seed 0 and top-100
+is stored in `tie_diagnostics.json`. These measurements use seed 0 and top-100
 per member on the official byte-verified 3,570-row v2 snapshot.
 
 There are 21 distinct feature vectors. Equal preferences produce one score for
@@ -11,9 +11,9 @@ contain 797 and 649 POIs, both at score 5.
 
 | Scenario and policy | Union size | TOUR_API | TOUR_API+KAKAO | KAKAO |
 |---|---:|---:|---:|---:|
-| Equal preferences, historical CSV-order cutoff | 100 | 77 | 23 | 0 |
+| Equal preferences, CSV-order cutoff | 100 | 77 | 23 | 0 |
 | Equal preferences, seeded identity cutoff | 100 | 13 | 3 | 84 |
-| Varied preferences, historical CSV-order cutoff | 200 | 74 | 38 | 88 |
+| Varied preferences, CSV-order cutoff | 200 | 74 | 38 | 88 |
 | Varied preferences, seeded identity cutoff | 200 | 10 | 4 | 186 |
 
 The varied profiles in feature order are `[4,5,3,2,2,3,3,3,4,1]` and

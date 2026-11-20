@@ -1,5 +1,4 @@
-// web/src/components/PlaceAbout.tsx  (NEW file)
-// Shows the data teammate's enriched place info inside the place details sheet:
+// Displays enriched place details:
 // sub-category, short description (with its source), food type / menu / activity,
 // and the opening hours that were reported by the source (with how far they can be trusted).
 // Missing values arrive as null from the backend and are simply not shown.
@@ -57,7 +56,7 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
 const fmt = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 /**
- * Hours reported by the source (enriched data). Rules from the data teammate:
+ * Hours reported by the source (enriched data). Source-field rules:
  * - PUBLISHED_SCHEDULE: the place's regular published hours
  * - SNAPSHOT_WEEK: only seen for one week (hours_valid_from–until); must not be treated as permanent
  * - anything else: unknown, so we say so instead of guessing

@@ -1,11 +1,12 @@
-# Contracts — the agreement between the parts
+# Service contracts
 
-Each teammate's service must accept the `*.request.json` shape and return the `*.response.json` shape.
-The backend (`api/`) sends exactly these; the mock service (`services/mocks/`) returns exactly these.
-Updated to **TS SRS / SDD 1.1** (2026-10-07).
+Request and response examples are stored as paired `*.request.json` and
+`*.response.json` files. Services validate schema and dataset versions before
+processing a request. Typed optimizer contracts define scheduling facts and routes.
 
-Rules for everyone
-- The 10 features, always in this order (SDD 8.1): `food, cafe, nature, history, art, shopping, activity, entertainment, relax, festival`.
+## Shared rules
+
+- The 10 features, always in this order: `food, cafe, nature, history, art, shopping, activity, entertainment, relax, festival`.
   `feature_schema_version` = `fs-1.0`. Requests and responses carry it plus `dataset_version`; a mismatch is an error.
 - Member `ratings` remain **raw 1–5 integers**. Optional `tastes.keywords` from the onboarding survey supplies the query for Method C.
 - Place features remain **binary 0/1**, several can be 1. `options.individual_method="tfidf"` uses enriched text
@@ -13,25 +14,22 @@ Rules for everyone
   (`score_scale=relative_relevance_0_1`); `feature_mean`/historical `binary` use 1–5 in the real service.
   Consumers must use the returned `score_scale`; thresholds must match that scale.
 - Personal exclusions (`exclusions.tags`, `exclusions.poi_ids`) are E1 hard rules. A low rating (1) is **not** an exclusion.
-  Tags today: `hiking`, `raw_fish`, `alcohol` (derived from the place category at import).
+  Supported tags: `hiking`, `raw_fish`, `alcohol` (derived from the place category at import).
 - Optional `members[].tastes` = `{"keywords": [...], "avoid_keywords": [...]}` from the onboarding survey
   (`GET /meta/tastes`), only for members who answered it. Korean words for TF-IDF (Method C). Ignore it if unused.
 - Unknown is `null`, never 0: cost `null` = unknown, not free. Times are local `HH:MM`, dates `YYYY-MM-DD`, money KRW.
-- Group list: GFAR (SDD 9.2). Return `group_rank`, `mean_score`, `selection_gain`, `group_utility` separately.
-  `method: "average" | "awm"` exist only for comparison (SRS: Should).
-- Change a contract only with a pull request that updates these files. Everyone reviews it.
+- Group list: GFAR. Return `group_rank`, `mean_score`, `selection_gain`, `group_utility` separately.
+  `method: "average" | "awm"` exist only for comparison .
+- Keep request/response examples consistent with the typed service contracts.
 
-| Service | Owner | Endpoint | Files |
-|---|---|---|---|
-| Recommender (D, E1, F, G) | Recommender owner | `POST /recommend` | `recommend.*.json` |
-| Itinerary optimizer (H, E2/E3) | Recommender owner (proposed) | New service `POST /plans`, optional shared-budget `POST /runs` | `optimizer.synthetic.*.json`, [typed contract](../src/ourney_travelsync/optimizer/contracts.py) |
-| Legacy mock itinerary | Existing demo only | Mock `POST /plans` | `plans.*.json` (incompatible with the new optimizer) |
-| Opening-hours enrichment + E2 | Data owner | *to be defined* (replaces `availability.*.json`) | — |
-| AI agent | Agent owner | `POST /agent/turn` | `agent.*.json` |
-| Place data | Data owner | CSV → `python -m app.import_places` | `src/ourney_travelsync/data/README.md` |
-
-Reference implementation of the scoring + GFAR from the SDD: `services/mocks/group_rec.py`
-(tests: `api/tests/test_group_rec.py` — score 10/30 and the GFAR fixture A, C, B).
+| Service | Endpoint | Contract |
+|---|---|---|
+| Recommender | `POST /recommend` | `recommend.*.json` |
+| Optimizer | `POST /plans`, `POST /runs` | `optimizer.synthetic.*.json`, [typed models](../src/ourney_travelsync/optimizer/contracts.py) |
+| Planning data | `POST /snapshot` | [PlanningSnapshot](../docs/optimizer_app_integration.md) |
+| Availability | `POST /availability/check` | `availability.*.json` |
+| Agent | `POST /agent/turn` | `agent.*.json` |
+| Mock planner | Mock `POST /plans` | `plans.*.json`; incompatible with optimizer requests |
 
 The backend supplies `poi_snapshot` for the real recommender: an array of
 `{place_id, place_name, category_name, dataset_version, latitude, longitude, enriched_metadata, food, cafe,
@@ -47,21 +45,21 @@ hybrid satisfaction display fields are null. AWM comparisons require feature sco
 
 Availability checks carry `dataset_version` on each check (or at request level).
 Omitting it uses ACTIVE only for standalone current-place checks. Responses use
-`available: null` when the upstream hours parser has no usable schedule for that
-date. `false` means a known conflict/closure. The upstream optimizer keeps unknown
-hours without labelling them verified. POI identity and metadata use the pinned
-version; the upstream `poi_hours` and `poi_exceptions` tables remain keyed by place
+`available: null` when the hours parser has no usable schedule for that
+date. `false` means a known conflict/closure. App planning allows unknown hours with warnings and enforces known intervals
+and closures. Direct optimizer clients default to rejecting unknown hours. POI identity and metadata use the pinned
+version; the legacy `poi_hours` and `poi_exceptions` tables remain keyed by place
 ID alone and do not provide historical operating-schedule snapshots.
 
-The new optimizer uses `optimizer-1.0`: explicit dated windows, endpoint IDs,
+The optimizer uses `optimizer-1.0`: explicit dated windows, endpoint IDs,
 group budget, transport, directed evidenced routes, member constraints and pinned
 operating facts. The example files are **synthetic testing examples only**.
 Missing production facts must not be copied from them. The legacy request cannot
 be upgraded by adding defaults. See [optimizer integration requirements](../docs/optimizer.md).
 
-**Still outside the live API contract:** async runs (`POST /groups/{id}/runs` →
-202 + run_id, `GET /runs/{id}`). The production app now sends enriched Module H
+**Unsupported API:** asynchronous runs (`POST /groups/{id}/runs` →
+202 + run_id, `GET /runs/{id}`). The app sends enriched Module H
 snapshots via a configurable trusted planning-data adapter; see
 [the app contract and configuration](../docs/optimizer_app_integration.md).
-The new optimizer `/runs` is a synchronous internal budget coordinator,
-not the planned asynchronous group-run API.
+The optimizer `/runs` is a synchronous internal budget coordinator,
+and does not implement an asynchronous group-run API.

@@ -1,18 +1,7 @@
-# Module H — itinerary optimizer
+# Itinerary optimizer
 
-Meal policy update (2026-11-14): see [dynamic meal scheduling](dynamic_meals.md)
-for day-specific requirements, typed overrides, preview-only proposals and the
-app's retained budget/opening-hours bypass.
-
-Update 2026-11-06: the authenticated production app is now wired to Module H;
-see [app integration and planning-data setup](optimizer_app_integration.md).
-The standalone implementation and its original integration requirements are
-described below; the new app guide identifies completed wiring and remaining
-external-provider dependencies.
-
-Implements TS SRS 1.1 FR-ITIN-OPT-01 and SDD 1.1 sections 10–11. Source
-specifications inspected: `TravelSync_요구사항명세서_v1.1.txt` and
-`TravelSync_상세설계서_v1.1.txt` in the project-chat workspace (2026-10-07).
+See [app integration](optimizer_app_integration.md) for service configuration and
+[meal scheduling](dynamic_meals.md) for daily composition and overrides.
 
 ## Contract and formulation
 
@@ -28,8 +17,10 @@ Zero cost/travel is accepted only as an explicit evidenced input.
 Per day: optional visit booleans y, integer service starts t, directed arc
 booleans a. AddCircuit includes fixed end→start, no endpoint self-loops, and
 POI self-loops equal to NOT y. Real selected arcs enforce time propagation,
-including the last return leg; waiting is allowed. Exactly one complete opening
-interval must contain each selected stay. Across days sum(y)≤1. Each requested
+including the last return leg; waiting is allowed. When hours enforcement is
+enabled, each selected stay must fit a complete
+known opening interval. Unknown hours require `allow_unknown_opening_hours=True`;
+known closures and intervals remain binding. Across days sum(y)≤1. Each requested
 day must contain a visit. Costs include party size × per-person visits plus
 group fares on every selected real edge. Max-leg and per-day walking limits
 apply. Member exclusions are unioned and availability windows intersected.
@@ -37,17 +28,19 @@ apply. Member exclusions are unioned and availability windows intersected.
 One shared search budget ≤30 seconds covers all stages. Maximize fixed GFAR
 group_utility, then preserve the incumbent utility and maximize minimum member
 relevance (×10,000 rounded), then preserve both and minimize travel minutes.
+Requests with `optimize_travel=False` omit travel minimization; travel still
+constrains feasibility. Meal preferred starts add a final deviation objective.
 Record raw status, objective, bound and allocated/actual time per search.
 FEASIBLE never claims optimality. A later timeout must retain the incumbent.
 E3 rechecks raw snapshots and route records independently before publication.
 
-Every stage has a fixed fraction of the attempt cap (70% / 20% / 10%); the
+Default stages receive 70% / 20% / 10% of the attempt cap; the
 allocated caps sum to at most that cap. An elapsed deadline also limits later
 phases. Early termination leaves budget unused. CP-SAT time limits are
 cooperative, so process teardown can slightly exceed a configured limit; this
 is a search budget, not a hard 30-second HTTP wall-clock guarantee. Model
 construction, parsing and E3 are outside the reported solver search totals.
-An OPTIMAL response means all three objectives were proved; otherwise an
+An OPTIMAL response means all configured objectives were proved; otherwise an
 incumbent is FEASIBLE, with each raw phase status retained. Timeout without an
 incumbent is UNKNOWN. Model validation failure is MODEL_INVALID.
 
@@ -60,7 +53,7 @@ Run versions, members, exclusions, locks, dates, budget, mode and limits must
 remain identical. Both attempts retain their input, original GFAR fields, E2
 results and solver phases. The caller must save the original run envelope too.
 
-Daily departure is fixed as SDD 11.3 requires. Each member must be available at
+Daily departure is fixed. Each member must be available at
 that instant, and the whole route must fit in the continuous common availability
 interval containing it. Overlapping/adjacent windows are unioned. An unavailable
 departure returns CONSTRAINT_CONFLICT; selecting a later departure requires a
@@ -79,9 +72,9 @@ explicitly included by the adapter if they are part of the user's budget.
 
 The legacy `/plans` mock and `plans.*.json` describe three themed greedy plans.
 They cannot supply routing, party budget, common availability or verified
-operating snapshots. The new versioned service must reject that old payload.
-The app now collects these inputs, loads pinned recommendation/member data and
-calls the new service explicitly; switching OPTIMIZER_URL alone is insufficient.
+operating snapshots. The versioned optimizer rejects that payload.
+The app collects these inputs, loads pinned recommendation/member data, and
+calls the optimizer explicitly; switching OPTIMIZER_URL alone is insufficient.
 Its trusted planning-data adapter must be configured before it can schedule
 real places. No synthetic facts are used by the implementation. The necessary
 additive API audit table is documented in the app integration guide.
@@ -111,65 +104,22 @@ return leg, party costs, per-member utilities and disparity, solver settings,
 phase objectives/bounds/timings and the complete versioned input snapshot with
 SHA256. Relevance metrics are scorer-derived, not observed user satisfaction.
 
-## Production integration requirements
+## Integration requirements
 
-1. An authenticated orchestrator must load the captured group recommendation,
-   preferences/constraints and dataset versions. Convert original personal scores
-   to the documented 0–1 scale; supply all members' GFAR relevance separately.
-   Keep selection_gain, mean_score, group_rank and group_utility distinct. Retain
-   the actual candidate count and original utility formula before E2 exclusions.
-2. Enrich only those candidates, resolve holidays/exceptions and festival dates,
-   retain field evidence, and expand overnight/split schedules into dated
-   intervals. Hours tables keyed only by POI ID are not historical snapshots.
-   The existing hours parser's combined lunch-break range is insufficient input.
-3. Resolve endpoint IDs to coordinates and obtain directed routing for the
-   selected mode and reference departure times. Provide conservative static
-   durations or externally selected time buckets. This solver accepts one frozen
-   matrix per day. If route refresh invalidates E3, return a refresh-needed state
-   or replan only within the remaining run search budget; never reset 30 seconds.
-4. Use the `/runs` envelope if a once-expanded GFAR pool is available (L≤200,
-   K≤60). This module budgets and records attempts but does not query the
-   recommender, enrichment cache or routing provider itself.
-5. Call the new service with a transport timeout above 30 seconds plus parsing,
-   model-building and validation overhead. The current API default is 10 seconds;
-   async job lifecycle and progress reporting remain integration work.
-6. Store request, result, phase states and runtime/code/lockfile versions against
-   the run. Publish only validation_status=PASSED. The existing database storage
-   adapter accepts trusted optimizer output but is not itself E3. No schema
-   migration is necessary for this standalone module. The legacy app's A/B/C
-   view needs an explicit mapping/new view for the single optimized itinerary.
+The authenticated API supplies pinned scores, member rules, dates, endpoints,
+operating facts, and directed routes. It stores private request/result snapshots
+and publishes only after local E3 validation. The solver service is internal and
+does not authorize end users. Do not expose its per-member metrics or complete
+input snapshot on public group screens.
 
-The service is internal and has no authentication layer. Keep it behind the
-authenticated backend; input snapshots and per-member metrics require access
-control and must not be sent wholesale to group-facing public screens.
+The app uses the [Kakao planning-data adapter](../services/planning_data/README.md).
+It schedules one bounded candidate pool. Automatic expansion, traffic refresh,
+and asynchronous job management are not performed by the solver.
 
-## SDD alignment and boundaries
+Use transport timeouts that cover search, model construction, validation, and
+network overhead. The API defaults to a 45-second optimizer timeout; Compose's
+planning-data timeout is 180 seconds for batched route calls.
 
-- Implemented: dated AddCircuit model, optional visits, one visit minimum per
-  day, no repetition, waiting and split hours, E2 evidence exclusions, hard member
-  rules, directed routing and return, party budget, accessibility/events, movement
-  limits, lexicographic objectives, replay snapshots, one budgeted expansion and
-  independent E3 publication gate. No default constraints are relaxed.
-- Contract adaptation: endpoint IDs refer to upstream resolved locations instead
-  of embedding coordinates in every solver request. Member availability is
-  explicit, and service calls are synchronous. Legacy three themed variants are
-  retained only in the existing mock; Module H returns one optimized itinerary.
-- Production app wiring is implemented in `api/` and `web/`, including the
-  configurable planning-data call, private persistence and local E3 publication
-  gate. Actual enrichment/routing provider deployment, recommendation expansion,
-  route refresh and async jobs remain integration dependencies.
-- Acceptance remains unverified: real-provider/operating-data freshness and
-  correctness, deployment startup, live authenticated optimized trip flow,
-  performance at 10,000 source POIs / prescribed 20-run fixed-environment p95.
-  Solver input is bounded to 60 enriched candidates as SDD specifies.
-
-## Validation record
-
-See [optimizer verification report](optimizer_verification.md) for commands,
-results, changed-file summary and remaining assumptions. Tests use isolated
-synthetic inputs, an exhaustive small-instance oracle, HTTP contract checks and
-adversarial E3 mutations. Existing production POI data and database contents are
-not optimizer test fixtures.
-
-References: [Google CP-SAT statuses](https://developers.google.com/optimization/cp/cp_solver)
+See [testing commands and coverage](optimizer_verification.md).
+References: [CP-SAT statuses](https://developers.google.com/optimization/cp/cp_solver)
 and [solver limits](https://developers.google.com/optimization/cp/cp_tasks).

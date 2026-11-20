@@ -1,4 +1,4 @@
-"""Survey decisions: partial hours, endpoint feasibility and no route objective."""
+"""App planning policy: partial hours, endpoint feasibility, and optional route objective."""
 from copy import deepcopy
 
 import pytest

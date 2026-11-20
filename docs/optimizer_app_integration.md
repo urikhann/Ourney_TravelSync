@@ -1,9 +1,6 @@
-# Production app → Module H integration
+# API and optimizer integration
 
-Implemented 2026-11-06 on `feature/ortools-optimizer`. This supersedes the
-standalone-only wiring status in the 2026-11-05 verification report.
-
-The production API's `POST /trips/{id}/itineraries/generate` now calls the real
+The production API's `POST /trips/{id}/itineraries/generate` calls the
 optimizer. It never calls the greedy mock. Docker Compose starts Module H on
 port 8003 and points the API to `http://optimizer:8003`; local API defaults use
 `http://localhost:8003`. Only E3-passed itineraries are published. Legacy mock
@@ -31,8 +28,8 @@ With no adapter configured, generation returns HTTP 503 /
 `planning_data_not_configured`, records the failure and leaves any saved plan
 and votes untouched. The web app explains the missing configuration and keeps
 recommendations available. There is no synthetic, straight-line, zero-cost or
-always-open production fallback. The repository does not include a real routing
-or enrichment provider implementation, and none was configured in this session.
+always-open production fallback. Compose includes the Kakao driving adapter at `http://planning-data:8004`.
+See [adapter configuration](../services/planning_data/README.md).
 
 Request shape (`planning-data-1.0`):
 
@@ -43,7 +40,7 @@ Request shape (`planning-data-1.0`):
 | `dataset_version`, `transport_mode`, `group_size` | Pinned version, selected mode and actual member count |
 | `days` | All requested dates, fixed integer departure/end minutes and endpoint IDs |
 | `points` | Endpoint ID → explicit label, latitude, longitude |
-| `pois` | Only captured GFAR candidates: ID, coordinates, raw metadata and field-status hints |
+| `pois` | Day-specific catalogue candidates: ID, coordinates, raw metadata and field-status hints |
 | `required_access` | Group's explicitly requested accessibility properties |
 
 Metadata hints are not verified scheduling facts. The adapter must resolve
@@ -92,7 +89,7 @@ bodies are not echoed in public errors.
 ## Authenticated generation and publication
 
 The trip owner sends `GenerateInput`: all trip dates, per-day start/end minutes
-and explicit endpoint coordinates, group budget and mode. Leg/walking limits,
+and explicit endpoint coordinates, duration overrides, locks, and transport mode. Leg/walking limits,
 required access and locked visits are optional hard constraints. The browser can
 select a recommended location or enter another location's coordinates. It has
 no fields for submitting candidate scores, operating facts or route durations.
@@ -132,86 +129,31 @@ departure-time route refresh remain upstream orchestration work.
 
 ## Necessary additive schema change
 
-Added only the API database table `itinerary_optimization_runs`. It stores the
+The API database table `itinerary_optimization_runs`. It stores the
 requesting user, trip/recommendation IDs, explicit configuration, captured input
 state, planning-data request/response, optimizer request/response, terminal status
 and optional published itinerary ID. Failed attempts need this separate audit;
 using an empty itinerary as a failed-run record would misrepresent publication.
 
 The API's existing `Base.metadata.create_all()` creates this new table on startup.
-Existing tables/columns and canonical CLI database schemas are unchanged; no data
-migration or production-database command was executed here. Deploy with the
+The standalone recommendation package uses a separate database schema. Deploy with the
 normal API schema-creation permission, or have the database owner create this
 table from `app.models.OptimizationRun.__table__` before startup. Snapshots are
 private DB records; there is no public endpoint returning the raw audit.
 
-## Validation and limits
+## Planning policy and validation
 
-- Root suite: 166 passed plus 21 subtests.
-- API suite: **63 passed**, including the opt-in real HTTP test, in 19.93 seconds.
-  Includes real CP-SAT and local E3, adapter failure, missing cost,
-  context mismatch, forged PASSED response, auth, stale members/preferences,
-  private persistence, token isolation and legacy-plan rejection.
-- Opt-in loopback test starts four actual uvicorn processes (API, real
-  recommender, optimizer, synthetic adapter). It signs up/verifies/logs in a
-  fixture user, generates recommendations and a PASSED itinerary, votes, then
-  verifies unknown-cost failure preserves the saved plan/vote.
-- Web TypeScript and production Vite build passed with Node 20.13.1. The shipped
-  Compose web service continues to use Node 22.
-- Recommender service suite: **13 passed**. Total across root/API/recommender:
-  **242 passed**, plus 21 subtests. Two opt-in PostgreSQL tests were skipped.
-- PostgreSQL and Docker deployment were not exercised; no disposable PostgreSQL
-  URL or Docker executable is available. All executed database tests use newly
-  created SQLite databases. The workspace's existing `api/test.db` is unchanged.
-- The planning-data service used in tests is explicitly synthetic and has no
-  production fallback path. Real-provider correctness/freshness, traffic changes,
-  full-system scale and satisfaction remain unverified.
+App requests enforce known opening intervals and closures, allow unknown hours
+with warnings, and disable budget and travel-minimization objectives. Duration
+estimates and overrides are resolved consistently for retrieval and scheduling.
+The UI reports unknown hours, estimated stays, and the known-cost subtotal.
+See [planning rules](agreed_planning_implementation_20261117.md).
 
-Run the API suite from `api/` (install `.[optimizer]` and `api/requirements.txt`):
+The API converts only declared 1–5 scores with `(value - 1) / 4`. Relative
+relevance remains on its captured scale. GFAR relevance and rank-derived group
+utility remain separate; neither is measured satisfaction.
 
-```powershell
-$env:TRAVELSYNC_LIVE_OPTIMIZER_TEST='1'
-../.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider --basetemp=../.uv-cache/optimizer-app-verification
-```
-
-Without the opt-in variable, the loopback process test is skipped. API conftest
-always uses a new temporary SQLite database and no longer deletes `api/test.db`.
-Synthetic runtime fixtures live only under `api/tests/`.
-
-Changed-file scope: API generation/adapters/configuration/models and tests;
-recommender relevance metadata (selection behavior preserved); Compose/API image
-and CI dependencies; web planning form, itinerary display/types/errors; configuration
-templates and integration documentation. Source datasets, existing databases,
-canonical CLI schemas and unrelated experiments were not changed or committed.
-
-## Hybrid integration review — 2026-11-08
-
-Reviewed merge `b6380ff` on `feature/ortools-optimizer`. The merge already
-contains the hybrid-to-optimizer wiring; this review adds regression coverage
-without changing production behavior.
-
-- `api/app/optimization.py::prepare` accepts `relative_relevance_0_1` unchanged.
-  Only declared `1-5` scores receive `(value - 1) / 4`. GFAR Borda relevance and
-  rank-derived group utility remain separate inputs to optimization.
-- The API integration test exercises actual E5 hybrid scoring with deterministic
-  synthetic embeddings, the real recommender, CP-SAT and backend E3. It checks
-  exact member-score transfer and ensures hybrid recommendation/itinerary fit
-  and satisfaction fields are null rather than percentages or 1–5 predictions.
-- Missing cost, duration, openings, closure status, route duration or route fare
-  makes candidates ineligible with explicit reasons. Each API regression checks
-  that a failed attempt preserves the previous published itinerary and vote.
-- A solver response claiming PASSED with a modified arrival time is rejected by
-  local E3; its failed audit does not replace the previous itinerary or vote.
-
-Fresh verification: root **187 passed plus 21 subtests**, API **73 passed**
-(including the opt-in four-process HTTP test), recommender service **18 passed**;
-TypeScript and Vite production build passed. Python suites reported deprecation
-warnings only. Initial runs hit Windows' shared temporary-directory cleanup
-permission error; reruns with separate workspace `--basetemp` paths exited cleanly.
-
-The HTTP flow uses a synthetic planning adapter and exercises the configured
-default scorer/fallback. The controlled in-process test explicitly verifies the
-effective E5 hybrid path without downloading or depending on a model checkpoint.
-These checks establish integration behavior, not real-provider verification,
-recommendation quality or satisfaction. Real operating/routing sources, Docker
-deployment and PostgreSQL integration were not exercised in this review.
+Tests cover real CP-SAT with synthetic operating/routes, forged solver results,
+stale inputs, authorization, private persistence, and saved-plan/vote preservation.
+The optional loopback test starts the API, recommender, optimizer, and synthetic
+adapter as separate local processes. See [test setup](optimizer_verification.md).

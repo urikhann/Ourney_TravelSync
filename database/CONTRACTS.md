@@ -1,6 +1,6 @@
-﻿# PostgreSQL and recommendation contracts
+# PostgreSQL and recommendation contracts
 
-The supplied baseline SQL is retained as schema version 001. New installations
+Schema version 001 is defined in `database/schema.sql`. New installations
 apply `database/schema.sql`, then migration 002, atomically via `db-init`. Existing
 installations use explicit `db-migrate`. No database is initialized on import.
 
@@ -18,8 +18,7 @@ block cloning; reprocessing or a reviewed migration is required. Imports and
 approval use the same advisory transaction lock. Activation requires the expected
 head and a non-stale parent. CLI import never activates; activation is separate.
 Trusted Python APIs retain an explicit activation option. Administrator approval
-of a USER submission explicitly publishes a new snapshot atomically, as in the
-handoff. Pending submissions cannot supply feature labels. Approved records require
+of a USER submission publishes a new snapshot atomically. Pending submissions cannot supply feature labels. Approved records require
 admin evidence and duplicate checks; authentication endpoints remain out of scope.
 
 ## Preferences, constraints and run snapshots
@@ -43,28 +42,28 @@ It does not create a misleading persisted failure record outside that transactio
 Input adapters sort user/POI UUIDs, validate version membership and feature alignment,
 then apply exclusions before candidate generation. Outputs retain DB POI UUIDs.
 
-## Scores and undefined fields (migration 002)
+## Scores and undefined fields
 
 | Field | Meaning |
 |---|---|
-| individual_scores.score | Mean survey preference over active labels; 1-5 |
-| individual_scores.rank | Descending score with seeded identity ties; NULL for excluded POIs |
-| individual_scores.eligible | Explicit constraint exclusions passed; not itinerary feasibility |
-| group_scores.mean_score | Mean of all captured members' original 1-5 scores |
-| group_scores.group_rank | Algorithm selection order |
-| group_scores.selection_gain | GFAR marginal coverage gain; NULL for AWM |
-| group_scores.group_utility | NULL until an optimizer defines utility |
-| group_scores.feasible_dates | NULL until dates are actually checked |
+| `individual_scores.score` | Member score on the run's declared scale: feature 1–5, hybrid/TF-IDF 0–1 |
+| `individual_scores.scoring_details` | Component values, effective method, and fallback diagnostics |
+| `individual_scores.rank` | Descending score with seeded identity ties; null for excluded POIs |
+| `individual_scores.eligible` | Explicit exclusions passed; not itinerary feasibility |
+| `group_scores.mean_score` | Mean captured member score on the declared scale |
+| `group_scores.group_rank` | Algorithm selection order |
+| `group_scores.selection_gain` | GFAR marginal coverage gain; null for AWM |
+| `group_scores.group_utility` | Optional optimizer utility, distinct from selection gain |
+| `group_scores.feasible_dates` | Null until dates are checked |
 
-The handoff SQL required normalized 0-1 scores and mandatory gain/utility/dates,
-which conflicted with the working recommender. Migration 002 changes score CHECKs
-to 1-5 and permits undefined result fields to be NULL. It refuses an existing
-nonempty results table: historical result scales cannot safely be guessed. Back up
-and review existing results before migrating; do not bypass immutable-result
-triggers or silently rescale. Individual scores and group results remain separate.
+Migrations validate score ranges against the run's method and permit undefined
+fields to remain null. Migration 002 refuses nonempty result tables because
+historical scales cannot be inferred safely. Back up and review those records
+before migrating; do not bypass immutable-result triggers or silently rescale.
+Individual and group results remain separate.
 All eligible member scores must exist and match the group mean before insertion.
 
-## Filtering versus future optimization
+## Recommendation filtering and itinerary constraints
 
 Member exclusions use DB `poi_id` UUID strings and exact `category` or
 `category_name` strings, unioned across captured members. General recommendation
@@ -74,10 +73,10 @@ veto, not a guarantee of real-world acceptability.
 
 Daily windows, budget, movement limits and accessibility are captured and
 structurally validated, but are not solved by the recommendation adapter.
-Opening hours, holiday schedules, price, festival dates and dwell time are absent
-from the official CSV. No schedule/routing/budget feasibility or PASSED itinerary
+Raw enriched text does not establish opening hours, prices, event validity, or
+dwell durations for a selected date. No schedule/routing/budget feasibility or PASSED itinerary
 is produced. Existing itinerary persistence functions remain storage adapters for
-future trusted optimizer output; they do not validate all domain constraints.
+trusted optimizer output; they do not validate all domain constraints.
 
 ## Transactions and security boundaries
 
@@ -91,6 +90,5 @@ DB commands load `.env` from the current directory, with exported values taking
 precedence. Ordinary recommendation imports do not load PostgreSQL, HTTP, pandas
 or Streamlit modules. Submission approval additionally requires the ingestion extra.
 
-Use only explicitly configured disposable PostgreSQL for integration tests. The
-teammate's reported successful load is history, not validation of this checkout.
-Local test status is recorded in `docs/cleanup_report.md`.
+Use an explicitly configured disposable PostgreSQL database for integration
+tests. See [test configuration](../docs/optimizer_verification.md).

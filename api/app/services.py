@@ -1,4 +1,4 @@
-"""Calls to the teammates' services. The only place the backend talks to them.
+"""Backend HTTP clients for configured services.
 
 Each function sends the JSON from contracts/ and returns the JSON reply.
 To switch from the mock to a real service, change the URL in .env — no code changes.

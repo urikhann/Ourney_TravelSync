@@ -1,11 +1,9 @@
-# AGREE: future work, unimplemented
+# AGREE
 
-The previous package contained an entirely commented-out NumPy forward-pass
-sketch with randomly initialized feature projections and POI-conditioned member
-attention. It had no training loop, learned checkpoint or validated predictions.
-It has been removed from the active package; Git history preserves the sketch.
+AGREE is not an available recommender in this package. Use GFAR for group
+aggregation or AWM with calibrated preference scores.
 
-Future work would require labeled group/individual interactions, a justified
-training objective and negative sampling, group/user/time-aware evaluation splits,
-checkpointing and comparison against the current AWM/GFAR baselines. No AGREE
-recommendations or training capability are provided by this repository.
+A trained attention-based group model requires labeled individual/group
+interactions, a defined objective and negative-sampling policy, held-out splits,
+and a compatible checkpoint. Random projections or an untrained forward pass
+cannot provide validated recommendations.

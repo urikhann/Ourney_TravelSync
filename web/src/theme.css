@@ -1,22 +1,13 @@
-/* =====================================================================
-   TravelSync — theme.css  (new look: minimal, flat, one font)
-   Put this file in:  web/src/theme.css
-   Import it LAST in web/src/main.tsx (after styles.css and screens.css)
-   It only re-skins existing class names, so no page logic changes.
-   To undo everything: remove the  import "./theme.css";  line.
-   ===================================================================== */
+/* Shared theme. Import after styles.css and screens.css to override base styles. */
 
-/* ---------- 1. Design tokens ----------
-   The old variable names are kept on purpose (--navy, --blue, ...)
-   so every place that already uses var(--navy) etc. picks up the
-   new colours automatically. */
+/* ---------- 1. Shared design tokens ---------- */
 :root, .app {
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
           system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 
   /* neutrals */
   --ink:   #0F1729;   /* text, primary buttons, tab bar      */
-  --navy:  #0F1729;   /* old "navy" now = ink (flat, no blue tint) */
+  --navy:  #0F1729;   /* alias for the primary ink color */
   --muted: #667085;   /* secondary text                       */
   --soft:  #98A2B3;   /* hints, inactive icons                */
   --line:  #E4E7EC;   /* hairlines                            */
@@ -53,7 +44,7 @@ body {
 }
 button, input, select, textarea { font-family: var(--font); }
 
-/* old inline styles that hard-code the previous fonts */
+/* Normalize font overrides in inline styles. */
 [style*="Jakarta"], [style*="Inter,"] { font-family: var(--font) !important; }
 
 /* numbers line up (scores, times, prices) */
@@ -265,7 +256,7 @@ input.input:focus {
 .empty { padding: 72px 24px 24px; }
 .empty .score { font-size: 20px; }
 
-/* ---------- 15. Auth screens (used by the new AuthShell.tsx) ---------- */
+/* ---------- 15. Auth screens (AuthShell.tsx) ---------- */
 .ts-auth {
   min-height: 100dvh;
   background: var(--bg);
@@ -296,7 +287,7 @@ input.input:focus {
 .ts-auth-foot { margin-top: 18px; text-align: center; font-size: 14.5px; color: var(--muted); }
 .ts-auth-foot a, .ts-auth-foot button { color: var(--ink); font-weight: 650; }
 
-/* the old auth layout pieces are now flat */
+/* Flat authentication layout */
 .auth-sheet {
   background: none !important;
   margin: 0 !important;

@@ -16,7 +16,7 @@ or emails. Without `GEMINI_API_KEY`, or when Gemini fails (quota, network), simp
 ## Run locally
 
 ```bash
-cd ~/dev/Ourney_TravelSync/services/agent
+cd services/agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export GEMINI_API_KEY=...   # free key from https://aistudio.google.com/apikey (leave out to use rules)

@@ -1,10 +1,10 @@
-"""My taste survey (10 features, SRS FR-PREF-01) and my personal "never take me there" rules.
+"""Ten-feature taste survey and my personal "never take me there" rules.
 
-Rules from TS SRS/SDD 1.1:
+Validation and storage rules:
 - exactly the 10 features, each a whole number 1–5. 0, 6, 4.5, "4" or a missing feature is refused (422).
 - the raw 1–5 scores are stored as they are; the recommender derives weights w = r / sum(r) itself.
 - saving never overwrites: it stores version + 1. Send expected_version to avoid overwriting a newer save.
-- personal exclusions are a separate input (SDD 6.6 member_exclusions), not part of the taste scores.
+- personal exclusions are a separate input (member exclusions), not part of the taste scores.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, StrictInt, field_validator

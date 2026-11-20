@@ -9,7 +9,7 @@ export type Trip = TripSummary & {
   setup: { members: number; preferences_done: number; waiting_for: string[] };
 };
 
-// The 10 taste features, in the fixed order from TS SRS/SDD 1.1 (section 6.1).
+// Ten taste features in the shared vector order.
 // The same order is used by the survey, the database, the contracts and the recommender.
 export const CATEGORIES = ["food", "cafe", "nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival"] as const;
 export type Category = (typeof CATEGORIES)[number]; // = "food" | "cafe" | ... | "festival"

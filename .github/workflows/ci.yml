@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
       - run: cd web && npm install && npm run build
-  recommender:  # services/recommender wraps the team package (Python 3.13)
+  recommender:  # Recommender HTTP wrapper (Python 3.13)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,4 +1,4 @@
-"""The fixtures from TS SDD 1.1 (8.2 score example, 9.3 GFAR example, 9.2 boundary rules)."""
+"""Reference fixtures for feature scores, GFAR selection, and ranking boundaries."""
 import random
 
 import group_rec as g  # services/mocks/group_rec.py (conftest adds it to the path)

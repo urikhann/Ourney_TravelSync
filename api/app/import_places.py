@@ -1,9 +1,9 @@
-"""Import the data pipeline's CSV (travelsync_final_places.csv) as a new dataset version.
+"""Import a POI CSV as a new dataset version.
 
     cd api
     python -m app.import_places ../src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv --version busan-enriched-v3 --mapping rule_v2
 
-What it does (SRS FR-POI-DATA-01 / SDD 6.11, simplified for v1):
+Import steps:
   1. checks every row (id, name, Busan coordinates, 10 features that are exactly 0 or 1, at least one 1)
   2. writes the places as a DRAFT version
   3. only if everything passed: makes it ACTIVE and archives the old ACTIVE version
@@ -30,7 +30,7 @@ REQUIRED = ["place_id", "place_name", "latitude", "longitude", *FEATURES]
 BUSAN_BOX = (34.8, 35.5, 128.7, 129.4)  # lat min/max, lng min/max — a sanity check, not an exact border
 STAY_MIN = {"food": 70, "cafe": 60, "nature": 90, "history": 75, "art": 75, "shopping": 90,
             "activity": 90, "entertainment": 120, "relax": 60, "festival": 120}
-STAY_RULE = "stay-rule-1"  # category default stay times are ESTIMATED (SDD 7.2)
+STAY_RULE = "stay-rule-1"  # Category default stay times are estimates.
 TAG_RULES = {
     "hiking": re.compile(r"등산|둘레길|트레킹|갈맷길|숲길"),  # 갈맷길 = Busan's long walking trails
     "raw_fish": re.compile(r"횟집|회센터|회집|물회|활어|초밥|스시|사시미|오마카세"),

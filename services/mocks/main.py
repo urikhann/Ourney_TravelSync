@@ -1,4 +1,4 @@
-"""Mock versions of the teammates' services. Same JSON as contracts/. Replace one by one."""
+"""Mock service endpoints using the JSON shapes in contracts/."""
 import os
 from datetime import date, datetime, timedelta
 
@@ -37,7 +37,7 @@ def load_pois(version: str) -> dict[str, dict]:
                       'enriched_metadata': _json(r['enriched_metadata']) or {}} for r in rows}
 
 
-# ------------------------------------------------------------------ recommender (SDD 8–9: weighted sum + GFAR)
+# ------------------------------------------------------------------ recommender (weighted sum and GFAR)
 def reasons(poi: dict, members: list[dict], picked_for: str | None) -> list[dict]:
     f, out = poi["features"], []
     active = [c for c in FEATURES if f.get(c)]
@@ -167,7 +167,7 @@ def plans(req: dict):
     pois = load_pois(req["dataset_version"])
     ranked = [r for r in req["candidates"] if r["poi_id"] in pois]
     locked = {(l["date"], l["start"]): l["poi_id"] for l in req.get("locked_items", [])}
-    check = req.get("check_availability", True)  # False in the first version: no opening-hours checks
+    check = req.get("check_availability", True)  # False disables hours checks.
     out = []
     for variant in req.get("variants", ["best"]):
         bias = BIAS.get(variant, {})

@@ -1,4 +1,3 @@
-// web/src/password.ts  (NEW file)
 // Shared password helpers for Signup and Forgot password.
 
 /** How strong is the password? 0 = too short, 1 = okay, 2 = good, 3 = strong. Only "8+ characters" is required. */

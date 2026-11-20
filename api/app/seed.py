@@ -20,7 +20,7 @@ from .import_hours import import_hours_csv
 from .import_places import active_version, import_csv
 from .models import DatasetVersion, Poi, PoiHours, PublicHoliday
 
-# Sample: a few 2026 Korean public holidays. The data pipeline replaces this with the full list.
+# Sample Korean public holidays; import a complete calendar for scheduling.
 HOLIDAYS_2026 = [(date(2026, 10, 3), "National Foundation Day (개천절)"),
                  (date(2026, 10, 9), "Hangul Day (한글날)"),
                  (date(2026, 12, 25), "Christmas Day")]

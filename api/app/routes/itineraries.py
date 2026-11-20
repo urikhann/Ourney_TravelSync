@@ -129,7 +129,7 @@ class MealProposalInput(Contract):
 @router.post("/trips/{trip_id}/itineraries/meal-proposals")
 async def propose_meal_change(body: MealProposalInput, trip: Trip = Depends(member_trip),
                               user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Future tool boundary: authorize, resolve, re-optimize and preview only."""
+    """Authorize a meal change, re-optimize, and return a preview without publishing."""
     if trip.created_by != user.id:
         raise HTTPException(403, "optimizer_owner_required")
     raw = body.configuration.model_dump(mode="json")

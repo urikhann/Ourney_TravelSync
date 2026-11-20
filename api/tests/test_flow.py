@@ -122,7 +122,7 @@ def test_full_trip_flow(planning_adapter):
     r = c.post(f"/itineraries/{a['id']}/vote", headers=h["Minho"]).json()
     assert r["chosen_id"] == a["id"] and r["my_vote"] == a["id"]
 
-    # place details; the availability checker is switched off in the first version
+    # Place details remain available when the availability feature is disabled.
     poi = c.get("/pois/gamcheon", headers=h["Bat"]).json()
     assert poi["hours"] and poi["features"] == ["history", "art"] and poi["dataset_version"] == "sample-v1"
     assert a["stats"]["cost_unknown_count"] == 0

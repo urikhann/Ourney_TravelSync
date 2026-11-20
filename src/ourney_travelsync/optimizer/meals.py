@@ -1,4 +1,4 @@
-"""Pure meal policy resolution, shared by CP-SAT, E3 and future agent tools.
+"""Pure meal policy resolution, shared by CP-SAT, E3, and meal-preview tools.
 
 All minutes are wall-clock minutes on the specified Asia/Seoul calendar date.
 No operational facts, scores or persisted itinerary are modified here.
@@ -63,7 +63,7 @@ def validate_meal_overrides(days, policy):
 
 
 def update_meal_constraints(req: PlanRequest, change: MealOverride, *, constraint_version: str) -> PlanRequest:
-    """Typed future tool: replace one day/meal override and return a new snapshot.
+    """Typed meal update: replace one day/meal override and return a new snapshot.
 
     Caller must authorize membership/approval and re-optimize with this snapshot.
     This function never writes a plan or mutates the original request.

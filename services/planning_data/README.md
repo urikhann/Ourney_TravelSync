@@ -7,7 +7,7 @@ TravelSync의 기존 `planning-data-1.0` 경계에 자동차 경로를 연결한
 - `priority=TIME`
 - `avoid=["toll"]`: 통행료 없는 자동차 경로만 사용
 - `duration_minutes`, `distance_m`를 OR-Tools edge로 변환
-- private-car MVP이므로 `group_fare=0`, `walk_minutes=0`
+- 자가용 경로는 `group_fare=0`, `walk_minutes=0`
 - 운영시간/체류시간/비용은 TravelSync PostgreSQL의 기존 값을 사용
 - NULL/UNKNOWN 비용을 무료로 바꾸지 않는다
 
@@ -22,7 +22,7 @@ TravelSync의 기존 `planning-data-1.0` 경계에 자동차 경로를 연결한
 
 ## Repository setup
 
-On the `drive` branch, Compose connects the API to `http://planning-data:8004`.
+Compose connects the API to `http://planning-data:8004`.
 Run `./configure_kakao_key.ps1` from PowerShell to save a replacement key in
 the ignored root `.env`, then run `docker compose up --build`.
 Check `http://localhost:8004/health` for `kakao_configured: true`.
@@ -36,8 +36,9 @@ provider requests. Kakao quotas/billing and latency apply. Routes reflect the
 fetch-time road situation, not a forecast for the requested trip date.
 The `avoid=["toll"]` option and zero route fare implement the supplied private-car
 policy; fuel, parking, rental and taxi costs are not included.
-Unknown POI cost/hours and access/event evidence remain unknown and may cause
-E2 exclusion. Existing CP-SAT and independent E3 publication gates still apply.
+Unknown facts retain their status. Exclusion depends on the request policy:
+app plans allow unknown hours, enforce known intervals/closures, and disable
+budget enforcement; direct optimizer clients retain strict defaults. Existing CP-SAT and independent E3 publication gates still apply.
 
 Offline adapter checks (with service requirements, pytest and the optimizer extra installed):
 `python -m pytest tests/test_kakao_planning_data.py`

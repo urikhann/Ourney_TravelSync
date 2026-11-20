@@ -10,7 +10,7 @@ class AverageWithoutMisery:
 
     A POI is eligible when every member's score is >= misery_threshold.
     No fallback relaxes this threshold if fewer than top_k POIs survive.
-    TODO: select the threshold on validation data, on the same rating scale.
+    Thresholds must be validated on the same rating scale as the inputs.
     """
 
     def __init__(self, misery_threshold: float = 2.5) -> None:

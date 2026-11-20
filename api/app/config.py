@@ -23,7 +23,7 @@ MAIL_FROM = _env("MAIL_FROM", "TravelSync <no-reply@travelsync.app>")
 WEB_ORIGIN = _env("WEB_ORIGIN", "http://localhost:5173")
 WEB_URL = _env("WEB_URL", WEB_ORIGIN)  # used in invite links
 
-# Teammates' services. Default: the mock service in services/mocks.
+# Service URLs; local recommendation/availability defaults use services/mocks.
 RECOMMENDER_URL = _env("RECOMMENDER_URL", "http://localhost:8001")
 OPTIMIZER_URL = _env("OPTIMIZER_URL", "http://localhost:8003")
 PLANNING_DATA_URL = _env("PLANNING_DATA_URL")  # trusted enrichment/routing adapter; no mock fallback
@@ -37,28 +37,26 @@ SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))
 # The AI agent calls an LLM several times per answer, so it gets more time than the other services.
 AGENT_TIMEOUT_SECONDS = float(_env("AGENT_TIMEOUT_SECONDS", "60"))
 
-# Place data: the enriched POI snapshot that ships inside the recommender package (one source of truth
-# for the whole team). Imported automatically into an empty database (see app/seed.py).
+# Packaged enriched POI snapshot; imported into an empty database (see app/seed.py).
 # Set PLACES_CSV= (empty) to use the 28 sample places instead.
 _DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ourney_travelsync", "data",
                             "travelsync_poi_metadata_enriched_v3.csv")
 PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)
 PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v3")  # dataset version name for the auto-import
-# Opening hours (data team's operating-info CSV), loaded right after an automatic place import. Empty = skip.
+# Opening hours from the operating-info CSV, loaded right after an automatic place import. Empty = skip.
 HOURS_CSV = _env("HOURS_CSV", os.path.join(os.path.dirname(PLACES_CSV or _DEFAULT_CSV),
                                            "travelsync_poi_operating_info_v1.csv"))
 # Docker: make the database follow PLACES_CSV / PLACES_VERSION on every start (import it if missing, else activate
 # it), so switching between all places and the demo pool is just an environment change. Off for local runs.
 PLACES_FOLLOW_ENV = _env("PLACES_FOLLOW_ENV", "false").lower() in ("1", "true", "yes")
 
-# Group recommendation settings (SDD 8.3 / 9.2): L = each member's top list, K = group candidates.
+# Group recommendation settings: L = each member's top list, K = group candidates.
 REC_TOP_L = int(_env("REC_TOP_L", "100"))
 REC_GROUP_K = int(_env("REC_GROUP_K", "30"))
 
-# Limits from the SRS design range: groups of 1–10 people, trips of 1–3 days.
+# Supported limits: groups of 1–10 people, trips of 1–3 days.
 MAX_GROUP_MEMBERS = int(_env("MAX_GROUP_MEMBERS", "10"))
 MAX_TRIP_DAYS = int(_env("MAX_TRIP_DAYS", "3"))
 
-# Feature switches. The availability checker (opening hours / holidays) is postponed for the first version:
-# plans are built without checking opening hours. Set FEATURE_AVAILABILITY=true to turn it back on.
+# Controls availability-check endpoints and holiday display. Optimizer hours policy is separate.
 FEATURE_AVAILABILITY = _env("FEATURE_AVAILABILITY", "false").lower() in ("1", "true", "yes")

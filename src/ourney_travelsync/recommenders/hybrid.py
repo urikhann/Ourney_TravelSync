@@ -1,4 +1,4 @@
-"""Versioned E5 relevance, ported from the 2026-11-05 study (29018ce).
+"""Versioned E5 relevance with shared embedding caches and feature fallback.
 
 No human labels or private profiles enter the shared embedding cache. Transformer
 imports and CPU model initialization happen only on a cache miss.

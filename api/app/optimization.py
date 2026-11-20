@@ -42,7 +42,7 @@ class DailyInput(Window):
 class GenerateInput(Contract):
     daily_composition: DailyComposition = Field(default_factory=lambda: DailyComposition(meal_overlap_min=60))
     days: Annotated[tuple[DailyInput, ...], Field(min_length=1, max_length=3)]
-    budget_total: NonNegative = 0  # Compatibility only; this version does not enforce a budget.
+    budget_total: NonNegative = 0  # Compatibility field; app planning does not enforce a budget.
     duration_overrides: Annotated[dict[str, Annotated[int, Field(strict=True, ge=1, le=1440)]], Field(max_length=60)] = Field(default_factory=dict)
     transport_mode: Literal["walk", "drive", "transit"]
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None

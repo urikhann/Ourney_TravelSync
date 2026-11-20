@@ -1,4 +1,4 @@
-"""GFAR starter: normalized Borda relevance and greedy coverage gains.
+"""GFAR: normalized Borda relevance and greedy coverage gains.
 
 Reference: Kaya, Bridge & Tintarev (RecSys 2020), equations 1 and 5.
 https://doi.org/10.1145/3383313.3412232
@@ -15,7 +15,7 @@ class GFAR:
     Each member's top-L list gives Borda weights L-1, ..., 0, normalized
     per member. Items outside that list have zero relevance. Ties follow
     input POI order. L is independent of the requested output length.
-    TODO: tune individual_top_n and validate against the authors' code.
+    Candidate depth is independent of the requested output length.
     """
 
     def __init__(self, individual_top_n: int = 20) -> None:

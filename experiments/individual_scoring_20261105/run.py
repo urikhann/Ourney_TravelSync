@@ -120,7 +120,7 @@ def main():
     for penalty in config['penalties']:
         methods[f'dislike_{penalty}']=(structured(users,x,penalty)[0],'survey_feature_1_5')
         changed_scores[f'dislike_{penalty}']=structured(changed,x,penalty)[0]
-    # This weighted sum is a reconstruction of the stated legacy mismatch, NOT current binary code.
+    # Diagnostic weighted-sum reconstruction; the feature baseline uses an active-label mean.
     methods['legacy_weighted_reconstruction']=(users@x.T/users.sum(1,keepdims=True),'legacy_unvalidated')
     from ourney_travelsync.recommenders.tfidf import score_texts
     methods['tfidf_empty_actual']=(score_texts(rows,['']*len(users)),'cosine')

@@ -18,7 +18,7 @@ All generated output belongs under ignored root `data/` (for example `data/raw/`
 `data/generated/`, `data/cache/`). No raw responses belong under `src/`.
 
 The final generated name is `travelsync_generated_places.csv`, distinct from the
-official packaged v2 snapshot. Both output and cache paths are rejected if they
+official packaged snapshot. Both output and cache paths are rejected if they
 overlap installed package source. Partial collection writes a partial-run folder
 and the CLI exits unsuccessfully; it cannot be imported by `collect-to-db`.
 
@@ -46,10 +46,9 @@ uv run --extra postgres ourney-travelsync db-activate NEW_DATASET_UUID --expecte
 Omit `--expected-head` only for an empty head. `collect-to-db` combines complete
 collection and non-activating import; it never switches the active dataset.
 The Python import APIs retain explicit `activate=True` support for trusted callers,
-including their expected-head guard. Reviewed USER submissions retain the handoff's
-atomic review/publish behavior; an administrator's approval explicitly publishes
+including their expected-head guard. USER submissions use atomic review and
+publication; an administrator's approval publishes
 a new snapshot. No automatic startup import or activation occurs.
 
-DVC scaffolding was empty and has been removed. `experiments` is an optional
-dependency extra for future MLflow/DVC work, with no remote or pipeline claimed.
-Existing local DVC caches, environments, `.env`, `dvclive` and `mlflow.db` are preserved.
+The `experiments` extra supplies MLflow/DVC packages. Tracking servers, remotes,
+and experiment pipelines require separate configuration.

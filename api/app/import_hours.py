@@ -1,4 +1,4 @@
-"""Load opening hours from the data teammate's operating-info CSV into poi_hours / poi_exceptions.
+"""Load opening hours from the operating-info CSV into poi_hours / poi_exceptions.
 
     cd api
     python -m app.import_hours ../src/ourney_travelsync/data/travelsync_poi_operating_info_v1.csv

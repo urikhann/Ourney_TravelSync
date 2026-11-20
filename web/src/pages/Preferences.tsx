@@ -1,4 +1,4 @@
-// The preference survey: 10 taste features (TS SRS/SDD 1.1) + personal "never take me there" rules.
+// The preference survey: ten taste features + personal "never take me there" rules.
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,7 +50,7 @@ export default function Preferences() {
   useEffect(() => { if (saved.data && !form) setForm(saved.data); }, [saved.data, form]);
   useEffect(() => { if (savedEx.data && !ex) setEx(savedEx.data); }, [savedEx.data, ex]);
 
-  // ---- 5. Saving: two separate inputs (SDD: taste scores vs. personal exclusions) -----
+  // ---- 5. Saving: two separate inputs (taste scores and personal exclusions) -----
   const save = useMutation({
     mutationFn: async ({ p, e }: { p: Prefs; e: Exclusions }) => {
       // expected_version: if I saved on another device in between, the server answers 409 instead of overwriting

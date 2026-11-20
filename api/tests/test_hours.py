@@ -1,4 +1,4 @@
-"""Opening-hours rules from the data teammate's operating-info report (app/hours.py + the mock checker)."""
+"""Operating-info parsing and mock availability-checker rules."""
 import json
 from datetime import date
 

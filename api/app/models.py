@@ -84,7 +84,7 @@ class TripMember(Base):
     trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(10), default="member")  # owner | member
-    # Personal "never take me there" rules (SDD 6.6 member_exclusions): {"tags": [...], "poi_ids": [...]}
+    # Personal "never take me there" rules (member exclusions): {"tags": [...], "poi_ids": [...]}
     exclusions: Mapped[dict] = mapped_column(JSON, default=lambda: {"tags": [], "poi_ids": []})
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
@@ -103,7 +103,7 @@ class MemberAvailability(Base):
 
 
 class Preference(Base):
-    """One row per saved version (SDD 6.3): saving again INSERTs version+1, it never overwrites.
+    """One row per saved version: saving again INSERTs version+1, it never overwrites.
     ratings = the 10 raw 1–5 scores; the recommender derives the weights w = r / sum(r) itself."""
     __tablename__ = "preferences"
     __table_args__ = (UniqueConstraint("trip_id", "user_id", "version"),)
@@ -178,7 +178,7 @@ class OptimizationRun(Base):
 
 # ---------------------------------------------------------------- places (data pipeline owns these)
 class DatasetVersion(Base):
-    """An imported, validated set of places (SDD 6.11). Exactly one is ACTIVE; a run pins the version it used."""
+    """An imported, validated set of places. Exactly one is ACTIVE; a run pins the version it used."""
     __tablename__ = "dataset_versions"
     version: Mapped[str] = mapped_column(String(40), primary_key=True)
     status: Mapped[str] = mapped_column(String(10), default="DRAFT")   # DRAFT | ACTIVE | ARCHIVED

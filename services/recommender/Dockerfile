@@ -1,4 +1,4 @@
-# The real recommender (team package: scoring, AWM, GFAR) behind the HTTP contract. Port 8002.
+# Scoring, AWM, and GFAR behind the HTTP contract on port 8002.
 # Build context = repository root (it needs the package in src/):
 #   docker build -f services/recommender/Dockerfile .
 FROM python:3.13-slim

@@ -1,10 +1,10 @@
-"""TravelSync recommender service: the team's AWM / GFAR package behind the HTTP contract.
+"""TravelSync scoring and group aggregation behind the HTTP contract.
 
     POST /recommend   contracts/recommend.request.json  ->  contracts/recommend.response.json
     GET  /health
 
 This file only translates. All scoring and group aggregation is done by the `ourney_travelsync`
-package (src/ourney_travelsync, owned by the recommender teammate):
+package (src/ourney_travelsync):
 
     ratings (1-5) --E5 hybrid / feature fallback--> member x place relevance
                   --prepare_group------> candidates = union of each member's top-L (seeded ties)
@@ -60,7 +60,7 @@ def trip_seed(trip_id: str) -> int:
 
 
 def utility(rank: int, k: int) -> int:
-    """SDD 9.3: group_utility = round(1000 * (K' - rank + 1) / K')."""
+    """Rank-derived group_utility = round(1000 * (K' - rank + 1) / K')."""
     return round(1000 * (k - rank + 1) / k)
 
 
@@ -99,7 +99,7 @@ def check(req: dict) -> None:
     if list(req.get("features") or FEATURE_NAMES) != list(FEATURE_NAMES):
         raise HTTPException(422, "feature_order_mismatch")
     if req.get("dataset_version") != DATASET_VERSION and req.get('poi_snapshot') is None:
-        # The backend pinned a dataset this service does not have (SRS 7: versions must match).
+        # The backend pinned a dataset this service does not have (versions must match).
         raise HTTPException(409, f"dataset_version_mismatch: service has {DATASET_VERSION}")
     if not req.get("members"):
         raise HTTPException(422, "no_members")

@@ -13,17 +13,15 @@ Use a new dataset version when importing; existing snapshots remain immutable.
 ## Core v2 mapping
 
 
-The previous travelsync_final_places_v2.csv was inspected and strictly validated:
+The core snapshot `travelsync_final_places_v2.csv` contains:
 3,570 rows, 29 columns, 3,570 unique external IDs. Canonical location:
 src/ourney_travelsync/data/travelsync_final_places_v2.csv.
 SHA256: 5fe6fc689b10c03b0a4b1dd6ff99db4cf33e0d2478b20aaf32a6c51929127a15.
-It is copied byte-for-byte from the supplied travel.zip.
 
 Columns follow data_schema.BASE + EXTRA + FEATURES; feature order comes from
 features.FEATURE_NAMES. Import does not import HTTP/pandas collection code or
-reclassify merged labels. The integrated collector has layout/output-path changes
-and is not byte-identical to the handoff source. Its code hash identifies the
-installed mapping implementation, not proof of the historical CSV generator.
+reclassify merged labels. The mapping code hash identifies the installed implementation. Exact source-run
+reconstruction also requires the original raw API inputs and run manifest.
 
 | 파이프라인 출력 컬럼 | PostgreSQL 저장 | 처리 |
 |---|---|---|
@@ -62,13 +60,13 @@ installed mapping implementation, not proof of the historical CSV generator.
 ## 추가 저장 필드
 
 - description, operating_hours, closed_days, cost, estimated_stay_time: CSV에 없으므로 NULL. 운영정보 네 필드는 field_status에서 UNKNOWN. 무료가 확인된 경우에만 cost=0, KNOWN. 상태와 값 불일치는 DB 트리거로 거부합니다.
-- dataset_version: UUID. 문서의 VARCHAR 버전 식별자를 형식이 보장되는 UUID로 구체화했습니다.
+- dataset_version: UUID. 데이터셋별 불변 스냅샷을 식별합니다.
 - feature_schema_version: `travel10-v1`; mapping_version: `rule-v2-<소스 SHA256 앞16자리>`. mapping_versions에 전체 SHA256 저장. CSV가 실제로 이 v2 코드로 생성됐는지는 운영자가 확인해야 합니다. CSV만으로 과거 실행 코드 출처를 증명할 수는 없습니다.
 - verified_at: NULL. imported_at 성격의 created_at/updated_at을 원천 수집 시각으로 표시하지 않습니다. poi_source.collected_at도 원본 CSV에서 확인 불가하므로 NULL.
 - active: 검증된 최종 후보만 true. 운영정보 UNKNOWN이어도 선호 점수 후보로 조회 가능하며, 일정 후보 조건 검증은 별도 단계입니다.
 - submission_id: USER 출처에서만 필수. 승인된 제안과 연결.
 
-기존 문서의 `name`을 실제 CSV와 맞춰 `place_name`으로 저장하며 UUID `poi_id`는 유지했습니다. `place_id`는 외부 파이프라인 ID 보존용으로 추가했습니다.
+`place_name`은 장소 이름, UUID `poi_id`는 DB 식별자, `place_id`는 외부 파이프라인 식별자입니다.
 
 ## 빈 문자열과 NULL
 
@@ -78,6 +76,7 @@ CSV 표준에는 SQL NULL 표현이 없습니다. 이 import의 계약은 `""`/�
 
 CSV import는 기존 파이프라인의 국내 좌표 범위와 부산 주소를 검증합니다. 정밀 행정경계 폴리곤 검증은 포함하지 않습니다. 사용자 제안 승인은 관리자가 실제 주소/좌표 일치 및 부산 여부를 확인했다는 근거가 필요합니다. 해당 검증을 공개 클라이언트의 bool 값만으로 승인하면 안 됩니다.
 
-## 원본과 설계의 차이
+## 축제 데이터의 한계
 
-상세설계서에는 축제 회차/날짜 확인 후 병합을 기술하지만 첨부 v2 코드는 이름·거리로 판단하며 별도 회차 필드가 없습니다. 이번 DB 전환에서는 이를 구현 완료로 가정하지 않았으며 기존 merge 로직도 수정하지 않았습니다. 회차·유효일 보완은 다음 데이터 품질 작업입니다.
+병합은 이름과 거리를 사용하며 별도 축제 회차 필드가 없습니다. 병합된 장소
+레코드만으로 행사 날짜나 회차 유효성을 확인할 수 없습니다.

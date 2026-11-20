@@ -1,15 +1,15 @@
 # TravelSync - Ourney
 
-Different tastes, one itinerary. Inha University CSE capstone, team Ourney.
+Different tastes, one itinerary.
 
 This repository implements Python group recommendations, Busan POI collection and
 cleaning, immutable PostgreSQL dataset/run snapshots, an authentication API/web
 workflow, and an optional Streamlit viewer. E5 hybrid relevance is the default
 individual scorer feeding GFAR, with transparent feature fallback. See
-[E5 architecture, operations and verification](docs/e5_hybrid.md).
+[E5 scoring and configuration](docs/e5_hybrid.md).
 The authenticated API/web app calls the OR-Tools itinerary optimizer with an
-independent E3 publication gate. Verified operating/routing data requires a
-configured server-side adapter; the LLM agent remains a separate integration.
+independent E3 publication gate. Operating facts and directed driving routes come from the server-side planning
+adapter. The chat assistant uses read-only tools and validated suggestions.
 See [optimizer app setup](docs/optimizer_app_integration.md).
 
 ## Install and run
@@ -27,21 +27,21 @@ uv run --locked pytest -q
 `uv sync` installs the project editable and includes development tools. For core
 installation alone use `uv sync --locked --no-dev`. Run commands with the same
 extras used at installation because `uv run` synchronizes the requested environment.
-`pyproject.toml` is authoritative; `uv.lock` is resolver-generated. No independently
-maintained requirements files are needed.
+`pyproject.toml` is authoritative; `uv.lock` is resolver-generated. Service-specific HTTP and database dependencies are listed in each service
+requirements file.
 
 ```powershell
 uv sync --locked --extra ingestion --extra postgres --extra viewer
 uv run --locked --extra viewer streamlit run apps/data_viewer.py
 ```
 
-Extras: `ingestion` (requests/pandas), `postgres` (psycopg/python-dotenv), `viewer`
+Extras: `ingestion` (requests/pandas/python-dotenv/SQLAlchemy), `postgres` (psycopg/python-dotenv), `viewer`
 (Streamlit/pandas/PostgreSQL), `experiments` (MLflow/DVC), `semantic` (pinned
 SentenceTransformer/CPU E5 support). Core requires NumPy, SciPy and
 scikit-learn for legacy Method C. See [versioned metadata integration](docs/poi_metadata.md)
 for sidecar imports, JOINs, preference text and historical binary replay.
-Development tools are in the `dev` group. Existing environments and local experiment
-records are not cleanup targets.
+Development tools are in the `dev` group. The `optimizer` extra installs OR-Tools
+and Pydantic. Windows installations include timezone data for `Asia/Seoul`.
 
 For operational E5 scoring, install `--extra semantic` and prewarm with
 `ourney-travelsync e5-cache --download` before serving requests. Without an
@@ -67,12 +67,12 @@ users = {"alice": dict.fromkeys(FEATURE_NAMES, 3)}
 results = recommend_group(load_places(), users, top_k=10, tie_seed=0)
 ```
 
-## Current layout
+## Repository layout
 
 ```text
 src/ourney_travelsync/
     cli.py, common.py, features.py, places.py, evaluation.py
-    data/             official v2 CSV and provenance
+    data/             enriched POI CSVs and provenance
     recommenders/     individual scoring, AWM, GFAR, candidates and ties
     ingestion/        API collection and fixed-input processing
     db/               connection, import, repositories, submissions, run adapter
@@ -83,7 +83,7 @@ notebooks/compare_recommenders.ipynb
 scripts/              thin wrappers, diagnostics and wheel verification
 tests/                default offline suite
 integration_tests/    opt-in disposable PostgreSQL checks
-docs/                 workflows, diagnostics and cleanup report
+docs/                 configuration and architecture guides
 .github/workflows/tests.yml
 ```
 
@@ -94,7 +94,7 @@ The authoritative Git-tracked CSV is
 columns, 3,570 unique place IDs**. SHA256:
 `3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9`.
 V3 includes descriptions for 2,252 POIs (63.1%); all 29 core columns and features
-are unchanged from the previous packaged snapshot.
+use the shared ten-feature schema.
 Sources: 345 TourAPI, 106 merged and 3,119 Kakao. Its adjacent README records
 provenance and the distinction between external place IDs and database UUIDs.
 The enriched snapshot preserves the previous 29 core columns and adds 43 metadata
@@ -154,19 +154,18 @@ uv run --locked --extra postgres ourney-travelsync db-activate NEW_DATASET_UUID
 uv run --locked --extra postgres ourney-travelsync db-recommend GROUP_UUID CONSTRAINT_UUID --algorithm gfar
 ```
 
-Groups, preferences and constraints must already exist through repository functions;
-there is no public authentication or preference-entry API. `db-recommend` creates a
+For these standalone database commands, groups, preferences, and constraints must
+already exist through repository functions. The web API uses a separate schema. `db-recommend` creates a
 run, reads its captured inputs, and saves separate individual/group result fields
 in one transaction. Later preference/head changes do not alter its inputs. See
 [DB contracts](database/CONTRACTS.md) and [CSV mapping](database/CSV_MAPPING.md).
 
 For later head changes use `db-activate NEW --expected-head CURRENT`. Import alone
 does not activate. Existing schemas require explicit `db-migrate --directory
-database`; initialization refuses nonempty schemas. Migration 002 corrects the
-handoff's incompatible 0-1 score checks to 1-5 and permits undefined result fields.
+database`; initialization refuses nonempty schemas. Migration 002 uses
+1–5 preference scores and permits undefined result fields to remain null.
 It refuses databases with historical recommendation results, which need manual
-review instead of automatic rescaling. No existing database was migrated by this
-cleanup. Installed wheels require an explicit checkout/source-distribution
+review instead of automatic rescaling. Installed wheels require an explicit checkout/source-distribution
 `database/` directory for schema operations.
 
 ## Verification and limits
@@ -182,9 +181,10 @@ Default tests are offline and need neither API keys nor PostgreSQL. To opt into 
 checks, explicitly export `TRAVELSYNC_TEST_DATABASE_URL` for a disposable database,
 then run `uv run --extra postgres pytest -q integration_tests`. This creates and
 drops a uniquely named test schema. Never point it at a shared database.
-CI defines offline, wheel and disposable PostgreSQL jobs. Local results and the
-review-finding resolution map are in [the cleanup report](docs/cleanup_report.md).
+CI runs minimal and optional-dependency suites, installed-wheel checks, and
+disposable PostgreSQL tests. See [package architecture](docs/cleanup_report.md)
+and [optimizer tests](docs/optimizer_verification.md).
 
 Rule labels, tied category scores and narrow example profiles limit evaluation.
-No quality or fairness improvement is inferred from source-composition diagnostics.
-Data-provider terms still apply. A project license has not been selected by the team.
+Source-composition diagnostics do not measure recommendation quality or fairness.
+Data-provider terms still apply. No project license is specified.

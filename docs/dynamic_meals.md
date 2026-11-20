@@ -1,6 +1,6 @@
 # Dynamic meal scheduling (meal-1.0)
 
-Implemented November 14, 2026. Times are integer wall-clock minutes on each
+Times are integer wall-clock minutes on each
 calendar date in Asia/Seoul. No UTC conversion or overnight day windows are
 performed here; existing dated-day and operating-data contracts still apply.
 
@@ -8,7 +8,8 @@ performed here; existing dated-day and operating-data contracts still apply.
 
 `optimizer/contracts.py::DEFAULT_MEAL_WINDOWS` defines lunch 11:30–14:30
 (690–870) and dinner 17:30–20:30 (1050–1230). `DailyComposition` centrally
-defines the 45-minute overlap threshold and policy version.
+defines the standalone 45-minute overlap threshold and policy version.
+The application supplies a 60-minute threshold.
 
 For each requested day and each effective meal window:
 
@@ -20,8 +21,8 @@ required = explicit_requirement or overlap >= meal_overlap_min
 
 Requirements use the user's requested day bounds, not a shortened restaurant or
 member-availability window. A required meal remains required if routes, duration,
-availability or other hard constraints make it impossible. Exactly 45 minutes
-requires a meal; 44 does not. A 60-minute stay cannot fit a 45-minute overlap.
+availability or other hard constraints make it impossible. At the standalone default, exactly 45 minutes
+requires a meal; 44 does not. In the app, the boundary is 60 minutes. A 60-minute stay cannot fit a 45-minute overlap.
 
 Examples: 09:00–21:00 requires both meals; 09:00–14:00 lunch;
 14:00–21:00 dinner; 14:30–17:30 neither. Requirements are independent per date.
@@ -29,12 +30,11 @@ Other composition rules (activities, variety, café cap, food/drink separation)
 still apply, so a short day can remain infeasible for reasons besides meals.
 The existing nonempty-day rule remains in place.
 
-Omitting `PlanRequest.daily_composition` now materializes the default policy in
+Omitting `PlanRequest.daily_composition` materializes the default policy in
 the input snapshot. Explicit `null` retains the legacy no-composition mode for
 standalone callers. The authenticated app always supplies a composition policy.
 The old `min_meals` field is accepted but deprecated and ignored: it cannot force
-two meals on a morning-only day. `max_meals` remains enforced. Breakfast is no
-longer a default slot but remains supported in custom base configurations.
+two meals on a morning-only day. `max_meals` remains enforced. Breakfast is supported in custom base configurations but is not a default slot.
 
 ## CP-SAT and E3
 
@@ -51,8 +51,8 @@ No new restaurant suitability metadata is inferred.
 Optional meal visits can be selected if they improve the existing objectives;
 there is no extra meal reward. The existing cross-day no-repeat rule means two
 required meals need distinct POIs, and multi-day trips need enough distinct POIs.
-Existing full-catalogue retrieval already reserves restaurant alternatives; it
-was not changed, nor were GFAR or individual/group utility calculations.
+Full-catalogue retrieval reserves restaurant alternatives. Meal constraints do
+not modify GFAR or individual/group utility calculations.
 
 E3 reconstructs meal assignment from actual visit start/departure times and the
 input policy, using an exhaustive injective matching over the small meal-slot
@@ -70,7 +70,7 @@ be missed when hard constraints or earlier objectives take priority, or search
 times out. Fixed starts are hard. Neither preference changes scores or makes a
 failed hard constraint optional. Response phases expose deviation and status.
 
-## Structured overrides and future agent boundary
+## Structured overrides and previews
 
 `MealOverride` takes `date`, `name`, optional `window` (`start_min`, `end_min`),
 either `preferred_start_min` or `fixed_start_min`, and optional `required`.
@@ -105,7 +105,7 @@ overrides, threshold and policy version) are fully included in the replay
 snapshot. The app fingerprints the full generation configuration for its
 constraint version, using existing JSON audit columns; no migration is needed.
 
-The existing chat is a mock, without a tool executor. A future tool can call:
+The trip owner can request a preview with:
 
 ```
 POST /trips/{trip_id}/itineraries/meal-proposals
@@ -130,79 +130,17 @@ infeasibility returns HTTP 409 with a code and required-meal conflicts; malforme
 overrides return 422. Reported unscheduled meals identify requirements in the
 failed model; they are not a minimal explanation of the root cause.
 
-There is no real LLM parser, approval controller or commit-proposal operation in
-this change. The future chat controller must distinguish preferred versus fixed
-intent, resolve phrases such as “tomorrow” to a Seoul date, collect required group
-approval, and recheck proposal/input freshness before committing a revision.
-Do not route an unapproved agent proposal through ordinary `/generate`, whose
-existing owner-triggered rebuild behavior remains unchanged.
+Meal proposals return previews only; they do not apply an approved revision.
+A controller applying a proposal must obtain approval and check input freshness.
+Ordinary owner-triggered `/generate` requests rebuild the saved itinerary.
 
-## Data and verification limits
+## Constraints and tests
 
-Per the requested app configuration, **budget and opening-hours enforcement
-remain disabled** in both ordinary app generation and meal proposals. E2/CP-SAT/
-E3 respect those request flags consistently. Standalone requests retain strict
-defaults, and tests exercise enabled hours/budget enforcement. An app E3 pass
-does not establish real restaurant availability or affordability. Unknown POI
-fees remain excluded from accounted totals under the existing cost policy.
-No operational data was created or changed.
+App generation and meal previews enforce known hours and closures while allowing
+unknown hours with warnings. Budget enforcement is disabled. Standalone clients
+retain strict defaults. Costs include supplied fees only, so a validated plan
+does not establish affordability or complete restaurant availability.
 
-Validation uses synthetic facts/routes and isolated temporary SQLite databases,
-without live external API calls. Tests cover day windows and exact boundaries,
-duration/closing/end/travel conflicts, nonmeal roles, distinct visits, candidate
-shortage, overrides, snapshot isolation, E3 tampering, owner authorization and
-saved-plan/vote preservation. See `test_optimizer_meals.py` and
-`api/tests/test_meal_proposals.py`.
-
-Modified implementation entry points: `contracts.py` (policy/data contracts),
-`meals.py` (effective windows, updates and independent matching), `solver.py`
-(assignments/preference phase), `validation.py` (E3), optimizer `api.py`
-(infeasibility diagnostics), app `optimization.py` (input validation), app
-`routes/itineraries.py` (preview workflow and default policy response). The Plan
-form/types now describe server-supplied defaults instead of hardcoded old slots.
-Legacy optimizer fixtures/examples explicitly opt out of composition; existing
-composition and candidate tests use the new defaults.
-
-## Verification results
-
-Final local checks:
-
-- All `tests/test_optimizer_*.py`: **180 passed**, no failures or skips.
-- API meal proposals, optimizer integration and planning candidates:
-  **32 passed**, no failures or skips.
-- TypeScript compiler API, using the existing `web/tsconfig.json`: **0 diagnostics**.
-- `git diff --check`: passed.
-
-Both Python suites report the installed Starlette/httpx TestClient deprecation
-warning. The initial API test run was blocked by missing dependencies; the
-existing `api/requirements.txt` dependencies were installed into `.venv`, then
-the suites passed. Two initial new assertions incorrectly prohibited optional
-objective-improving restaurant visits; they were corrected to check required
-coverage. The legacy documented example now explicitly opts out of composition.
-No final test failures remain. A production Vite bundle was not built because
-`npm` is unavailable on PATH; TypeScript validation used the installed compiler
-through the Node runtime. Live operational data, Docker and PostgreSQL were not
-tested by these checks.
-
-Complete changed-file inventory:
-
-| File | Main change |
-|---|---|
-| `src/ourney_travelsync/optimizer/contracts.py` | `MealOverride`, central defaults, versioned policy, request validation |
-| `src/ourney_travelsync/optimizer/meals.py` | `effective_meals`, `validate_meal_overrides`, `update_meal_constraints`, `meals_can_be_assigned` |
-| `src/ourney_travelsync/optimizer/solver.py` | `solve_prepared`: per-meal assignments and final preference phase |
-| `src/ourney_travelsync/optimizer/validation.py` | `validate_final`: independent actual-visit meal matching |
-| `src/ourney_travelsync/optimizer/api.py` | `optimize`: failed-model meal diagnostics |
-| `api/app/optimization.py` | `GenerateInput.valid_meals`: override preflight |
-| `api/app/routes/itineraries.py` | `propose_meal_change`, shared `_generate`, server-supplied policy defaults |
-| `web/src/components/OptimizationForm.tsx` | Display dynamic policy from the server |
-| `web/src/types.ts` | Override/default-policy response types |
-| `tests/test_optimizer_meals.py` | New policy, CP-SAT and E3 tests |
-| `tests/test_optimizer_composition.py` | Two default meal slots |
-| `tests/optimizer_fixtures.py` | Explicit legacy no-composition fixture |
-| `api/tests/test_meal_proposals.py` | Preview, conflicts, authorization, plan/vote preservation |
-| `api/tests/test_planning_candidates.py` | Dynamic-minimum expectations |
-| `contracts/optimizer.synthetic.request.json` | Explicit legacy no-composition example |
-| `contracts/optimizer.synthetic.response.json` | Matching example input snapshot |
-| `docs/dynamic_meals.md` | Policy, interface, limitations and verification report |
-| `docs/optimizer.md` | Link to this policy update |
+Synthetic tests cover overlap boundaries, full-stay and route conflicts, distinct
+meal visits, overrides, E3 tampering, authorization, and saved-plan/vote preservation.
+See `tests/test_optimizer_meals.py` and `api/tests/test_meal_proposals.py`.

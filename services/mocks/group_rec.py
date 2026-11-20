@@ -1,7 +1,6 @@
-"""Reference version of the group recommender from TS SDD 1.1 (chapters 8–9), used by the mock service.
+"""Reference group recommender used by the mock service.
 
-The recommender teammate owns the real service. This file exists so the backend and the web app can be built
-and tested against the same numbers the design document specifies:
+Scoring and aggregation:
 
   w(u,k) = r(u,k) / sum_k r(u,k)              raw 1–5 scores -> weights that sum to 1
   P(u,i) = sum_k w(u,k) * x(i,k)              x = the place's 10 binary features -> score 0..1
@@ -10,7 +9,7 @@ and tested against the same numbers the design document specifies:
   gain(i) = sum_u p(u,i) * q(u),  q(u) starts at 1 and becomes q(u) * (1 - p(u,i)) after i is picked
   group_utility(i) = round(1000 * (K' - group_rank(i) + 1) / K')
 
-Tie rules (SDD 9.2): score ties -> poi_id ascending; gain ties -> mean_score descending, then poi_id ascending.
+Tie rules: score ties -> poi_id ascending; gain ties -> mean_score descending, then poi_id ascending.
 """
 FEATURES = ["food", "cafe", "nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival"]
 
@@ -34,7 +33,7 @@ def relevance(top: list[str]) -> dict[str, float]:
     n = len(top)
     borda = {pid: n - r for r, pid in enumerate(top, start=1)}
     total = sum(borda.values())
-    if total == 0:  # only one candidate: its relevance is 1 (SDD 9.2 boundary rule)
+    if total == 0:  # only one candidate: its relevance is 1
         return {pid: 1.0 for pid in top}
     return {pid: b / total for pid, b in borda.items()}
 

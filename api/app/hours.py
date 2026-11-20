@@ -1,6 +1,6 @@
 """Turn one row of the operating-info CSV into opening hours we can store.
 
-Rules from the data teammate (travelsync_operating_info_report):
+Operating-info parsing rules:
   - hours_scope PUBLISHED_SCHEDULE -> the place's regular weekly hours            -> PoiHours rows
   - hours_scope SNAPSHOT_WEEK      -> only true for hours_valid_from..until dates -> PoiException rows (dated)
   - anything else (NULL scope, NOT_FOUND, AMBIGUOUS, RAW_ONLY, FETCH_ERROR)       -> unknown, store nothing

@@ -1,6 +1,6 @@
 """Run the group recommender for a trip and read the latest result.
 
-Flow (TS SDD 1.1, chapters 5, 8, 9): pin the ACTIVE dataset version and each member's latest preference version,
+Flow: pin the ACTIVE dataset version and each member's latest preference version,
 send them to the recommender (contracts/recommend.request.json), store the run, return the result with place details.
 The recommender computes per-member E5 hybrid relevance, removes explicit E1
 exclusions, and picks with GFAR. Feature-only comparison and fallback stay available.
@@ -139,7 +139,7 @@ async def run_recommender(body: RunIn | None = None, trip: Trip = Depends(member
     res = await services.recommend(req)
     if res.get("dataset_version") not in (None, version) or \
             res.get("feature_schema_version") not in (None, FEATURE_SCHEMA_VERSION):
-        raise HTTPException(502, "recommender_version_mismatch")   # SRS 7: versions must match
+        raise HTTPException(502, "recommender_version_mismatch")   # Dataset and feature-schema versions must match.
     run = RecommendationRun(trip_id=trip.id, model_version=res.get("model_version", "unknown"), method=body.method,
                             misery_threshold=req["options"]["awm_threshold"], dataset_version=version,
                             feature_schema_version=FEATURE_SCHEMA_VERSION, member_snapshot=snapshot,
