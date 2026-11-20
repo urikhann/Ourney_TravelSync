@@ -52,6 +52,39 @@ The service addresses inside Docker are fixed in `docker-compose.yml`.
 
 ## Troubleshooting
 
+### Slow rebuilds or growing Docker storage
+
+The recommender image uses CPU-only PyTorch for E5. Python dependencies are
+installed before application source in the recommender, optimizer and API images,
+so source/data edits reuse the dependency layers. Requirements are read from
+`pyproject.toml`; local Python installations and `uv.lock` are unchanged.
+
+After updating these Dockerfiles, rebuild once from the repository root:
+
+```bash
+docker compose --parallel 1 --progress plain build recommender optimizer api
+docker compose up -d
+```
+
+This first rebuild still downloads dependencies. Later source-only rebuilds should
+show `CACHED` for the dependency installation steps. Avoid `--no-cache` for normal
+rebuilds. Single-service builds, such as `docker compose build recommender`, also
+avoid rebuilding unrelated services. Starting existing images only needs
+`docker compose up -d`.
+
+To measure usage without deleting anything:
+
+```bash
+docker system df
+docker buildx du
+```
+
+Existing large images/cache are not removed by this change, and the Docker WSL
+disk file can remain large even after space is freed internally. Review the usage
+before choosing cleanup. `docker compose down -v` deletes the PostgreSQL volume;
+it is not a build performance fix. The web service also runs `npm install` on
+startup; that time is separate from image building.
+
 - **"port is already allocated"**: something else uses that port (often a local server from the 4-terminal setup,
   or a local PostgreSQL on 5432). Stop it, then run the command again.
 - **The web page loads but nothing works**: wait until the api log says `Application startup complete`

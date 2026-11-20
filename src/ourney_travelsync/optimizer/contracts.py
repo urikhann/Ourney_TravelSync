@@ -182,6 +182,8 @@ class PlanRequest(Contract):
     daily_composition: DailyComposition | None = Field(default_factory=DailyComposition)
     enforce_cost: bool = True
     enforce_opening_hours: bool = True
+    allow_unknown_opening_hours: bool = False
+    optimize_travel: bool = True
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     locked_items: tuple[Lock, ...] = ()

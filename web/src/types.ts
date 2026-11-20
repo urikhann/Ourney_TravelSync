@@ -46,6 +46,7 @@ export type Recommendations = {
 };
 
 export type PlanItem = {
+  duration_source?: string; duration_estimated?: boolean;
   visit_category?: "cafe" | "meal" | "activity";
   activity_category?: string;
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
@@ -64,6 +65,7 @@ export type DailyComposition = {
   meal_windows: { name: "breakfast" | "lunch" | "dinner"; start_min: number; end_min: number }[];
 };
 export type OptimizationInput = {
+  duration_overrides?: Record<string, number>;
   daily_composition?: DailyComposition;
   days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint }[];
   budget_total: number; transport_mode: "walk" | "drive" | "transit";
@@ -73,7 +75,8 @@ export type OptimizationInput = {
 };
 export type Plan = {
   id: number; letter: string; variant: string; name: string; votes: number; stale: boolean;
-  stats: { group_fit: number | null; total_cost: number; cost_unknown_count?: number; walking_km_per_day: number | null;
+  stats: { group_fit: number | null; total_cost: number; cost_unknown_count?: number; budget_enforced?: boolean;
+    opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
   days: { date: string; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];

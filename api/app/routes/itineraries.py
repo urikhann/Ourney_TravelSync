@@ -1,7 +1,7 @@
 """Authenticated Module H generation, independent E3 publication, and approval."""
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
@@ -9,13 +9,15 @@ from sqlalchemy.orm import Session
 from .. import config, services
 from ..db import get_db
 from ..deps import member_trip
-from ..models import Itinerary, OptimizationRun, PublicHoliday, RecommendationRun, Trip, User, Vote
+from ..models import Itinerary, OptimizationRun, Poi, PublicHoliday, RecommendationRun, Trip, User, Vote
 from ..optimization import GenerateInput, catalogue_request, data_request, fingerprint, prepare, solver_request, state
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
 from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride, PlanResponse
 from ourney_travelsync.optimizer.validation import validate_final
+from ourney_travelsync.optimizer.eligibility import usable_cost
+from ourney_travelsync.visit_durations import default_duration
 
 router = APIRouter(tags=["itineraries"])
 
@@ -76,7 +78,7 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
         "holidays": [{"date": h.day.isoformat(), "name": h.name} for h in holidays] if config.FEATURE_AVAILABILITY else [],
         "availability_checked": bool(its),
-        "setup": {"dates": trip_dates(trip), "default_composition": DailyComposition().model_dump(mode="json"), "is_owner": trip.created_by == user.id,
+        "setup": {"dates": trip_dates(trip), "default_composition": DailyComposition(meal_overlap_min=60).model_dump(mode="json"), "is_owner": trip.created_by == user.id,
                   "planning_data_configured": bool(config.PLANNING_DATA_URL),
                   "recommendations_ready": bool(rec and rec.method == "gfar" and rec.response.get("relevance_version")),
                   "points": list(points.values())},
@@ -88,6 +90,29 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
                                  "candidate_selection": latest.input.get("candidate_retrieval", {}).get("planning_candidate_selection")}
                                 if latest else None),
     }
+
+
+@router.get("/trips/{trip_id}/planning-places")
+def planning_places(q: str = Query(default="", max_length=120), trip: Trip = Depends(member_trip),
+                    user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Search only the trip's pinned recommendation dataset, including non-top-k POIs."""
+    run = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
+                    .order_by(RecommendationRun.id.desc()))
+    if run is None:
+        raise HTTPException(409, "no_recommendations_yet")
+    query = select(Poi).where(Poi.dataset_version == run.dataset_version)
+    if q.strip():
+        query = query.where(Poi.name.icontains(q.strip(), autoescape=True))
+    return [{"id": p.id, "name": p.name, "duration_min": default_duration(p.features)}
+            for p in db.scalars(query.order_by(Poi.name, Poi.id).limit(50))]
+
+
+def visit_availability(candidate, day, visit, enforce=True):
+    op = candidate.operations.get(day)
+    if not enforce or op is None or not op.openings.known or not op.closed.known:
+        return {"available": None}
+    return {"available": not op.closed.value and any(
+        w.start_min <= visit.start_min and visit.departure_min <= w.end_min for w in op.openings.value)}
 
 
 @router.post("/trips/{trip_id}/itineraries/generate")
@@ -224,12 +249,18 @@ async def _generate(body, trip, user, db, *, preview=False):
                              "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked, "moved_from": None,
                              "visit_category": candidate_by_id[v.poi_id].visit_category,
                              "activity_category": candidate_by_id[v.poi_id].activity_category,
-                             "availability": {"available": True}} for v in d.items]
+                             "duration_source": candidate_by_id[v.poi_id].duration_min.source,
+                             "duration_estimated": candidate_by_id[v.poi_id].duration_min.status == "ESTIMATED",
+                             "availability": visit_availability(candidate_by_id[v.poi_id], d.date, v, req.enforce_opening_hours)} for v in d.items]
             days.append(raw)
         plan = Itinerary(trip_id=trip_id, run_id=run_id, letter="A", variant="optimized", days=days,
                          stats={"group_fit": (None if run.response.get("score_scale") == "relative_relevance_0_1"
                                               else checked.metrics["mean_personal_fit"]),
-                                "total_cost": checked.metrics["total_cost"], "cost_unknown_count": 0,
+                                "total_cost": checked.metrics["total_cost"],
+                                "budget_enforced": req.enforce_cost,
+                                "opening_hours_enforced": req.enforce_opening_hours,
+                                "cost_unknown_count": sum(not usable_cost(candidate_by_id[v.poi_id].cost_per_person)
+                                                          for d in result.days for v in d.items),
                                 "daily_composition": req.daily_composition.model_dump(mode="json") if req.daily_composition else None,
                                 "budget_total": req.budget_total, "transport_mode": req.transport_mode,
                                 "travel_minutes": checked.metrics["travel_minutes"],

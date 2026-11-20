@@ -5,7 +5,7 @@ cannot replace recommendation scores, member rules, dates or budget.
 """
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
@@ -17,6 +17,7 @@ from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyCom
                                                   NonNegative, Operation, PlanRequest, Window)
 
 from ourney_travelsync.planning_categories import visit_role
+from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
 
 from . import config
 from .models import DatasetVersion, MemberAvailability, Poi, Preference, RecommendationRun, Trip, TripMember
@@ -39,9 +40,10 @@ class DailyInput(Window):
 
 
 class GenerateInput(Contract):
-    daily_composition: DailyComposition = Field(default_factory=DailyComposition)
+    daily_composition: DailyComposition = Field(default_factory=lambda: DailyComposition(meal_overlap_min=60))
     days: Annotated[tuple[DailyInput, ...], Field(min_length=1, max_length=3)]
-    budget_total: NonNegative
+    budget_total: NonNegative = 0  # Compatibility only; this version does not enforce a budget.
+    duration_overrides: Annotated[dict[str, Annotated[int, Field(strict=True, ge=1, le=1440)]], Field(max_length=60)] = Field(default_factory=dict)
     transport_mode: Literal["walk", "drive", "transit"]
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
@@ -132,6 +134,11 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         if (len(locked_rows) != len(body.locked_items)
                 or any(p.id in banned or banned_tags.intersection(p.tags or []) for p in locked_rows)):
             raise HTTPException(422, "optimizer_invalid_locks")
+    if preflight_only and body.duration_overrides:
+        found = db.scalars(select(Poi.id).where(Poi.dataset_version == run.dataset_version,
+                                               Poi.id.in_(body.duration_overrides))).all()
+        if set(found) != set(body.duration_overrides):
+            raise HTTPException(422, "optimizer_invalid_duration_overrides")
     if preflight_only:
         return
     if not group or len(group) > 60 or len({r["poi_id"] for r in group}) != len(group):
@@ -175,8 +182,8 @@ def catalogue_request(run, body, db):
     return {**run.request,
         "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
             category_name=p.category, latitude=p.lat, longitude=p.lng,
-            enriched_metadata=p.enriched_metadata, duration_min=p.duration_min,
-            field_status=p.field_status, **p.features) for p in rows],
+            enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features)),
+            field_status={**(p.field_status or {}), "duration": "ESTIMATED"}, **p.features) for p in rows],
         "planning_days": [d.model_dump(mode="json") for d in body.days],
         "planning_locks": [l.model_dump(mode="json") for l in body.locked_items],
         "planning_composition": body.daily_composition.model_dump(mode="json")}
@@ -209,6 +216,13 @@ def solver_request(run, audit_id, body, prepared, request, response):
     enriched = [Candidate.model_validate({**p.model_dump(mode="json"),
                  **(facts[p.poi_id].model_dump(mode="json", exclude={"poi_id"}) if p.poi_id in facts else {})})
                 for p in candidates]
+    # Resolve every duration in one place, independent of missing adapter facts.
+    rows = prepared[4]
+    stamp = datetime.now(timezone.utc).isoformat()
+    enriched = [Candidate.model_validate({**p.model_dump(mode="json"), "duration_min": {
+        "value": body.duration_overrides.get(p.poi_id, default_duration(rows[p.poi_id].features)),
+        "status": "ESTIMATED", "source": "user-duration-override" if p.poi_id in body.duration_overrides else "category-default",
+        "verified_at": stamp, "rule_version": RULE_VERSION}}) for p in enriched]
     # Reparse merged facts as nested typed objects; never trust model_copy alone.
     payload = dict(schema_version="optimizer-1.0", run_id=f"{run.id}:{audit_id}",
                    dataset_version=run.dataset_version, mapping_version=mapping,
@@ -218,7 +232,8 @@ def solver_request(run, audit_id, body, prepared, request, response):
                    transport_mode=body.transport_mode, days=daily, members=[m.model_dump(mode="json") for m in members],
                    candidates=[p.model_dump(mode="json") for p in enriched], edges=[e.model_dump(mode="json") for e in data.edges],
                    daily_composition=body.daily_composition.model_dump(mode="json"),
-                   budget_total=body.budget_total, enforce_cost=False, enforce_opening_hours=False,
+                   budget_total=body.budget_total, enforce_cost=False, enforce_opening_hours=True,
+                   allow_unknown_opening_hours=True, optimize_travel=False,
                    max_leg_minutes=body.max_leg_minutes,
                    max_total_walk_minutes=body.max_total_walk_minutes,
                    locked_items=[l.model_dump(mode="json") for l in body.locked_items],

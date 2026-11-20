@@ -145,6 +145,11 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     if meal_preferences:
         objectives[-1] = ("travel_minutes", travel, False, 0.05)
         objectives.append(("meal_preference", sum(meal_preferences), False, 0.05))
+    if not req.optimize_travel:
+        objectives = [o for o in objectives if o[0] != "travel_minutes"]
+        # Reuse the full search allowance without adding a route preference.
+        total_fraction = sum(o[3] for o in objectives)
+        objectives = [(n, e, m, f / total_fraction) for n, e, m, f in objectives]
     for name, expression, maximize, fraction in objectives:
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:

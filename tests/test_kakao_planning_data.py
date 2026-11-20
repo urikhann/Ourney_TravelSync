@@ -128,6 +128,7 @@ def test_operating_facts_keep_unknown_cost_and_holiday_closure(adapter, monkeypa
         def dispose(self):
             pass
     monkeypatch.setattr(adapter, "engine", Engine())
+    monkeypatch.setattr(adapter, "load_normalized", lambda *_: {})
     result = adapter._load_operating("fixture-version", ["p"], [day])["p"]
     assert result["cost_per_person"]["status"] == "UNKNOWN"
     assert result["cost_per_person"]["value"] is None

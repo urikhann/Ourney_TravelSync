@@ -71,17 +71,20 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
                         per_date[day.date] = (bound,)
                     else:
                         why.append(f"{day.date}:NO_FULL_STAY_WINDOW")
-                elif op is None or not op.openings.known or not op.closed.known:
-                    why.append(f"{day.date}:OPERATING_INFO_UNKNOWN")
-                elif op.closed.value:
+                elif op is not None and op.closed.known and op.closed.value:
                     why.append(f"{day.date}:CLOSED")
-                elif p.is_festival and (not op.event_active.known or op.event_active.value is not True):
+                elif p.is_festival and (op is None or not op.event_active.known or op.event_active.value is not True):
                     why.append(f"{day.date}:EVENT_UNVERIFIED_OR_INACTIVE")
+                elif (op is None or not op.openings.known or not op.closed.known) and not req.allow_unknown_opening_hours:
+                    why.append(f"{day.date}:OPERATING_INFO_UNKNOWN")
                 else:
                     bound = bounds[day.date]
+                    intervals = op.openings.value if op is not None and op.openings.known else (bound,)
+                    if op is None or not op.openings.known or not op.closed.known:
+                        why.append(f"{day.date}:OPENING_HOURS_UNVERIFIED")
                     usable = tuple(Window(start_min=max(w.start_min, bound.start_min),
                                           end_min=min(w.end_min, bound.end_min))
-                                   for w in op.openings.value
+                                   for w in intervals
                                    if min(w.end_min, bound.end_min) - max(w.start_min, bound.start_min)
                                    >= p.duration_min.value)
                     if usable:

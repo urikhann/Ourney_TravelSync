@@ -1,5 +1,7 @@
 """Place details and the availability check for one place."""
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -32,7 +34,17 @@ def get_poi(poi_id: str, version: str | None = None, user: User = Depends(curren
     # Monday first. A day missing from a known week = closed that day. No rows at all = hours unknown -> [].
     hours = [{"day": DAYS[d], "open": weekly[d].open if d in weekly else None,
               "close": weekly[d].close if d in weekly else None} for d in WEEK] if weekly else []
-    return {**place_dict(p), "name_ko": p.name_ko, "city": p.city, "address": p.road_address or p.address,
+    normalized = load_normalized(db.connection(), p.dataset_version, [poi_id]).get(poi_id)
+    effective_status = p.field_status or {}
+    if normalized and day_windows(normalized, datetime.now(ZoneInfo("Asia/Seoul")).date()) is not None:
+        hours = []
+        for d in WEEK:
+            windows = normalized["schedule"]["weekly"][str(d)]
+            hours.extend([{"day": DAYS[d], "open": hhmm(start), "close": hhmm(end)} for start, end in windows]
+                         or [{"day": DAYS[d], "open": None, "close": None}])
+        effective_status = {**effective_status, "hours": "KNOWN", "closed_days": "KNOWN",
+                            "hours_batch": normalized["batch_id"]}
+    return {**place_dict(p), "field_status": effective_status, "name_ko": p.name_ko, "city": p.city, "address": p.road_address or p.address,
             "phone": p.phone or None, "tags": p.tags, "feature_rules": p.feature_rules, "source": p.source,
             "dataset_version": p.dataset_version, "closed_on_public_holidays": p.closed_on_public_holidays,
             "hours": hours}

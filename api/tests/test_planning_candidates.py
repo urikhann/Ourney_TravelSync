@@ -85,7 +85,8 @@ def test_app_uses_catalogue_and_keeps_bypasses_and_recommendations(planning_adap
     assert selection["catalogue_count"] == 28
     assert len(audit.optimizer_request["candidates"]) > len(rec["group"])
     assert audit.optimizer_request["enforce_cost"] is False
-    assert audit.optimizer_request["enforce_opening_hours"] is False
+    assert audit.optimizer_request["enforce_opening_hours"] is True
+    assert audit.optimizer_request["allow_unknown_opening_hours"] is True
     assert all(p["allowed_dates"] for p in audit.optimizer_request["candidates"])
     assert planning_adapter.calls[0]["day_candidate_ids"] == selection["day_candidate_ids"]
     assert response.json()["latest_optimization"]["candidate_selection"] == selection
@@ -116,7 +117,8 @@ def test_app_composition_reserves_restaurants_and_validates_published_day(planni
     req=audit.optimizer_request
     assert req["daily_composition"]["max_cafes"]==2
     assert req["daily_composition"]["min_meals"]==0
-    assert req["enforce_cost"] is False and req["enforce_opening_hours"] is False
+    assert req["enforce_cost"] is False and req["enforce_opening_hours"] is True
+    assert req["allow_unknown_opening_hours"] is True
     p={x["poi_id"]:x for x in req["candidates"]}
     assert sum(x["visit_category"]=="meal" for x in p.values()) >= 2
     visits=response.json()["plans"][0]["days"][0]["items"]

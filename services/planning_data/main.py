@@ -24,6 +24,10 @@ from datetime import date, datetime, timezone
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from sqlalchemy import bindparam, create_engine, text
+try:
+    from ourney_travelsync.operating_schedules import load_normalized, day_windows
+except ModuleNotFoundError:  # standalone planning-data image
+    from operating_schedules import load_normalized, day_windows
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -127,6 +131,7 @@ def _load_operating(dataset_version: str, poi_ids: list[str], days: list[date]) 
     ).bindparams(bindparam("days", expanding=True))
 
     with engine.connect() as c:
+        normalized = load_normalized(c, dataset_version, poi_ids)
         pois = {r["id"]: dict(r) for r in c.execute(
             poi_sql, {"version": dataset_version, "ids": poi_ids}
         ).mappings()}
@@ -196,6 +201,14 @@ def _load_operating(dataset_version: str, poi_ids: list[str], days: list[date]) 
             elif d in holidays and row.get("closed_on_public_holidays") and known_closed_days:
                 opening_fact = _fact([], status="KNOWN", source=source, verified_at=verified)
                 closed_fact = _fact(True, status="KNOWN", source=source, verified_at=verified)
+            elif pid in normalized and day_windows(normalized[pid], d) is not None:
+                record = normalized[pid]
+                normalized_windows = day_windows(record, d)
+                source_ref = f"normalized-hours:{record['batch_id']}:{pid}"
+                opening_fact = _fact([{"start_min": start, "end_min": end} for start, end in normalized_windows],
+                                     status="KNOWN", source=source_ref, verified_at=record["observed_at"])
+                closed_fact = _fact(not bool(normalized_windows), status="KNOWN", source=source_ref,
+                                    verified_at=record["observed_at"])
             elif known_hours:
                 dow = (d.weekday() + 1) % 7  # project: Sunday=0
                 rows = hours.get(pid, {}).get(dow, [])

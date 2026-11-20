@@ -103,7 +103,6 @@ def test_no_adapter_fails_without_greedy_fallback(monkeypatch):
 
 
 @pytest.mark.parametrize("missing,reason", [
-    ("duration_min", "DURATION_UNKNOWN"),
     ("route_duration", "ROUTE_UNAVAILABLE"),
     ("route_fare", "ROUTE_UNAVAILABLE"),
 ])
@@ -269,3 +268,61 @@ def test_missing_place_cost_does_not_block_generation(planning_adapter):
     assert plan["stats"]["validation_status"] == "PASSED"
     assert all(item["visit_cost"] == 0 for day in plan["days"] for item in day["items"])
     assert all(p["cost_per_person"]["status"] == "UNKNOWN" for p in audits(tid)[-1].optimizer_request["candidates"])
+
+
+def test_category_durations_unknown_hours_budget_and_no_travel_objective(planning_adapter):
+    h, tid, _ = ready(individual_method='feature_mean')
+    def missing(req, response):
+        for p in response['pois']:
+            p.update(duration_min={}, operations={}, cost_per_person={})
+        return response
+    planning_adapter.transform = missing
+    body = configuration()
+    body.pop('budget_total')
+    response = generate(h, tid, body)
+    assert response.status_code == 200, response.text
+    plan = response.json()['plans'][0]
+    assert plan['stats']['budget_enforced'] is False
+    assert plan['stats']['opening_hours_enforced'] is True
+    assert plan['stats']['cost_unknown_count'] > 0
+    assert all(i['availability']['available'] is None and i['duration_estimated']
+               for d in plan['days'] for i in d['items'])
+    audit = audits(tid)[-1]
+    assert audit.optimizer_request['allow_unknown_opening_hours'] is True
+    assert audit.optimizer_request['optimize_travel'] is False
+    assert all(p['objective'] != 'travel_minutes' for p in audit.response['phases'])
+    assert all(p['duration_min']['status'] == 'ESTIMATED' for p in audit.optimizer_request['candidates'])
+
+
+def test_catalogue_must_visit_and_duration_override_survive_retrieval(planning_adapter):
+    h, tid, _ = ready(individual_method='feature_mean')
+    options = c.get(f'/trips/{tid}/planning-places', headers=h)
+    assert options.status_code == 200
+    # Find a sightseeing place rather than forcing a restaurant into an arbitrary meal slot.
+    from app.models import Poi
+    from ourney_travelsync.planning_categories import visit_role
+    with SessionLocal() as db:
+        pid = next(p.id for p in db.scalars(select(Poi)) if visit_role(p.features)[0] == 'activity')
+    assert any(p['id'] == pid for p in options.json())
+    body = configuration()
+    body['locked_items'] = [dict(poi_id=pid, date='2026-11-06')]
+    body['duration_overrides'] = {pid: 37}
+    response = generate(h, tid, body)
+    assert response.status_code == 200, response.text
+    visit = next(i for d in response.json()['plans'][0]['days'] for i in d['items'] if i['poi_id'] == pid)
+    assert visit['locked'] and visit['stay_minutes'] == 37 and visit['duration_source'] == 'user-duration-override'
+    body['duration_overrides'] = {'not-in-catalogue': 37}
+    assert generate(h, tid, body).json()['detail'] == 'optimizer_invalid_duration_overrides'
+
+
+def test_known_closed_places_never_become_unknown_hour_visits(planning_adapter):
+    h, tid, _ = ready(individual_method='feature_mean')
+    def closed(req, response):
+        for p in response['pois']:
+            for op in p['operations'].values():
+                op['closed'] = dict(value=True, status='KNOWN', source='synthetic closure', verified_at='2026-11-01T00:00:00Z')
+        return response
+    planning_adapter.transform = closed
+    response = generate(h, tid)
+    assert response.status_code == 409, response.text
+    assert all(any('CLOSED' in reason for reason in p['reasons']) for p in audits(tid)[-1].response['eligibility'])

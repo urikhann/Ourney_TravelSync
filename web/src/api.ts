@@ -80,6 +80,8 @@ const MESSAGES: Record<string, string> = {
   recommendations_stale: "Preferences or group members changed. Generate recommendations again before planning.",
   optimizer_recommendation_data_missing: "Regenerate recommendations to include all member scores and relevance values needed for planning.",
   optimizer_owner_required: "Only the trip owner can set planning conditions and generate the itinerary.",
+  optimizer_invalid_locks: "A must-visit place is unavailable, excluded, duplicated, or assigned to an invalid day. Review your selected places.",
+  optimizer_invalid_duration_overrides: "A visit-duration override refers to a place outside this trip's catalogue. Choose the place again.",
   optimizer_final_validation_failed: "The returned itinerary failed the final checks. It was not published; your saved plan is kept.",
   optimizer_invalid_solver_model: "The optimizer could not validate its model. Your saved plan is kept.",
   optimizer_invalid_response: "The optimizer returned an invalid response. Your saved plan is kept.",

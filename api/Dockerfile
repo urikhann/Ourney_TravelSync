@@ -1,11 +1,12 @@
 FROM python:3.13-slim
 WORKDIR /code
 COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 COPY pyproject.toml README.md ./
+RUN python -c "import tomllib; from pathlib import Path; p=tomllib.loads(Path('pyproject.toml').read_text())['project']; Path('/tmp/package-requirements.txt').write_text('\n'.join(p['dependencies']))"
+RUN pip install --no-cache-dir -r /tmp/package-requirements.txt -r requirements.txt
 COPY src ./src
 # API imports typed contracts and independent E3; it does not need OR-Tools.
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps . && pip check
 COPY api/app ./app
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

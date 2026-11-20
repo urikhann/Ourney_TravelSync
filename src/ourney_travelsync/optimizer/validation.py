@@ -102,10 +102,13 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if v.start_min < v.arrival_min or v.start_min < day.start_min or v.departure_min > day.end_min:
                 problem("VISIT_TIME_ORDER", day.date, v.poi_id)
             op = p.operations.get(day.date)
-            if req.enforce_opening_hours and (op is None or not op.openings.known or not op.closed.known or op.closed.value is not False
-                    or not any(w.start_min <= v.start_min and v.departure_min <= w.end_min
-                               for w in (op.openings.value or ()))):
-                problem("OPERATING_WINDOW", day.date, v.poi_id)
+            if req.enforce_opening_hours:
+                unknown = op is None or not op.openings.known or not op.closed.known
+                closed = op is not None and op.closed.known and op.closed.value is True
+                outside = op is not None and op.openings.known and not any(
+                    w.start_min <= v.start_min and v.departure_min <= w.end_min for w in op.openings.value)
+                if closed or outside or (unknown and not req.allow_unknown_opening_hours):
+                    problem("OPERATING_WINDOW", day.date, v.poi_id)
             if p.is_festival and (op is None or not op.event_active.known or op.event_active.value is not True):
                 problem("EVENT_INVALID", day.date, v.poi_id)
             for m in req.members:

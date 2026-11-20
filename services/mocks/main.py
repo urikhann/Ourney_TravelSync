@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine, text
+from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm
 
 import group_rec
 from group_rec import FEATURES
@@ -88,6 +89,7 @@ def check_one(poi_id: str, day: date, start: str, duration: int, version: str | 
     with engine.connect() as c:
         if version is None:
             version = c.execute(text("SELECT version FROM dataset_versions WHERE status='ACTIVE'")).scalar()
+        normalized = load_normalized(c, version, [poi_id]).get(poi_id)
         poi = c.execute(text("SELECT closed_on_public_holidays FROM pois WHERE id=:i AND dataset_version=:v"),
                         {"i": poi_id, "v": version}).first()
         has_weekly = c.execute(text("SELECT 1 FROM poi_hours WHERE poi_id=:i LIMIT 1"), {"i": poi_id}).first()
@@ -112,6 +114,20 @@ def check_one(poi_id: str, day: date, start: str, duration: int, version: str | 
     if holiday and poi.closed_on_public_holidays:
         return {**base, "available": False, "reason": f"Closed on public holidays ({holiday.name})", "open": None,
                 "close": None, "next_available": next_open()}
+    normalized_windows = day_windows(normalized, day) if normalized else None
+    if not exc and normalized_windows is not None:
+        fact = {**base, "source": f"normalized-hours:{normalized['batch_id']}",
+                "last_updated": normalized["observed_at"]}
+        if not normalized_windows:
+            return {**fact, "available": False, "reason": "Closed on this weekday", "open": None,
+                    "close": None, "next_available": next_open()}
+        start_min = _min(start)
+        for begin, end in normalized_windows:
+            if duration == 0 or begin <= start_min and start_min + duration + BUFFER_MIN <= end:
+                return {**fact, "available": True, "reason": None, "open": hhmm(begin), "close": hhmm(end),
+                        "next_available": None}
+        return {**fact, "available": False, "reason": "Visit crosses a closure or break", "open": None,
+                "close": None, "next_available": None}
     if exc and exc.open:
         o, cl = exc.open, exc.close  # hours seen for this exact date
     elif not has_weekly:

@@ -71,11 +71,11 @@ export default function Plan() {
       <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
-        <div className="banner amber">Planning test mode: opening hours, closures, and budget limits are not enforced. Displayed fees include only available cost data; verify hours and actual spending before visiting.</div>
+        <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Budget limits are not applied. Displayed fees are only the known-cost subtotal. Weather and accessibility are not checked.</div>
         {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
         <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
         {exclusions}
-        <p className="muted small">Verified schedule · {selected.stats.solver_status === "OPTIMAL" ? "Best result proved" : "A better plan may exist"}. Based on the saved operating and route information.</p>
+        <p className="muted small">Schedule checked against saved routes, available hours and estimated visit durations · {selected.stats.solver_status === "OPTIMAL" ? "Best result proved for the configured objectives" : "A better plan may exist"}.</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {v.plans.map((p) => {
             const on = p.id === selected.id;
@@ -93,7 +93,7 @@ export default function Plan() {
 
         <div className="card" style={{ marginTop: 10, padding: "11px 0", display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
           <div className="stat"><b style={{ color: "var(--green-d)" }}>{pct(selected.stats.group_fit)}</b><span className="muted tiny">group fit</span></div>
-          <div className="stat"><b>₩{selected.stats.total_cost.toLocaleString()}</b><span className="muted tiny">whole group</span></div>
+          <div className="stat"><b>₩{selected.stats.total_cost.toLocaleString()}</b><span className="muted tiny">known-cost subtotal{selected.stats.cost_unknown_count ? ` (${selected.stats.cost_unknown_count} unknown)` : ""}</span></div>
           <div className="stat"><b>{stops}</b><span className="muted tiny">stops</span></div>
         </div>
 
@@ -106,7 +106,7 @@ export default function Plan() {
         {holiday && (
           <div className="banner amber" style={{ marginBottom: 10 }}>
             <CalendarDays size={15} color="var(--amber)" />
-            <span>{holiday.name} is a public holiday. Holiday closures were checked.</span>
+            <span>{holiday.name} is a public holiday. Confirm holiday hours where information is missing.</span>
           </div>
         )}
 
@@ -121,6 +121,8 @@ export default function Plan() {
             return (
               <div key={it.poi_id + it.start}>
                 <div className="leg"><Clock size={12} />{it.travel_minutes} min travel · arrive {it.arrival}</div>
+                {it.availability?.available !== true && <p className="small" role="status">Opening hours unverified — confirm before visiting.</p>}
+                {it.duration_estimated && <p className="muted small">Visit duration: {it.stay_minutes} min ({it.duration_source === "user-duration-override" ? "your override" : "category estimate"})</p>}
                 <div className="tl-item">
                   <div className="tl-time" style={moved ? { color: "var(--amber)" } : undefined}>{it.start}</div>
                   <div className="tl-dot" style={{ borderColor: col, background: it.locked ? col : "#fff" }} />
