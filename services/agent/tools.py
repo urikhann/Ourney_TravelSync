@@ -23,10 +23,10 @@ def _place(r) -> dict:
     """What the agent may know about a place. `indoor` comes from the place's categories (rule-based guess)."""
     return {"poi_id": r["id"], "name": r["name"], "area": r["area"], "kind": r["kind"], "category": r["category"],
             "indoor_guess": bool(r["indoor"]), "walking_level": r["walking_level"],
-            "avg_cost_krw": r["avg_cost_krw"], "duration_min": r["duration_min"]}
+            "duration_min": r["duration_min"]}
 
 
-PLACE_COLS = "id, name, area, kind, category, indoor, walking_level, avg_cost_krw, duration_min"
+PLACE_COLS = "id, name, area, kind, category, indoor, walking_level, duration_min"
 
 
 class TripData:
@@ -64,7 +64,7 @@ class TripData:
             for d in self.days]}
 
     def find_places(self, kind: str | None = None, indoor: bool | None = None, max_walking: float | None = None,
-                    max_cost_krw: int | None = None, limit: int = 5) -> dict:
+                    limit: int = 5) -> dict:
         """Places that are not in the plan yet. The group's own recommendations come first (they fit the group)."""
         used = {it["poi_id"] for d in self.days for it in d["items"]}
         limit = max(1, min(int(limit or 5), 8))
@@ -72,8 +72,7 @@ class TripData:
         def ok(p):
             return (p["poi_id"] not in used and (kind is None or p["kind"] == kind)
                     and (indoor is None or p["indoor_guess"] == indoor)
-                    and (max_walking is None or (p["walking_level"] if p["walking_level"] is not None else 1) <= max_walking)
-                    and (max_cost_krw is None or (p["avg_cost_krw"] is not None and p["avg_cost_krw"] <= max_cost_krw)))
+                    and (max_walking is None or (p["walking_level"] if p["walking_level"] is not None else 1) <= max_walking))
 
         picks = [self.places[i] for i in self.group if i in self.places and ok(self.places[i])][:limit]
         source = "group recommendations"
@@ -103,7 +102,7 @@ class TripData:
         try:
             date.fromisoformat(day)
             r = httpx.post(f"{AVAILABILITY_URL}/availability/check", timeout=8,
-                           json={"checks": [{"poi_id": poi_id, "date": day, "start": start, "duration_min": int(duration_min)}]})
+                           json={"checks": [{"poi_id": poi_id, "date": day, "start": start, "duration_min": int(duration_min), "dataset_version": self.version}]})
             r.raise_for_status()
             res = r.json()["results"][0]
             return {"poi_id": poi_id, "available": res["available"], "reason": res.get("reason"),

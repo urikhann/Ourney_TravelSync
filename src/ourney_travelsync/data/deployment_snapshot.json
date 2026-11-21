@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "dataset_version": "busan-enriched-v4-20261121",
+  "csv": "travelsync_poi_metadata_enriched_v4.csv",
+  "operating_csv": "travelsync_poi_operating_info_v1.csv",
+  "manifest": "enrichment_v4_manifest.json.gz",
+  "sha256": {
+    "travelsync_poi_metadata_enriched_v4.csv": "9129937e7522ea5f89cd6dd07a5c8c16cd8ecdba1b71a79ba90d79d5a86f57aa",
+    "travelsync_poi_operating_info_v1.csv": "854892084ae5c8740a29339b24d71a3764d5829a3cfb1026e11959aec6fc0249",
+    "enrichment_v4_manifest.json.gz": "9840dfa3e93659f96c1f1bb1fd8e4836c8ec3c3d2c7e58962328d35c53e16936"
+  }
+}

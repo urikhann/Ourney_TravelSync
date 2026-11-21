@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine, text
-from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm
+from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm, load_versioned_weekly, load_versioned_dated
 
 import group_rec
 from group_rec import FEATURES
@@ -94,9 +94,18 @@ def check_one(poi_id: str, day: date, start: str, duration: int, version: str | 
                         {"i": poi_id, "v": version}).first()
         has_weekly = c.execute(text("SELECT 1 FROM poi_hours WHERE poi_id=:i LIMIT 1"), {"i": poi_id}).first()
         hours = c.execute(text("SELECT open, close FROM poi_hours WHERE poi_id=:i AND dow=:d"), {"i": poi_id, "d": dow}).first()
+        frozen = load_versioned_weekly(c, version, [poi_id])
+        if frozen is not None:
+            from types import SimpleNamespace
+            weekly = frozen.get(poi_id, [])
+            has_weekly = bool(weekly)
+            hours = next((SimpleNamespace(**r) for r in weekly if r["dow"] == dow), None)
         holiday = c.execute(text("SELECT name FROM public_holidays WHERE day=:d"), {"d": day}).first()
         exc = c.execute(text("SELECT closed, open, close, reason FROM poi_exceptions WHERE poi_id=:i AND day=:d"),
                         {"i": poi_id, "d": day}).first()
+        if exc is None:
+            from types import SimpleNamespace
+            exc = next((SimpleNamespace(**r) for r in load_versioned_dated(c, version, [poi_id]) if r["day"] == day), None)
     base = {"poi_id": poi_id, "confidence": 0.7, "source": "place data", "last_updated": None}
     if poi is None:
         return {**base, "available": False, "reason": "Unknown place", "open": None, "close": None, "next_available": None}
@@ -247,10 +256,9 @@ def _sample_proposal(itinerary_id, want: str) -> tuple[dict | None, str]:
 @app.post("/agent/turn")
 def agent_turn(req: dict):
     t = req["message"]["text"].lower()
-    wants = [w for w, keys in {"indoor": ["rain", "indoor"], "low walking": ["tired", "walk"],
-                               "cheaper": ["cheap", "budget"]}.items() if any(k in t for k in keys)]
+    wants = [w for w, keys in {"indoor": ["rain", "indoor"], "low walking": ["tired", "walk"]}.items() if any(k in t for k in keys)]
     if not wants:
-        return {"reply": "I can re-plan for rain, less walking or a lower budget. (mock agent)", "tool_calls": [], "proposal": None}
+        return {"reply": "I can re-plan for rain or less walking. (mock agent)", "tool_calls": [], "proposal": None}
     proposal, example = (_sample_proposal(req.get("itinerary_id"), wants[0])
                          if wants[0] in ("indoor", "low walking") else (None, ""))
     calls = [{"name": "understand_request", "summary": ", ".join(wants)}]

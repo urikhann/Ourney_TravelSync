@@ -4,7 +4,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, Wallet } from "lucide-react";
+import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle } from "lucide-react";
 import { api, message } from "../api";
 import type { AgentProposal, ChatMessage, ChatPage, Place, Trip } from "../types";
 import { ErrorBox, Loading } from "../ui";
@@ -18,7 +18,6 @@ const MENTION = /^\s*@travelsync(\s|$)/i;
 const QUICK = [
   { Icon: CloudRain, label: "It's raining", text: "It's raining — can we swap outdoor stops for indoor places?" },
   { Icon: Footprints, label: "Less walking", text: "We're tired — please make today's plan need less walking." },
-  { Icon: Wallet, label: "Cheaper", text: "Can you make this plan cheaper?" },
   { Icon: Lightbulb, label: "Why this plan?", text: "Why were these places picked for our group?" },
 ];
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -151,7 +150,7 @@ function AgentBubble({ m }: { m: ChatMessage }) {
         </div>
         {!!a?.tool_calls.length && (
           <div className="tools">
-            {a.tool_calls.map((t, i) => <span key={i} className="tool"><Check size={12} /> {t.summary || t.name}</span>)}
+            {a.tool_calls.map((t, i) => <span key={i} className="tool">{t.name === "gemini_error" ? <AlertTriangle size={12} /> : <Check size={12} />} {t.summary || t.name}</span>)}
           </div>
         )}
         {a?.proposal && <ProposalCard p={a.proposal} />}

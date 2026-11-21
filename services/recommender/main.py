@@ -34,8 +34,10 @@ from ourney_travelsync.recommenders.hybrid import ScoringConfig
 
 FEATURE_SCHEMA_VERSION = "fs-1.0"
 # The dataset version name the backend uses for the packaged enriched CSV (api/app/config.py PLACES_VERSION).
-DATASET_VERSION = os.getenv("DATASET_VERSION", "busan-enriched-v3")
-PLACES_CSV = os.getenv("PLACES_CSV") or None          # None = the CSV inside the package
+from ourney_travelsync.deployment import configured
+_DEPLOYMENT, _CSV = configured()
+DATASET_VERSION = _DEPLOYMENT["dataset_version"]
+PLACES_CSV = str(_CSV)          # None = the CSV inside the package
 GFAR_DEPTH = int(os.getenv("GFAR_DEPTH", "20"))         # Borda depth of each member's list (package default)
 AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.5"))  # package default, 1-5 scale
 MODEL_VERSION = f"ourney-travelsync-{pkg_version('ourney-travelsync')}"
@@ -304,4 +306,28 @@ def planning_candidates(req: dict):
 @app.get("/health")
 def health():
     return {"ok": True, "model_version": MODEL_VERSION, "dataset_version": DATASET_VERSION,
-            "places": len(places().place_ids)}
+            "places": len(places().place_ids), "scoring": scoring_health()}
+
+
+def scoring_health():
+    from ourney_travelsync.recommenders.hybrid import score_catalogue
+    # Fixed non-neutral public probe, no stored user preferences; cache-only even if env enables regeneration.
+    result = score_catalogue(places(), np.array([[5,4,2,3,4,2,5,2,4,1]], dtype=float),
+                             config=ScoringConfig.from_env(regenerate=False))
+    from ourney_travelsync.recommenders.hybrid import catalogue_identity
+    identity = catalogue_identity(places())[2]
+    return {**result.diagnostics, "expected_cache_identity":{k:v for k,v in identity.items() if k != "poi_ids"}}
+
+
+if __name__ == "__main__":
+    import argparse, json
+    from ourney_travelsync.recommenders.hybrid import embeddings
+    parser = argparse.ArgumentParser(description="Prewarm exactly the configured deployment catalogue")
+    parser.add_argument("--prewarm", action="store_true", required=True)
+    parser.add_argument("--download", action="store_true")
+    args = parser.parse_args()
+    _, _, identity = embeddings(places(), ScoringConfig.from_env(regenerate=True, local_files_only=not args.download))
+    probe = scoring_health()
+    if any(m["effective_scoring_method"] != "e5_hybrid" for m in probe["members"]):
+        raise RuntimeError("E5 cache-only verification failed")
+    print(json.dumps({"dataset_version": DATASET_VERSION, "cache_identity":{k:v for k,v in identity.items() if k != "poi_ids"}, "scoring":probe}))

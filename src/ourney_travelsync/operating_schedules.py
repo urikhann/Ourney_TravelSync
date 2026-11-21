@@ -38,3 +38,40 @@ def day_windows(record,day):
  return s['weekly'][str((day.weekday()+1)%7)]
 
 def hhmm(minutes):return f'{minutes//60:02d}:{minutes%60:02d}'
+
+
+def load_versioned_weekly(connection, version, ids):
+    """None: historical version without frozen baseline; dict: version owns its weekly facts."""
+    if not inspect(connection).has_table('poi_versioned_legacy_hours'):
+        return None
+    if not connection.execute(text('SELECT 1 FROM poi_versioned_legacy_hours WHERE dataset_version=:v LIMIT 1'), {'v':version}).first():
+        return None
+    query = text('SELECT poi_id,payload FROM poi_versioned_legacy_hours WHERE dataset_version=:v AND poi_id IN :ids').bindparams(bindparam('ids', expanding=True))
+    result = {}
+    for row in connection.execute(query, {'v':version, 'ids':list(ids)}).mappings():
+        value = row['payload']
+        result[row['poi_id']] = json.loads(value) if isinstance(value,str) else value
+    return result
+
+
+def dataset_diagnostics(connection):
+    versions = [dict(r) for r in connection.execute(text('SELECT version,status,poi_count FROM dataset_versions ORDER BY version')).mappings()]
+    result = {'datasets':versions, 'active_dataset':[r['version'] for r in versions if r['status']=='ACTIVE']}
+    for table in ('poi_metadata','poi_enrichment_evidence','poi_enrichment_reviews','poi_versioned_legacy_hours','poi_versioned_dated_hours','poi_normalized_hours'):
+        result[table] = ([dict(r) for r in connection.execute(text(f'SELECT dataset_version,count(*) AS records FROM {table} GROUP BY dataset_version')).mappings()]
+                         if inspect(connection).has_table(table) else [])
+    result['hours_batches'] = ([dict(r) for r in connection.execute(text('SELECT batch_id,dataset_version,poi_count,payload_sha256 FROM poi_hours_import_batches')).mappings()]
+                               if inspect(connection).has_table('poi_hours_import_batches') else [])
+    return result
+
+
+def load_versioned_dated(connection, version, ids):
+    if not inspect(connection).has_table('poi_versioned_dated_hours'):
+        return []
+    query = text('SELECT payload FROM poi_versioned_dated_hours WHERE dataset_version=:v AND poi_id IN :ids').bindparams(bindparam('ids', expanding=True))
+    result = []
+    for row in connection.execute(query, {'v':version, 'ids':list(ids)}).mappings():
+        payload = row['payload']
+        for item in json.loads(payload) if isinstance(payload,str) else payload:
+            result.append({**item, 'day':date.fromisoformat(item['day'])})
+    return result

@@ -1,5 +1,10 @@
 # E5 hybrid scoring
 
+E5 hybrid is the accepted product recommender. For the deployed enriched snapshot,
+use [deployment setup and prewarming](deployment_snapshot.md); the generic CLI
+examples below may select a different packaged catalogue unless `--csv` is explicit.
+Budget enforcement is excluded from product scope.
+
 The API, recommender service, CLI, and PostgreSQL adapter share the package
 scoring pipeline. Each member receives a separate relevance vector before GFAR
 aggregation. The pinned POI snapshot supplies names, categories, features, and

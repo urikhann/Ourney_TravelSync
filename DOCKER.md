@@ -1,6 +1,12 @@
+# Reproducible snapshot setup
+
+Use [the deployment snapshot guide](docs/deployment_snapshot.md) for fresh setup,
+upgrade, restart, rollback and E5 prewarming. Initial dataset activation is explicit.
+The notes below describe general development services.
+
 # Run TravelSync with Docker
 
-One command starts PostgreSQL, the recommender, the planning-data adapter,
+After the explicit snapshot setup linked above, one command starts PostgreSQL, the recommender, the planning-data adapter,
 the OR-Tools optimizer, availability mocks, the chat agent, the API, and the web app.
 You only need **Docker Desktop** (Mac / Windows) — no Python, Node or uv on your computer.
 
@@ -8,8 +14,8 @@ You only need **Docker Desktop** (Mac / Windows) — no Python, Node or uv on yo
 docker compose up --build
 ```
 
-Then open **http://localhost:5173**. The first start takes a few minutes (it builds the images and imports
-3,570 places and their opening hours into PostgreSQL). Existing images and data are reused on later starts.
+Then open **http://localhost:5173**. Initial setup imports and validates 3,570 places,
+metadata and versioned hours. Ordinary starts validate and reuse the installed snapshot.
 
 | Service | Port | What it is |
 |---|---|---|
@@ -38,18 +44,13 @@ tables and columns are unchanged.
 |---|---|
 | stop | `Ctrl + C`, or `docker compose down` |
 | start again | `docker compose up` (add `--build` after pulling new code) |
-| use the 40 demo places | `PLACES_FILE=travelsync_demo40.csv PLACES_VERSION=busan-demo40-v1 docker compose up` |
-| go back to all 3,570 places | `docker compose up` |
 | see the email verification code | it is printed in the log: `docker compose logs api \| grep -A3 EMAIL` |
 | open the database | `docker compose exec db psql -U travelsync` (`\dt` lists tables, `\q` quits) |
-| delete all data and start fresh | `docker compose down -v` |
 
-On Windows PowerShell, set the demo variables first:
-`$env:PLACES_FILE="travelsync_demo40.csv"; $env:PLACES_VERSION="busan-demo40-v1"; docker compose up`
 
 ## Settings
 
-Defaults work without any file. To change them, copy `.env.example` to `.env`
+The packaged snapshot is the default. Before setup, copy `.env.example` to `.env`
 (for example `SMTP_*` to send real emails, or `FEATURE_AVAILABILITY=false` to hide opening-hours checks).
 The service addresses inside Docker are fixed in `docker-compose.yml`.
 

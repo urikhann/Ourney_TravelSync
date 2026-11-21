@@ -80,7 +80,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     </p>}
     <p className="small">New plans: at most {composition.max_cafes} caf&eacute;s and {composition.max_meals} meals, and at least {composition.min_activities} activities from {composition.min_activity_categories} categories each day. A meal is required when that day's travel hours overlap its window by at least {composition.meal_overlap_min} minutes. {composition.separate_food_drink && "An activity separates food/drink stops."} Base meal windows: {composition.meal_windows.map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}. Day-specific overrides take precedence.</p>
     <p className="small">Demo routes reuse saved Kakao results without expiry. Travel times may come from an earlier request.</p>
-    <p className="small">Known opening intervals and closures are respected. Unknown hours are allowed with a warning. Budget limits, automatic weather handling, and accessibility support are not included in this version.</p>
+    <p className="small">Known opening intervals and closures are respected. Unknown hours are allowed with a warning. Automatic weather handling and accessibility support are not included in this version.</p>
     <p className="small">Estimated visit times: cafés 45 min, meals 60 min, history/art/entertainment/festival 90 min, other activities 60 min. Place-specific overrides are available below.</p>
     <p className="muted small">Times are local. Every member must confirm every trip date. Missing route data stops planning; distance estimates are not substituted.</p>
     {!!prior?.locked_items?.length && <p className="small">{prior.locked_items.length} locked visits will be retained.</p>}

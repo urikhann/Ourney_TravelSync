@@ -22,6 +22,7 @@ def fake_embeddings(monkeypatch):
         a /= np.linalg.norm(a,axis=1,keepdims=True)
         return a[:len(places.place_ids)], a[-10:], {'dataset_content_hash':'fixture'}
     monkeypatch.setattr(h,'embeddings',embed)
+EXAMPLE["dataset_version"] = main.DATASET_VERSION
 
 
 def request(**options):

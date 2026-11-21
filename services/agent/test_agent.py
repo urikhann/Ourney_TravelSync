@@ -163,3 +163,52 @@ def test_busy_model_switches_to_the_next_one():
     out = brain.turn(req("@TravelSync hello again"), client=fake)
     assert fake.models_used == [brain.FALLBACK_MODELS[0]] and out["reply"] == "Hi again!"
     brain.busy_until.clear()
+
+
+def test_chat_tools_do_not_expose_cost_filters_or_prices():
+    data = tools.TripData(7)
+    assert "avg_cost_krw" not in data.get_plan()["plan"][0]["items"][0]
+    assert all("avg_cost_krw" not in p for p in data.find_places()["places"])
+    declaration = next(t for t in brain.TOOLS if t["name"] == "find_places")
+    assert "max_cost_krw" not in declaration["parameters_json_schema"]["properties"]
+
+
+def test_budget_request_does_not_propose_cost_optimization():
+    out = brain.rules_turn(req("@TravelSync make it cheaper, lower budget please"), tools.TripData(7))
+    assert out["proposal"] is None and out["needs_clarification"]
+    assert "cheaper" not in out["reply"] and "budget" not in out["reply"]
+
+
+def test_provider_error_reports_status_without_leaking_response(monkeypatch):
+    from google.genai import errors
+    secret = "private-key-and-prompt-must-not-appear"
+    def fail(*args, **kwargs):
+        raise errors.ClientError(404, {"error":{"code":404,"status":"NOT_FOUND","message":secret}})
+    monkeypatch.setattr(brain, "gemini_with_fallback", fail)
+    out = brain.turn(req("@TravelSync hello"), client=object())
+    summary = out["tool_calls"][0]["summary"]
+    assert "HTTP 404" in summary and "model unavailable" in summary
+    assert secret not in json.dumps(out)
+    rate_limit = errors.ClientError(429,{"error":{"code":429,"message":secret}})
+    assert "quota or rate limit" in brain.provider_failure_summary(rate_limit)
+
+
+def test_hours_tool_sends_pinned_dataset(monkeypatch):
+    # Use a fresh class method: the module's legacy fixtures replace check_hours globally.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("agent_pinned_tools_test", Path(__file__).parent / "tools.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    seen = []
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"results":[{"available":None}]}
+    def post(*args, **kwargs):
+        seen.append(kwargs["json"])
+        return Response()
+    monkeypatch.setattr(module.httpx,"post",post)
+    data = module.TripData(None)
+    data.version = "historical-v1"
+    assert data.check_hours("museum","2026-11-21","10:00")["available"] is None
+    assert seen[0]["checks"][0]["dataset_version"] == "historical-v1"
+    module.engine.dispose()

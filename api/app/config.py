@@ -37,17 +37,14 @@ SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))
 # The AI agent calls an LLM several times per answer, so it gets more time than the other services.
 AGENT_TIMEOUT_SECONDS = float(_env("AGENT_TIMEOUT_SECONDS", "60"))
 
-# Packaged enriched POI snapshot; imported into an empty database (see app/seed.py).
-# Set PLACES_CSV= (empty) to use the 28 sample places instead.
-_DEFAULT_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ourney_travelsync", "data",
-                            "travelsync_poi_metadata_enriched_v3.csv")
-PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)
-PLACES_VERSION = _env("PLACES_VERSION", "busan-enriched-v3")  # dataset version name for the auto-import
-# Opening hours from the operating-info CSV, loaded right after an automatic place import. Empty = skip.
-HOURS_CSV = _env("HOURS_CSV", os.path.join(os.path.dirname(PLACES_CSV or _DEFAULT_CSV),
-                                           "travelsync_poi_operating_info_v1.csv"))
-# Docker: make the database follow PLACES_CSV / PLACES_VERSION on every start (import it if missing, else activate
-# it), so switching between all places and the demo pool is just an environment change. Off for local runs.
+# Both services resolve the same hash-validated snapshot specification.
+from ourney_travelsync.deployment import SNAPSHOT, snapshot
+_DATASET = snapshot()
+_DEFAULT_CSV = str(SNAPSHOT.parent / _DATASET["csv"])
+PLACES_CSV = _env("PLACES_CSV", _DEFAULT_CSV)  # explicit empty = isolated sample mode
+PLACES_VERSION = _env("PLACES_VERSION", _DATASET["dataset_version"])
+HOURS_CSV = _env("HOURS_CSV", str(SNAPSHOT.parent / _DATASET["operating_csv"]))
+# Compatibility setting only; startup never imports or activates deployment data.
 PLACES_FOLLOW_ENV = _env("PLACES_FOLLOW_ENV", "false").lower() in ("1", "true", "yes")
 
 # Group recommendation settings: L = each member's top list, K = group candidates.

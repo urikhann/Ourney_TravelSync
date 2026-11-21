@@ -1,10 +1,11 @@
-# One command starts the whole app:   docker compose up --build      ->  http://localhost:5173
-# 40 demo places instead of all 3,570:  PLACES_FILE=travelsync_demo40.csv PLACES_VERSION=busan-demo40-v1 docker compose up
-# Stop: Ctrl+C (or docker compose down).  Delete all data and start fresh: docker compose down -v
+# After explicit dataset setup, start the app:   docker compose up --build      ->  http://localhost:5173
+# Explicit dataset setup: see docs/deployment_snapshot.md.
+# Stop: Ctrl+C (or docker compose down). Preserve database volumes.
 # Settings come from .env (optional, copy .env.example); the defaults below work without it.
 x-places: &places
-  PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v3.csv}
-  PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v3}
+  PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v4.csv}
+  PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v4-20261121}
+  TRAVELSYNC_DATASET_SNAPSHOT: /data/deployment_snapshot.json
 
 services:
   db:
@@ -24,9 +25,10 @@ services:
     build: {context: ., dockerfile: services/recommender/Dockerfile}
     environment:
       <<: *places
-      DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v3}
+      DATASET_VERSION: ${PLACES_VERSION:-busan-enriched-v4-20261121}
       TRAVELSYNC_E5_CACHE: /e5-cache
       TRAVELSYNC_E5_MODEL_CACHE: /e5-models
+      TRAVELSYNC_E5_REGENERATE: "0"
     ports: ["8002:8002"]
     volumes: ["./src/ourney_travelsync/data:/data:ro", "./output/e5-cache:/e5-cache", "./output/e5-models:/e5-models"]
     healthcheck:
@@ -88,7 +90,7 @@ services:
       <<: *places
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       HOURS_CSV: /data/travelsync_poi_operating_info_v1.csv
-      PLACES_FOLLOW_ENV: "true"   # Import or activate PLACES_VERSION on startup.
+      PLACES_FOLLOW_ENV: "false"  # Activation is an explicit setup operation.
       RECOMMENDER_URL: http://recommender:8002
       OPTIMIZER_URL: http://optimizer:8003
       PLANNING_DATA_URL: ${PLANNING_DATA_URL:-http://planning-data:8004}

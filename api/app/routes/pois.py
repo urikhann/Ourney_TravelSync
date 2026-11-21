@@ -1,7 +1,7 @@
 """Place details and the availability check for one place."""
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm
+from ourney_travelsync.operating_schedules import load_normalized, day_windows, hhmm, load_versioned_weekly
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -31,6 +31,10 @@ def get_poi(poi_id: str, version: str | None = None, user: User = Depends(curren
     """One place. `version` = the dataset version of a run (default: the ACTIVE one)."""
     p = _find(db, poi_id, version)
     weekly = {h.dow: h for h in db.scalars(select(PoiHours).where(PoiHours.poi_id == poi_id))}
+    frozen = load_versioned_weekly(db.connection(), p.dataset_version, [poi_id])
+    if frozen is not None:
+        from types import SimpleNamespace
+        weekly = {h["dow"]: SimpleNamespace(**h) for h in frozen.get(poi_id, [])}
     # Monday first. A day missing from a known week = closed that day. No rows at all = hours unknown -> [].
     hours = [{"day": DAYS[d], "open": weekly[d].open if d in weekly else None,
               "close": weekly[d].close if d in weekly else None} for d in WEEK] if weekly else []

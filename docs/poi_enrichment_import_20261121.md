@@ -1,5 +1,9 @@
 # POI enrichment import — 21 November 2026
 
+This records the earlier local import. Use [deployment setup](deployment_snapshot.md)
+for reproducible fresh installation, explicit upgrade, restart and rollback.
+Selecting the V4 CSV alone does not import schedules, evidence or review records.
+
 The local database now uses `busan-enriched-v4-20261121`, an immutable snapshot
 of all 3,570 POIs. It incorporates usable official API descriptions and strictly
 normalized schedules from the latest collection, including the newly authorized

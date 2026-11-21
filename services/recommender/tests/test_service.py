@@ -12,6 +12,7 @@ from ourney_travelsync.recommenders.average_without_misery import AverageWithout
 
 client = TestClient(main.app)
 EXAMPLE = json.loads((Path(__file__).resolve().parents[3] / "contracts" / "recommend.request.json").read_text())
+EXAMPLE["dataset_version"] = main.DATASET_VERSION
 
 
 def req(method="gfar", **opts):
@@ -22,7 +23,7 @@ def req(method="gfar", **opts):
 
 def test_health():
     body = client.get("/health").json()
-    assert body["ok"] and body["places"] == 3570 and body["dataset_version"] == "busan-enriched-v3"
+    assert body["ok"] and body["places"] == 3570 and body["dataset_version"] == "busan-enriched-v4-20261121"
 
 
 def test_method_c_uses_versioned_join_snapshot():
@@ -47,7 +48,7 @@ def test_contract_shape_and_scale(method):
     r = client.post("/recommend", json=req(method, individual_method='binary'))
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v3" and body["method"] == method
+    assert body["score_scale"] == "1-5" and body["dataset_version"] == "busan-enriched-v4-20261121" and body["method"] == method
     ids = [g["poi_id"] for g in body["group"]]
     assert len(ids) == len(set(ids)) and [g["group_rank"] for g in body["group"]] == list(range(1, len(ids) + 1))
     for g in body["group"]:
@@ -61,7 +62,7 @@ def test_same_order_as_the_package():
     users = {m["user_id"]: m["ratings"] for m in EXAMPLE["members"]}
     for method, model in [("gfar", None), ("awm", AverageWithoutMisery(2.5))]:
         body = client.post("/recommend", json=req(method, tie_seed=0, individual_method='feature_mean')).json()
-        direct = recommend_group(load_places(), users, top_k=30, tie_seed=0, recommender=model, individual_method='feature_mean')
+        direct = recommend_group(main.places(), users, top_k=30, tie_seed=0, recommender=model, individual_method='feature_mean')
         assert [g["poi_id"] for g in body["group"]] == [x.poi_id for x in direct]
 
 

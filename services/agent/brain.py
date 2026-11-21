@@ -29,7 +29,8 @@ DEADLINE_SECONDS = 40  # the backend waits up to 60 s; stop early and use the ru
 SYSTEM = """You are TravelSync, the assistant inside a group-travel planning app for Busan.
 The group chats; you are only called when someone asks you.
 Rules:
-- Use the tools to look at the real plan and real places. Never invent places, times or prices.
+- Use the tools to look at the real plan and real places. Never invent places or times.
+- Budget and price optimization are outside product scope. Do not offer cheaper plans or cost comparisons.
 - You may suggest at most ONE change (remove one stop and add one place at the same start time). The group approves it later.
 - Only use poi_id and item_id values returned by the tools. Never change a locked stop.
 - indoor_guess is inferred from the category; say "probably indoor", not "definitely".
@@ -48,7 +49,6 @@ TOOLS = [
          "kind": {"type": "string", "description": "Same kind as the stop being replaced, e.g. 'activity', 'food', 'cafe'"},
          "indoor": {"type": "boolean", "description": "true = probably indoor places only"},
          "max_walking": {"type": "number", "description": "0 (little walking) to 1 (a lot)"},
-         "max_cost_krw": {"type": "integer"},
          "limit": {"type": "integer", "description": "1-8, default 5"}}}},
     {"name": "check_hours", "description": "Is this place open for the whole visit? available: true, false or null (unknown).",
      "parameters_json_schema": {"type": "object", "required": ["poi_id", "day", "start"], "properties": {
@@ -71,7 +71,7 @@ def run_tool(data: TripData, name: str, args: dict) -> dict:
     if name == "get_plan":
         return data.get_plan()
     if name == "find_places":
-        return data.find_places(**{k: v for k, v in args.items() if k in ("kind", "indoor", "max_walking", "max_cost_krw", "limit")})
+        return data.find_places(**{k: v for k, v in args.items() if k in ("kind", "indoor", "max_walking", "limit")})
     if name == "check_hours":
         return data.check_hours(args.get("poi_id", ""), args.get("day", ""), args.get("start", ""), args.get("duration_min") or 90)
     return {"error": f"unknown tool {name}"}
@@ -140,8 +140,8 @@ def gemini_turn(req: dict, data: TripData, client=None, model: str = GEMINI_MODE
 
 
 # ---------------------------------------------------------------- rules fallback (no LLM)
-WANTS = {"indoor": ["rain", "indoor", "비", "실내"], "low walking": ["tired", "walk", "피곤", "걷"],
-         "cheaper": ["cheap", "budget", "저렴", "싸"]}
+WANTS = {"indoor": ["rain", "indoor", "비", "실내"],
+         "low walking": ["tired", "walk", "피곤", "걷"]}
 
 
 def rules_turn(req: dict, data: TripData) -> dict:
@@ -149,7 +149,7 @@ def rules_turn(req: dict, data: TripData) -> dict:
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
     if want is None:
-        return finish(data, "I can help with rain (indoor places), less walking or a cheaper plan.", None, calls, True)
+        return finish(data, "I can help with rain (indoor places) or less walking.", None, calls, True)
     plan = data.get_plan()["plan"]
     if not plan:
         return finish(data, "There is no plan yet — build plans on the Plan tab first, then ask me again.", None, calls)
@@ -163,8 +163,6 @@ def rules_turn(req: dict, data: TripData) -> dict:
             args["indoor"] = True
         elif want == "low walking":
             args["max_walking"] = max(0.0, (item.get("walking_level") or 0.5) - 0.1)
-        else:
-            args["max_cost_krw"] = max(0, (item.get("avg_cost_krw") or 0) - 1)
         found = data.find_places(**args)["places"]
         calls.append({"name": "find_places", "summary": "Searched places"})
         for cand in found:
@@ -198,12 +196,26 @@ def gemini_with_fallback(req: dict, data: TripData, client=None) -> dict:
                 out["tool_calls"].insert(0, {"name": "model", "summary": f"Used {model} ({GEMINI_MODEL} was busy)"})
             return out
         except errors.APIError as e:
+            log.warning("agent model failure: model=%s %s", model, provider_failure_summary(e))
             if getattr(e, "code", None) not in BUSY:
                 raise
             busy_until[model] = time.monotonic() + BUSY_PAUSE_SECONDS
             log.info("agent turn: %s busy (%s), trying the next model", model, e.code)
             last = e
     raise last or RuntimeError("no Gemini model available")
+
+
+def provider_failure_summary(error: Exception) -> str:
+    """Expose a useful reason without echoing provider payloads, prompts or API keys."""
+    code = getattr(error, "code", None)
+    reasons = {400: "request rejected", 401: "authentication rejected", 403: "access denied",
+               404: "model unavailable for this API account", 429: "quota or rate limit reached",
+               500: "provider error", 503: "provider overloaded", 504: "provider timed out"}
+    if isinstance(code, int):
+        return f"AI unavailable (HTTP {code}: {reasons.get(code, 'provider request failed')})"
+    if isinstance(error, TimeoutError):
+        return "AI unavailable (request timed out)"
+    return "AI unavailable (provider request failed)"
 
 
 def turn(req: dict, client=None) -> dict:
@@ -213,6 +225,8 @@ def turn(req: dict, client=None) -> dict:
             return gemini_with_fallback(req, data, client)
         except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
-            out["tool_calls"].insert(0, {"name": "gemini_error", "summary": f"AI unavailable ({type(e).__name__})"})
+            summary = provider_failure_summary(e)
+            log.warning("agent fallback to rules: %s", summary)
+            out["tool_calls"].insert(0, {"name": "gemini_error", "summary": summary})
             return out
     return rules_turn(req, data)

@@ -40,3 +40,10 @@ def health():
                                      "availability": config.AVAILABILITY_URL, "agent": config.AGENT_URL}}
 
 # Next milestones: WebSocket chat, agent proposals, feedback.
+
+
+@app.get("/meta/deployment", tags=["meta"])
+def deployment_status():
+    from ourney_travelsync.operating_schedules import dataset_diagnostics
+    with engine.connect() as c:
+        return {"configured_dataset": config.PLACES_VERSION, **dataset_diagnostics(c)}

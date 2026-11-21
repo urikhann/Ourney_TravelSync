@@ -71,7 +71,7 @@ export default function Plan() {
       <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
-        <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Budget limits are not applied. Displayed fees are only the known-cost subtotal. Weather and accessibility are not checked.</div>
+        <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Weather and accessibility are not checked.</div>
         {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
         <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
         {exclusions}
@@ -91,9 +91,8 @@ export default function Plan() {
           })}
         </div>
 
-        <div className="card" style={{ marginTop: 10, padding: "11px 0", display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
+        <div className="card" style={{ marginTop: 10, padding: "11px 0", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
           <div className="stat"><b style={{ color: "var(--green-d)" }}>{pct(selected.stats.group_fit)}</b><span className="muted tiny">group fit</span></div>
-          <div className="stat"><b>₩{selected.stats.total_cost.toLocaleString()}</b><span className="muted tiny">known-cost subtotal{selected.stats.cost_unknown_count ? ` (${selected.stats.cost_unknown_count} unknown)` : ""}</span></div>
           <div className="stat"><b>{stops}</b><span className="muted tiny">stops</span></div>
         </div>
 
@@ -131,7 +130,7 @@ export default function Plan() {
                       <div className="b" style={{ fontSize: 14 }}>{mealLabel(it)}{it.place?.name ?? it.poi_id}</div>
                       {it.locked && <Lock size={15} color="var(--muted)" />}
                     </div>
-                    <div className="muted tiny">{it.start}–{it.end} · {it.stay_minutes} min stay · group visit fees ₩{it.visit_cost.toLocaleString()}</div>
+                    <div className="muted tiny">{it.start}–{it.end} · {it.stay_minutes} min stay</div>
                     {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>Reserved · locked</div>}
                     {moved ? (
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>

@@ -25,9 +25,9 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 from sqlalchemy import bindparam, create_engine, text
 try:
-    from ourney_travelsync.operating_schedules import load_normalized, day_windows
+    from ourney_travelsync.operating_schedules import load_normalized, day_windows, load_versioned_weekly, load_versioned_dated, dataset_diagnostics
 except ModuleNotFoundError:  # standalone planning-data image
-    from operating_schedules import load_normalized, day_windows
+    from operating_schedules import load_normalized, day_windows, load_versioned_weekly, load_versioned_dated, dataset_diagnostics
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -58,6 +58,8 @@ def _now() -> datetime:
 def _iso(dt: datetime | None) -> str:
     if dt is None:
         return _now().isoformat()
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.isoformat()
@@ -135,7 +137,10 @@ def _load_operating(dataset_version: str, poi_ids: list[str], days: list[date]) 
         pois = {r["id"]: dict(r) for r in c.execute(
             poi_sql, {"version": dataset_version, "ids": poi_ids}
         ).mappings()}
-        hour_rows = [dict(r) for r in c.execute(hours_sql, {"ids": poi_ids}).mappings()]
+        frozen = load_versioned_weekly(c, dataset_version, poi_ids)
+        hour_rows = ([r for rows in frozen.values() for r in rows] if frozen is not None
+                     else [dict(r) for r in c.execute(hours_sql, {"ids": poi_ids}).mappings()])
+        baseline_dated = load_versioned_dated(c, dataset_version, poi_ids)
         exc_rows = [dict(r) for r in c.execute(
             exc_sql, {"ids": poi_ids, "days": days}
         ).mappings()] if days else []
@@ -146,8 +151,8 @@ def _load_operating(dataset_version: str, poi_ids: list[str], days: list[date]) 
     hours: dict[str, dict[int, list[dict]]] = {}
     for r in hour_rows:
         hours.setdefault(r["poi_id"], {}).setdefault(r["dow"], []).append(r)
-    exceptions = {(r["poi_id"], r["day"]): r for r in exc_rows}
-    holidays = {r["day"]: r["name"] for r in holiday_rows}
+    exceptions = {(r["poi_id"], date.fromisoformat(r["day"]) if isinstance(r["day"],str) else r["day"]): r for r in baseline_dated + exc_rows}
+    holidays = {date.fromisoformat(r["day"]) if isinstance(r["day"],str) else r["day"]: r["name"] for r in holiday_rows}
 
     result = {}
     for pid in poi_ids:
@@ -591,3 +596,10 @@ async def snapshot(request: dict, authorization: str | None = Header(default=Non
         "pois": [operating[pid] for pid in poi_ids if pid in operating],
         "edges": edges,
     }
+
+
+@app.get("/diagnostics")
+def diagnostics(authorization: str | None = Header(default=None)):
+    _auth(authorization)
+    with engine.connect() as c:
+        return dataset_diagnostics(c)
