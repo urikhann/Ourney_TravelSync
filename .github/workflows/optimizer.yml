@@ -7,6 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with: {python-version: '3.13'}
+      - run: python scripts/verify_deployment_artifacts.py --git-ref HEAD
       # Enrichment HTTP tests use the optional ingestion client (mocked, no API calls).
       - run: uv sync --locked --extra optimizer --extra ingestion --extra postgres
       # Root tests include the planning-data adapter and its database imports.

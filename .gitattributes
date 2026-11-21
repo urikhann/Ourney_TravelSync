@@ -2,3 +2,8 @@
 src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv -text
 src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v1.csv -text
 src/ourney_travelsync/data/travelsync_final_places_v2.csv -text
+
+# Deployment artifacts are hashed as bytes, including original line endings.
+src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v4.csv -text whitespace=cr-at-eol
+src/ourney_travelsync/data/travelsync_poi_operating_info_v1.csv -text whitespace=cr-at-eol
+src/ourney_travelsync/data/enrichment_v4_manifest.json.gz -text

@@ -165,3 +165,12 @@ No Docker/container or disposable PostgreSQL verification was available in this
 session. No external routing provider, new model download, venue-hour accuracy or
 recommendation-quality evaluation is established by these tests. Shared application
 data was not changed; no push, merge or remote deployment was performed.
+
+
+Snapshot artifact hashes are over the exact packaged bytes. `.gitattributes`
+marks the V4 and operating CSVs as `-text`, preserving their original CRLF bytes
+on Linux and Windows. Do not regenerate the manifest hashes to accommodate a
+platform's newline conversion. CI checks Git-stored and checked-out artifacts
+before installing dependencies, and the installed-wheel check validates the same
+snapshot. Regression tests round-trip the data through Git with both
+`core.autocrlf=false` and `true`.

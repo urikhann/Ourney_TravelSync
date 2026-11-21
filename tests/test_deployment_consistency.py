@@ -94,8 +94,8 @@ def test_existing_version_content_mismatch_is_rejected(database, mutation):
             initialize(db,expected_active=V)
         db.rollback()
 
-def test_csv_database_cache_identity_and_pinned_planning_hours(database, monkeypatch):
-    from app.routes.recommendations import FEATURES
+def test_csv_database_cache_identity(database):
+    from app.features import FEATURES
     with Session(database) as db:
         pois = list(db.scalars(select(Poi).where(Poi.dataset_version==V)).unique())
         from ourney_travelsync.places import PlaceDataset
@@ -103,6 +103,12 @@ def test_csv_database_cache_identity_and_pinned_planning_hours(database, monkeyp
                           latitude=p.lat,longitude=p.lng,enriched_metadata=p.enriched_metadata,**p.features) for p in pois)
         joined = PlaceDataset(rows,tuple(r["place_id"] for r in rows),np.array([[r[f] for f in FEATURES] for r in rows],float),np.array([[r["latitude"],r["longitude"]] for r in rows]))
         assert catalogue_identity(joined)[2] == catalogue_identity(load_places(configured()[1]))[2]
+
+
+def test_pinned_planning_hours(database, monkeypatch):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    with Session(database) as db:
         schedules = list(db.execute(text("SELECT poi_id,schedule FROM poi_normalized_hours WHERE dataset_version=:v"), {"v":V}).mappings())
         monkeypatch.setenv("DATABASE_URL", str(database.url))
         planning = load_module("deployment_planning_test", "services/planning_data/main.py")

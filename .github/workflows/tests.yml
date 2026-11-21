@@ -8,6 +8,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
+      - run: python scripts/verify_deployment_artifacts.py --git-ref HEAD
       - run: uv sync --locked
       - run: uv run --locked pytest -q
       - run: uv sync --locked --extra ingestion --extra postgres --extra viewer

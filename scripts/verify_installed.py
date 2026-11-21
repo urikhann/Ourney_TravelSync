@@ -16,6 +16,10 @@ import ourney_travelsync
 assert 'site-packages' in ourney_travelsync.__file__, ourney_travelsync.__file__
 assert len(load_places().place_ids) == 3570
 assert hashlib.sha256(files('ourney_travelsync').joinpath('data',OFFICIAL_FILENAME).read_bytes()).hexdigest() == OFFICIAL_SHA256
+from ourney_travelsync.deployment import snapshot, manifest, SNAPSHOT
+spec = snapshot()
+assert len(load_places(SNAPSHOT.parent / spec['csv']).place_ids) == 3570
+assert manifest(spec)['dataset_version'] == spec['dataset_version']
 from ourney_travelsync.cli import main
 assert main(['recommend','--top-k','2']) == 0
 assert not any(name in sys.modules for name in ['requests','pandas','psycopg','streamlit'])
