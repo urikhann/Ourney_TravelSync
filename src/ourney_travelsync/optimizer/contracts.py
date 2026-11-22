@@ -127,7 +127,7 @@ class Candidate(Contract):
     mean_score: Unit
     personal_scores: dict[str, Unit]
     relevance: dict[str, Unit]
-    visit_category: Literal["cafe", "meal", "activity"] = "activity"
+    visit_category: Literal["cafe", "meal", "activity", "evening"] = "activity"
     activity_category: Literal["nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival", "other"] = "other"
     allowed_dates: tuple[date, ...] | None = None
     tags: tuple[str, ...] = ()

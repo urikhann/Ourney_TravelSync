@@ -18,6 +18,7 @@ from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, Me
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
 from ourney_travelsync.visit_durations import default_duration
+from ourney_travelsync.planning_categories import is_evening_venue
 
 router = APIRouter(tags=["itineraries"])
 
@@ -105,6 +106,33 @@ def planning_places(q: str = Query(default="", max_length=120), trip: Trip = Dep
         query = query.where(Poi.name.icontains(q.strip(), autoescape=True))
     return [{"id": p.id, "name": p.name, "duration_min": default_duration(p.features)}
             for p in db.scalars(query.order_by(Poi.name, Poi.id).limit(50))]
+
+
+@router.get("/trips/{trip_id}/evening-choices")
+def evening_choices(q: str = Query(default="", max_length=120), trip: Trip = Depends(member_trip),
+                    db: Session = Depends(get_db)):
+    """Optional catalogue choices only; no route calls or plan changes."""
+    run = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
+                    .order_by(RecommendationRun.id.desc()))
+    if run is None:
+        raise HTTPException(409, "no_recommendations_yet")
+    banned = {pid for m in trip.members for pid in (m.exclusions or {}).get("poi_ids", [])}
+    tags = {tag for m in trip.members for tag in (m.exclusions or {}).get("tags", [])}
+    if "alcohol" in tags:
+        return []
+    query = select(Poi).where(Poi.dataset_version == run.dataset_version).order_by(Poi.name, Poi.id)
+    if q.strip():
+        query = query.where(Poi.name.icontains(q.strip(), autoescape=True))
+    choices = []
+    for p in db.scalars(query):
+        if p.id in banned or tags.intersection(p.tags or ()) or not is_evening_venue(
+                {"category_name": p.category, "tags": p.tags}):
+            continue
+        choices.append(dict(id=p.id, name=p.name, category=p.category, duration_min=60,
+                            hours_verified=(p.field_status or {}).get("hours") == "KNOWN"))
+        if len(choices) >= 20:
+            break
+    return choices
 
 
 def visit_availability(candidate, day, visit, enforce=True):

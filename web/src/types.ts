@@ -47,7 +47,7 @@ export type Recommendations = {
 
 export type PlanItem = {
   duration_source?: string; duration_estimated?: boolean;
-  visit_category?: "cafe" | "meal" | "activity";
+  visit_category?: "cafe" | "meal" | "activity" | "evening";
   activity_category?: string;
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
   availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown

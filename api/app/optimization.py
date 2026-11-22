@@ -161,7 +161,7 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         # Normalize the captured values without clamping invalid data into range.
         scores = {u: (v - 1) / 4 if scale == "1-5" else v for u, v in raw_scores.items()}
         p = rows[row["poi_id"]]
-        role, category = visit_role(p.features)
+        role, category = visit_role({**p.features, "category_name": p.category, "tags": p.tags})
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
@@ -181,7 +181,7 @@ def catalogue_request(run, body, db):
     rows = db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version).order_by(Poi.id)).all()
     return {**run.request,
         "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
-            category_name=p.category, latitude=p.lat, longitude=p.lng,
+            category_name=p.category, tags=p.tags, latitude=p.lat, longitude=p.lng,
             enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features)),
             field_status={**(p.field_status or {}), "duration": "ESTIMATED"}, **p.features) for p in rows],
         "planning_days": [d.model_dump(mode="json") for d in body.days],

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from .contracts import DayPlan, PlanRequest
 from .meals import effective_meals, meals_can_be_assigned
+from ..planning_categories import EVENING_START_MIN
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,9 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if p is None:
                 problem("UNKNOWN_POI", day.date, v.poi_id)
                 continue
+            if p.visit_category == "evening" and (v.start_min < EVENING_START_MIN or not any(
+                    l.poi_id == p.poi_id and l.date == day.date for l in req.locked_items)):
+                problem("EVENING_CHOICE_OR_TIME", day.date, v.poi_id)
             if p.allowed_dates is not None and day.date not in p.allowed_dates:
                 problem("DAY_CANDIDATE_NOT_SELECTED", day.date, v.poi_id)
             e = leg(v.poi_id)

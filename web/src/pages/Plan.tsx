@@ -10,7 +10,7 @@ import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
 
-const mealLabel = (it: PlanItem) => it.place?.kind === "food" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
+const mealLabel = (it: PlanItem) => it.visit_category === "evening" ? "Evening · " : it.visit_category === "meal" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
 
 export default function Plan() {
   const { id = "" } = useParams();

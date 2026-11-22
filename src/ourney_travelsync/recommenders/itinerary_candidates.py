@@ -60,6 +60,9 @@ def select_days(data, records, days, locks=(), composition=None):
         pool, detour = [], {}
         for j, pid in enumerate(data.poi_ids):
             r = records[pid]
+            # Nightlife is opt-in for a particular day, never an automatic meal.
+            if roles[j][0] == "evening" and not any(l["poi_id"] == pid and l["date"] == d["date"] for l in locks):
+                continue
             duration = r.get("duration_min")
             status = (r.get("field_status") or {}).get("duration")
             # Unverified dwell values are not used as exclusion evidence.
