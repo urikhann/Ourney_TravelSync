@@ -1,6 +1,7 @@
 """Deterministic day-specific retrieval; geographic screening is not route evidence."""
 from collections import Counter
 from datetime import date
+import os
 import math
 import numpy as np
 from ..common import GroupInput
@@ -48,7 +49,9 @@ def select_days(data, records, days, locks=(), composition=None):
     preferred = [i for i in range(len(FEATURE_NAMES)) if np.any(data.user_features[:, i] >= 4)]
     if not preferred:
         preferred = list(range(len(FEATURE_NAMES)))
-    limit = min(40, 60 // len(days))
+    # A full directed matrix grows quadratically; retain role alternatives in a
+    # bounded first pass rather than spending routing quota on forty stops/day.
+    limit = min(max(12, min(40, int(os.getenv("PLANNING_DAY_CANDIDATE_LIMIT", "16")))), 60 // len(days))
     previous, selected, by_day, diagnostics = set(), set(), {}, {}
     roles = [visit_role(records[pid]) for pid in data.poi_ids]
     coordinates = [(records[pid]["latitude"], records[pid]["longitude"]) for pid in data.poi_ids]

@@ -1,0 +1,33 @@
+Routing quota guard
+
+Branch: codex/routing-quota-guard
+
+The previous default requested up to 40 candidates per day: 1,640 directed
+legs, up to 82 multi-destination calls before point-route fallback. The default
+is now 16/day: 272 directed legs and 17 batch calls before fallback. This is an
+83% reduction in route legs, with fewer scheduling alternatives as a tradeoff.
+No geographic estimate replaces verified route evidence.
+
+Controls passed by Compose:
+  PLANNING_DAY_CANDIDATE_LIMIT=16 (12..40, also limited by 60/trip days)
+  KAKAO_ROUTE_CONCURRENCY=2
+  KAKAO_ROUTE_MAX_REQUESTS=80 (HTTP attempts per snapshot, including retries)
+  KAKAO_ROUTE_DAILY_REQUEST_LIMIT=200 (local HTTP attempts per KST date)
+
+These are application allowances, not provider billing units or claims about
+the account's actual quota. They are conservative defaults and can be configured.
+The daily counter is atomic and stored in the route-cache SQLite volume, scoped
+by a one-way hash of the configured credential. Cache hits spend no allowance.
+
+HTTP 429 and provider code -10 stop immediately without retries. A persistent
+cooldown honors numeric Retry-After seconds (bounded to 1..86400); otherwise it
+lasts one hour. This does not assume when the provider resets its quota. HTTP
+5xx retains bounded retry. Successful batch and point legs are cached before
+later fallback failures; retrying reuses completed legs. Concurrent requests
+already in flight may complete, but waiting calls recheck the persistent guard.
+
+Budget failures preserve the previous published plan and use explicit UI errors.
+No fabricated route is inserted, and no quota reset, account upgrade or key
+rotation is performed. Exhausted upstream quota still requires provider recovery
+or sufficient existing cache coverage. This branch was tested with fake HTTP
+responses; it has not been deployed over the running stack.

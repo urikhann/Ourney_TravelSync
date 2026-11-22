@@ -30,6 +30,7 @@ async def _post(base_url: str, path: str, payload: dict, service: str, timeout: 
         if service == "planning_data":
             # Only forward our adapter's fixed codes; never expose provider bodies or credentials.
             allowed = {"routing_credentials_rejected", "routing_quota_exceeded",
+                       "routing_request_budget_exceeded", "routing_daily_budget_exceeded",
                        "routing_provider_error", "routing_provider_unavailable",
                        "routing_invalid_response", "routing_no_routes", "routing_request_rejected",
                        "routing_start_point_unreachable", "routing_end_point_unreachable", "routing_cache_unavailable",

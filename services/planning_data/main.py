@@ -20,6 +20,7 @@ import weakref
 from pathlib import Path
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
@@ -36,7 +37,9 @@ DATABASE_URL = os.getenv(
 KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 PLANNING_DATA_TOKEN = os.getenv("PLANNING_DATA_TOKEN", "")
 KAKAO_ROUTE_RADIUS = min(10000, max(1, int(os.getenv("KAKAO_ROUTE_RADIUS", "5000"))))
-KAKAO_ROUTE_CONCURRENCY = max(1, int(os.getenv("KAKAO_ROUTE_CONCURRENCY", "8")))
+KAKAO_ROUTE_CONCURRENCY = max(1, int(os.getenv("KAKAO_ROUTE_CONCURRENCY", "2")))
+KAKAO_ROUTE_MAX_REQUESTS = max(1, int(os.getenv("KAKAO_ROUTE_MAX_REQUESTS", "80")))
+KAKAO_ROUTE_DAILY_REQUEST_LIMIT = max(1, int(os.getenv("KAKAO_ROUTE_DAILY_REQUEST_LIMIT", "200")))
 
 ROUTE_CACHE_PATH = os.getenv("ROUTE_CACHE_PATH", "/cache/routes.sqlite3")
 _origin_locks = weakref.WeakKeyDictionary()
@@ -280,9 +283,15 @@ async def _retry_pause(seconds):
 async def _route_request(client, semaphore, method, url, **kwargs):
     for attempt in range(3):
         async with semaphore:
+            if getattr(client, "_travelsync_route_requests", 0) >= KAKAO_ROUTE_MAX_REQUESTS:
+                raise HTTPException(503, "routing_request_budget_exceeded")
+            client._travelsync_route_requests = getattr(client, "_travelsync_route_requests", 0) + 1
+            await asyncio.to_thread(_reserve_request)
             response = await client.request(method, url, **kwargs)
-        transient = (response.status_code in (429, 500, 502, 503, 504)
-                     or (response.status_code == 400 and _provider_error_code(response) == -10))
+            if response.status_code == 429 or _provider_error_code(response) == -10:
+                await asyncio.to_thread(_block_requests, response.headers.get("Retry-After"))
+                _check_response(response)
+        transient = response.status_code in (500, 502, 503, 504)
         if transient and attempt < 2:
             await _retry_pause(.5 * (2 ** attempt))
             continue
@@ -341,6 +350,43 @@ def _cache_connection():
             yield connection
     finally:
         connection.close()
+
+
+def _reserve_request():
+    """Atomic local HTTP-attempt allowance, shared by workers and restarts.
+
+    This is an application limit, not a claim about provider billing units.
+    Cache hits never spend the allowance. Credentials are never persisted.
+    """
+    scope = hashlib.sha256(KAKAO_REST_API_KEY.encode()).hexdigest()
+    now = _now()
+    day = now.astimezone(ZoneInfo("Asia/Seoul")).date().isoformat()
+    try:
+        with _cache_connection() as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS request_budget (scope TEXT PRIMARY KEY, day TEXT, used INTEGER, blocked_until REAL)")
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT day,used,blocked_until FROM request_budget WHERE scope=?", (scope,)).fetchone()
+            if row and row[2] > now.timestamp():
+                raise HTTPException(503, "routing_quota_exceeded")
+            used = row[1] if row and row[0] == day else 0
+            if used >= KAKAO_ROUTE_DAILY_REQUEST_LIMIT:
+                raise HTTPException(503, "routing_daily_budget_exceeded")
+            connection.execute("INSERT INTO request_budget VALUES (?,?,?,0) ON CONFLICT(scope) DO UPDATE SET day=excluded.day,used=excluded.used", (scope,day,used+1))
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, "routing_cache_unavailable") from None
+
+
+def _block_requests(retry_after):
+    try:
+        delay = max(1, min(86400, int(retry_after)))
+    except (ValueError, TypeError):
+        delay = 3600  # Unknown provider reset: cool down, do not guess quota renewal.
+    scope = hashlib.sha256(KAKAO_REST_API_KEY.encode()).hexdigest()
+    try:
+        with _cache_connection() as connection:
+            connection.execute("UPDATE request_budget SET blocked_until=max(blocked_until,?) WHERE scope=?", (_now().timestamp()+delay,scope))
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, "routing_cache_unavailable") from None
 
 
 def _valid_cached_route(edge):
@@ -409,6 +455,31 @@ async def _routes_from_origin(client, semaphore, origin_id, origin, destinations
                 if keys[pid] in cached else by_id[pid] for pid,_ in destinations]
 
 
+async def _save_provider_route(origin, destination, route):
+    """Keep completed legs even if a later fallback or origin exhausts quota."""
+    summary = route.get("summary")
+    if not isinstance(summary, dict):
+        return
+    duration, distance = summary.get("duration"), summary.get("distance")
+    point = route.get("_point_route", False)
+    fare_data = summary.get("fare")
+    fare = fare_data.get("toll") if point and isinstance(fare_data,dict) else None if point else 0
+    if (route.get("result_code") == 0
+            and type(duration) is int and 0 <= duration <= 86400
+            and type(distance) is int and 0 <= distance <= 10**9
+            and type(fare) is int and 0 <= fare <= 10**9):
+        edge = dict(status="KNOWN", duration_minutes=math.ceil(duration/60), distance_m=distance,
+                    group_fare=fare, walk_minutes=0, fetched_at=_now().isoformat(),
+                    provider="KAKAO_MOBILITY_DIRECTIONS_V1" if point else PROVIDER)
+        await asyncio.to_thread(_save_routes, [(_cache_key(origin,destination),edge)])
+
+
+async def _point_and_cache(client, semaphore, origin, destination):
+    route = await _point_route(client,semaphore,origin,destination)
+    await _save_provider_route(origin,destination,route)
+    return route
+
+
 async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destinations, day):
     edges = []
     for batch in _chunk(destinations, 30):
@@ -433,11 +504,13 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
 
         # 304 means outside the batch search radius, not no driving route.
         # Only those legs use the unrestricted point-to-point endpoint.
+        for pid, point in batch:
+            await _save_provider_route(origin, point, by_key.get(pid, {}))
         outside = [(pid, point) for pid, point in batch
                    if by_key.get(pid, {}).get("result_code") == 304]
         if outside:
             fallback = await _gather_routes((
-                _point_route(client, semaphore, origin, point) for _, point in outside))
+                _point_and_cache(client, semaphore, origin, point) for _, point in outside))
             by_key.update({pid: route for (pid, _), route in zip(outside, fallback)})
 
         fetched = _now().isoformat()
