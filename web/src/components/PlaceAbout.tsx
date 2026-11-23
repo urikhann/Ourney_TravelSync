@@ -4,6 +4,7 @@
 // Missing values arrive as null from the backend and are simply not shown.
 import { ExternalLink } from "lucide-react";
 import type { EnrichedMeta } from "../types";
+import { locale, t } from "../i18n";
 
 const SOURCE: Record<string, string> = {
   KAKAO_MAP: "Kakao Map", PUBLIC_TOURISM: "Public tourism data (TourAPI)", OFFICIAL_SITE: "Official website",
@@ -36,18 +37,18 @@ function publicSourceUrls(value?: string | null): string[] {
 export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
   const m = meta ?? {};
   const facts: [string, string][] = [];
-  if (has(m.food_type)) facts.push(["Food type", m.food_type]);
-  if (has(m.representative_menu)) facts.push(["Signature menu", m.representative_menu]);
-  if (has(m.representative_activity)) facts.push(["Things to do", m.representative_activity]);
+  if (has(m.food_type)) facts.push([t("Food type"), m.food_type]);
+  if (has(m.representative_menu)) facts.push([t("Signature menu"), m.representative_menu]);
+  if (has(m.representative_activity)) facts.push([t("Things to do"), m.representative_activity]);
   if (!has(m.detailed_category) && !has(m.description_summary) && facts.length === 0) return null;
 
-  const source = has(m.description_source_type) ? SOURCE[m.description_source_type] ?? m.description_source_type : null;
+  const source = has(m.description_source_type) ? t(SOURCE[m.description_source_type] ?? m.description_source_type) : null;
   const sourceLinks = publicSourceUrls(m.description_source_url);
   const fromMenu = m.description_basis === "STRUCTURED_MENU_FACTS" || m.description_basis === "OFFICIAL_MENU_FACTS";
   return (
     <>
       <div className="h2" style={{ margin: "6px 2px 0" }}>
-        About {has(m.detailed_category) && <small>{m.detailed_category}</small>}
+        {t("About")} {has(m.detailed_category) && <small>{m.detailed_category}</small>}
       </div>
       <div className="card list">
         {has(m.description_summary) && (
@@ -55,12 +56,12 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
             {m.description_summary}
             {source && (
               <div className="muted tiny" style={{ marginTop: 6 }}>
-                {fromMenu ? "Summary from menu info · " : ""}Source: {source}
+                {fromMenu ? t("Summary from menu info") + " · " : ""}{t("Source: {src}", { src: source })}
                 {sourceLinks.map((url, index) => (
                   <span key={url} style={{ whiteSpace: "nowrap" }}>
                     {" · "}
                     <a href={url} target="_blank" rel="noreferrer">
-                      {sourceLinks.length === 1 ? "Open source" : `Open source ${index + 1}`}
+                      {sourceLinks.length === 1 ? t("Open source") : t("Open source {n}", { n: index + 1 })}
                       {" "}<ExternalLink size={11} style={{ display: "inline", verticalAlign: "-1px" }} />
                     </a>
                   </span>
@@ -80,7 +81,7 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
   );
 }
 
-const fmt = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const fmt = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString(locale(), { month: "short", day: "numeric" });
 
 /**
  * Hours reported by the source (enriched data). Source-field rules:
@@ -92,23 +93,23 @@ export function ReportedHours({ meta }: { meta?: EnrichedMeta }) {
   const m = meta ?? {};
   const hours = has(m.opening_time) && has(m.closing_time) ? `${m.opening_time}–${m.closing_time}` : null;
   const closed = has(m.closed_day) ? m.closed_day : null;
-  if (!hours && !closed) return <div className="list-row muted small">Opening hours aren't known yet — check before you go.</div>;
+  if (!hours && !closed) return <div className="list-row muted small">{t("Opening hours aren't known yet — check before you go.")}</div>;
 
   const snapshot = m.hours_scope === "SNAPSHOT_WEEK";
   const note = snapshot
-    ? `Seen only for ${has(m.hours_valid_from) ? fmt(m.hours_valid_from) : "one week"}${has(m.hours_valid_until) ? ` – ${fmt(m.hours_valid_until)}` : ""} · may differ on your dates`
-    : m.hours_scope === "PUBLISHED_SCHEDULE" ? "Published hours" : "Reported hours";
+    ? t("Seen only for {when} · may differ on your dates", { when: `${has(m.hours_valid_from) ? fmt(m.hours_valid_from) : t("one week")}${has(m.hours_valid_until) ? ` – ${fmt(m.hours_valid_until)}` : ""}` })
+    : m.hours_scope === "PUBLISHED_SCHEDULE" ? t("Published hours") : t("Reported hours");
   return (
     <>
       {hours && (
         <div className="list-row" style={{ padding: "7px 0" }}>
-          <div className="grow b" style={{ fontWeight: 600 }}>Open</div>
+          <div className="grow b" style={{ fontWeight: 600 }}>{t("Open")}</div>
           <div className="small num">{hours}</div>
         </div>
       )}
       {closed && (
         <div className="list-row" style={{ padding: "7px 0" }}>
-          <div className="grow b" style={{ fontWeight: 600 }}>Closed</div>
+          <div className="grow b" style={{ fontWeight: 600 }}>{t("Closed")}</div>
           <div className="small">{closed}</div>
         </div>
       )}

@@ -92,6 +92,16 @@ class TripMember(Base):
     user: Mapped[User] = relationship()
 
 
+class TripInvite(Base):
+    """The trip's invite link settings (issue #18). One row per trip, created the first time it is needed.
+    The link works until expires_at. Revoking also changes the trip's invite code, so old links stop working."""
+    __tablename__ = "trip_invites"
+    trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class MemberAvailability(Base):
     """One row per member per free date."""
     __tablename__ = "availability"
@@ -113,6 +123,18 @@ class Preference(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     ratings: Mapped[dict] = mapped_column(JSON)            # {"food": 5, "cafe": 4, ...} — exactly the 10 features
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class UserPreference(Base):
+    """My saved 10 ratings, used for every trip (issue #21). Saving INSERTs version+1 (history is kept).
+    A trip copies these into its own Preference row when I create or join it; editing a trip never changes them."""
+    __tablename__ = "user_preferences"
+    __table_args__ = (UniqueConstraint("user_id", "version"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    ratings: Mapped[dict] = mapped_column(JSON)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class RecommendationRun(Base):

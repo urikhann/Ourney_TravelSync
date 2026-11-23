@@ -212,15 +212,22 @@ WANTS = {"indoor": ["rain", "indoor", "비", "실내"],
          "low walking": ["tired", "walk", "피곤", "걷"]}
 
 
+def _say(korean: bool, en: str, ko: str) -> str:
+    return ko if korean else en
+
+
 def rules_turn(req: dict, data: TripData) -> dict:
     t = req["message"]["text"].lower()
+    ko = any("\uac00" <= ch <= "\ud7a3" for ch in t)  # a Korean message gets a Korean reply
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
     if want is None:
-        return finish(data, "I can help with rain (indoor places) or less walking.", None, calls, True)
+        return finish(data, _say(ko, "I can help with rain (indoor places) or less walking.",
+                                 "비 오는 날 실내 장소 찾기나 덜 걷는 일정으로 바꾸는 것을 도와드릴 수 있어요."), None, calls, True)
     plan = data.get_plan()["plan"]
     if not plan:
-        return finish(data, "There is no plan yet — build plans on the Plan tab first, then ask me again.", None, calls)
+        return finish(data, _say(ko, "There is no plan yet — build plans on the Plan tab first, then ask me again.",
+                                 "아직 일정이 없어요. 일정 탭에서 먼저 일정을 만든 뒤 다시 물어봐 주세요."), None, calls)
     for item in plan[0]["items"]:
         if item.get("locked") or item.get("kind") == "food":
             continue
@@ -237,11 +244,15 @@ def rules_turn(req: dict, data: TripData) -> dict:
             hours = data.check_hours(cand["poi_id"], plan[0]["date"], item["start"], cand.get("duration_min") or 90)
             if hours["available"] is not False:
                 calls.append({"name": "check_hours", "summary": "Checked opening hours"})
-                note = "" if hours["available"] else " Its opening hours aren't known, so check before going."
-                return finish(data, f"How about swapping {item['name']} ({item['start']}) for {cand['name']}?{note}",
+                note = "" if hours["available"] else _say(ko, " Its opening hours aren't known, so check before going.",
+                                                          " 영업시간 정보가 없으니 가기 전에 확인해 주세요.")
+                reply = _say(ko, f"How about swapping {item['name']} ({item['start']}) for {cand['name']}?",
+                             f"{item['name']}({item['start']}) 대신 {cand['name']}에 가는 건 어때요?")
+                return finish(data, reply + note,
                               {"date": plan[0]["date"], "remove_item_ids": [item["item_id"]],
                                "add": [{"poi_id": cand["poi_id"], "start": item["start"]}]}, calls)
-    return finish(data, "I couldn't find a good swap in today's plan.", None, calls)
+    return finish(data, _say(ko, "I couldn't find a good swap in today's plan.",
+                             "오늘 일정에서 바꿀 만한 좋은 장소를 찾지 못했어요."), None, calls)
 
 
 def gemini_with_fallback(req: dict, data: TripData, client=None) -> dict:

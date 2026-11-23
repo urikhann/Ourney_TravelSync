@@ -9,8 +9,15 @@ import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
+import { t } from "../i18n";
 
-const mealLabel = (it: PlanItem) => it.visit_category === "evening" ? "Evening · " : it.visit_category === "meal" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
+const mealLabel = (it: PlanItem) => {
+  if (it.visit_category === "evening") return t("Evening") + " · ";
+  if (it.visit_category === "meal" || (!it.visit_category && it.place?.kind === "food")) {
+    return t(it.start >= "17:00" ? "Dinner" : "Lunch") + " · ";
+  }
+  return "";
+};
 
 export default function Plan() {
   const { id = "" } = useParams();
@@ -26,29 +33,29 @@ export default function Plan() {
   });
 
   const v = q.data;
-  if (q.isLoading) return <><TopBar title="Choose a plan" back={`/trips/${id}`} /><Loading /><TabBar tripId={id} /></>;
+  if (q.isLoading) return <><TopBar title={t("Choose a plan")} back={`/trips/${id}`} /><Loading /><TabBar tripId={id} /></>;
 
-  if (!v) return <><TopBar title="Itinerary" back={`/trips/${id}`} /><main className="content"><ErrorBox error={message(q.error)} /></main><TabBar tripId={id} /></>;
+  if (!v) return <><TopBar title={t("Itinerary")} back={`/trips/${id}`} /><main className="content"><ErrorBox error={message(q.error)} /></main><TabBar tripId={id} /></>;
   const latestError = v.latest_optimization?.error_code;
   const failure = latestError ? message(new ApiError(409, latestError)) : null;
   const excluded = v.latest_optimization?.eligibility.filter(p => !p.schedule_eligible) ?? [];
-  const exclusions = excluded.length > 0 && <details className="card pad" style={{ marginTop: 12 }}><summary>Excluded from automatic planning ({excluded.length})</summary>
+  const exclusions = excluded.length > 0 && <details className="card pad" style={{ marginTop: 12 }}><summary>{t("Excluded from automatic planning ({n})", { n: excluded.length })}</summary>
     {excluded.map(p => <p className="small" key={p.poi_id}><b>{v.setup.points.find(x => x.id === p.poi_id)?.name ?? p.poi_id}</b><br />{p.reasons.map(r => {
       const code = r.split(":").pop() ?? r;
       const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", OPENING_HOURS_UNVERIFIED: "Opening hours need confirmation", ROUTE_UNAVAILABLE: "No usable route within travel limits", DAY_CANDIDATE_NOT_SELECTED: "Not shortlisted for this day", NO_FULL_STAY_WINDOW: "Visit does not fit the available time", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
-      return `${r.includes(":") ? r.slice(0, r.lastIndexOf(":")) + ": " : ""}${names[code] ?? "Required information or conditions are not satisfied"}`;
+      return `${r.includes(":") ? r.slice(0, r.lastIndexOf(":")) + ": " : ""}${t(names[code] ?? "Required information or conditions are not satisfied")}`;
     }).join(" · ")}</p>)}</details>;
   if (v.plans.length === 0) {
     return (
       <>
-        <TopBar title="Itinerary" back={`/trips/${id}`} />
+        <TopBar title={t("Itinerary")} back={`/trips/${id}`} />
         <main className="content">
           <div className="empty">
             <div className="ic"><Map size={30} /></div>
-            <div className="title" style={{ fontSize: 18 }}>No plans yet</div>
-            <p className="muted small">Plans use the full place catalogue and your group's preferences.</p>
+            <div className="title" style={{ fontSize: 18 }}>{t("No plans yet")}</div>
+            <p className="muted small">{t("Plans use the full place catalogue and your group's preferences.")}</p>
             <ErrorBox error={failure} />
-            <p className="small" style={{ marginTop: 10 }}>No recommendations yet? <Link to={`/trips/${id}/places`}>Go to Places</Link></p>
+            <p className="small" style={{ marginTop: 10 }}>{t("No recommendations yet?")} <Link to={`/trips/${id}/places`}>{t("Go to Places")}</Link></p>
           </div>
           <OptimizationForm tripId={id} view={v} />
           {exclusions}
@@ -68,61 +75,63 @@ export default function Plan() {
 
   return (
     <>
-      <TopBar title="Itinerary" back={`/trips/${id}`} />
+      <TopBar title={t("Itinerary")} back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
-        {!!selected.stats.routing_warnings?.length && <div className="banner amber" role="status">The routing allowance or provider quota was reached. This plan uses available saved routes; some alternatives could not be checked.</div>}
-        <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Weather and accessibility are not checked.</div>
-        {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
-        <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
+        {!!selected.stats.routing_warnings?.length && <div className="banner amber" role="status">{t("The routing allowance or provider quota was reached. This plan uses available saved routes; some alternatives could not be checked.")}</div>}
+        <div className="banner amber">{t(selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules.")} {t("Weather and accessibility are not checked.")}</div>
+        {selected.stale && <div className="banner amber">{t("Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.")}</div>}
+        <details className="pf-more" style={{ marginBottom: 12 }}><summary>{t("Change planning conditions")}</summary><OptimizationForm tripId={id} view={v} /></details>
         {exclusions}
-        <p className="muted small">Schedule checked against saved routes, available hours and estimated visit durations · {selected.stats.solver_status === "OPTIMAL" ? "Best result proved for the configured objectives" : "A better plan may exist"}.</p>
+        <p className="muted small">{t("Schedule checked against saved routes, available hours and estimated visit durations")} · {t(selected.stats.solver_status === "OPTIMAL" ? "Best result proved for the configured objectives" : "A better plan may exist")}.</p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           {v.plans.map((p) => {
             const on = p.id === selected.id;
             return (
               <button key={p.id} className={"plan-tab" + (on ? " on" : "")} onClick={() => setTab(p.id)} aria-pressed={on}>
                 <div className="row tiny b" style={{ justifyContent: "space-between", opacity: on ? 0.75 : 0.6 }}>
-                  PLAN {p.letter}{p.id === v.chosen_id && <span style={{ color: on ? "#6EE7B7" : "var(--green)" }}>CHOSEN</span>}
+                  {t("PLAN {x}", { x: p.letter })}{p.id === v.chosen_id && <span style={{ color: on ? "#6EE7B7" : "var(--green)" }}>{t("CHOSEN")}</span>}
                 </div>
-                <div className="b" style={{ fontSize: 13, margin: "2px 0 6px", lineHeight: 1.2 }}>{p.name}</div>
-                <div className="row tiny b" style={{ gap: 5, opacity: 0.85 }}><ThumbsUp size={12} />{p.votes} vote{p.votes === 1 ? "" : "s"}</div>
+                <div className="b" style={{ fontSize: 13, margin: "2px 0 6px", lineHeight: 1.2 }}>{t(p.name)}</div>
+                <div className="row tiny b" style={{ gap: 5, opacity: 0.85 }}><ThumbsUp size={12} />{p.votes === 1 ? t("1 vote") : t("{n} votes", { n: p.votes })}</div>
               </button>
             );
           })}
         </div>
 
         <div className="card" style={{ marginTop: 10, padding: "11px 0", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-          <div className="stat"><b style={{ color: "var(--green-d)" }}>{pct(selected.stats.group_fit)}</b><span className="muted tiny">group fit</span></div>
-          <div className="stat"><b>{stops}</b><span className="muted tiny">stops</span></div>
+          <div className="stat"><b style={{ color: "var(--green-d)" }}>{pct(selected.stats.group_fit)}</b><span className="muted tiny">{t("group fit")}</span></div>
+          <div className="stat"><b>{stops}</b><span className="muted tiny">{t("stops")}</span></div>
         </div>
 
         <div className="row" style={{ gap: 18, margin: "16px 4px 8px" }}>
           {days.map((dd, i) => (
-            <button key={dd.date} className={"day-tab" + (i === day ? " on" : "")} onClick={() => setDay(i)}>Day {i + 1} · {weekday(dd.date)}</button>
+            <button key={dd.date} className={"day-tab" + (i === day ? " on" : "")} onClick={() => setDay(i)}>{t("Day {n}", { n: i + 1 })} · {weekday(dd.date)}</button>
           ))}
         </div>
 
         {holiday && (
           <div className="banner amber" style={{ marginBottom: 10 }}>
             <CalendarDays size={15} color="var(--amber)" />
-            <span>{holiday.name} is a public holiday. Confirm holiday hours where information is missing.</span>
+            <span>{t("{name} is a public holiday. Confirm holiday hours where information is missing.", { name: holiday.name })}</span>
           </div>
         )}
 
         {d.items.every(it => it.visit_category) && <p className="muted small">
-          {d.items.filter(it => it.visit_category === "meal").length} meals &middot; {d.items.filter(it => it.visit_category === "cafe").length} caf&eacute;s &middot; {d.items.filter(it => it.visit_category === "activity").length} activities across {new Set(d.items.filter(it => it.visit_category === "activity").map(it => it.activity_category)).size} categories
+          {t("{m} meals · {c} cafés · {a} activities across {k} categories", { m: d.items.filter(it => it.visit_category === "meal").length,
+            c: d.items.filter(it => it.visit_category === "cafe").length, a: d.items.filter(it => it.visit_category === "activity").length,
+            k: new Set(d.items.filter(it => it.visit_category === "activity").map(it => it.activity_category)).size })}
         </p>}
         <div className="tl">
-          <p className="muted small">Leave {d.start_label} at {d.start}</p>
+          <p className="muted small">{t("Leave {place} at {time}", { place: d.start_label, time: d.start })}</p>
           {d.items.map((it) => {
             const moved = !!it.moved_from;
             const col = moved ? "#E0A21B" : "var(--blue)";
             return (
               <div key={it.poi_id + it.start}>
-                <div className="leg"><Clock size={12} />{it.travel_minutes} min travel · arrive {it.arrival}</div>
-                {it.availability?.available !== true && <p className="small" role="status">Opening hours unverified — confirm before visiting.</p>}
-                {it.duration_estimated && <p className="muted small">Visit duration: {it.stay_minutes} min ({it.duration_source === "user-duration-override" ? "your override" : "category estimate"})</p>}
+                <div className="leg"><Clock size={12} />{t("{n} min travel · arrive {time}", { n: it.travel_minutes, time: it.arrival })}</div>
+                {it.availability?.available !== true && <p className="small" role="status">{t("Opening hours unverified — confirm before visiting.")}</p>}
+                {it.duration_estimated && <p className="muted small">{t("Visit duration: {n} min ({src})", { n: it.stay_minutes, src: t(it.duration_source === "user-duration-override" ? "your override" : "category estimate") })}</p>}
                 <div className="tl-item">
                   <div className="tl-time" style={moved ? { color: "var(--amber)" } : undefined}>{it.start}</div>
                   <div className="tl-dot" style={{ borderColor: col, background: it.locked ? col : "#fff" }} />
@@ -131,19 +140,19 @@ export default function Plan() {
                       <div className="b" style={{ fontSize: 14 }}>{mealLabel(it)}{it.place?.name ?? it.poi_id}</div>
                       {it.locked && <Lock size={15} color="var(--muted)" />}
                     </div>
-                    <div className="muted tiny">{it.start}–{it.end} · {it.stay_minutes} min stay</div>
-                    {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>Reserved · locked</div>}
+                    <div className="muted tiny">{it.start}–{it.end} · {t("{n} min stay", { n: it.stay_minutes })}</div>
+                    {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>{t("Reserved · locked")}</div>}
                     {moved ? (
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
-                        <Clock size={12} /> Moved from {it.moved_from}{it.availability?.close ? ` · closes ${it.availability?.close}` : ""}
+                        <Clock size={12} /> {t("Moved from {time}", { time: it.moved_from ?? "" })}{it.availability?.close ? " · " + t("closes {time}", { time: it.availability.close }) : ""}
                       </span>
                     ) : it.availability?.available ? (
                       <span className="badge" style={{ background: "var(--green-50)", color: "var(--green-d)" }}>
-                        <CircleCheck size={12} /> {it.availability.close === "24:00" ? "Open 24h" : it.availability.close ? `Open · closes ${it.availability.close}` : "Open"}
+                        <CircleCheck size={12} /> {it.availability.close === "24:00" ? t("Open 24h") : it.availability.close ? t("Open · closes {time}", { time: it.availability.close }) : t("Open")}
                       </span>
                     ) : it.availability && it.availability.available === null && (
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
-                        <Clock size={12} /> Hours unknown
+                        <Clock size={12} /> {t("Hours unknown")}
                       </span>
                     )}
                   </button>
@@ -151,23 +160,23 @@ export default function Plan() {
               </div>
             );
           })}
-          <p className="muted small">Return: {d.return_travel_minutes} min to {d.end_label} · arrive {d.end_arrival}</p>
-          {d.items.length === 0 && <p className="muted small">Nothing fits this day — try rebuilding the plans.</p>}
+          <p className="muted small">{t("Return: {n} min to {place} · arrive {time}", { n: d.return_travel_minutes, place: d.end_label, time: d.end_arrival })}</p>
+          {d.items.length === 0 && <p className="muted small">{t("Nothing fits this day — try rebuilding the plans.")}</p>}
         </div>
 
         <div style={{ height: 14 }} />
-        <p className="muted tiny">Run #{selected.stats.optimization_run_id} · data {selected.stats.dataset_version} · routes {selected.stats.routing_version}</p>
+        <p className="muted tiny">{t("Run #{id} · data {data} · routes {routes}", { id: selected.stats.optimization_run_id, data: selected.stats.dataset_version, routes: selected.stats.routing_version })}</p>
         <ErrorBox error={vote.error ? message(vote.error) : null} />
-        {selected.stale ? <p className="muted small">Approval is paused until the itinerary is rebuilt for the current group.</p> : chosen ? (
+        {selected.stale ? <p className="muted small">{t("Approval is paused until the itinerary is rebuilt for the current group.")}</p> : chosen ? (
           <div className="banner green" style={{ border: "1px solid #BFE8D6" }}>
             <CircleCheck size={20} color="var(--green)" />
-            <span><b>Plan {chosen.letter} chosen</b> · {chosen.votes} of {v.members} votes. It's now the trip plan.</span>
+            <span><b>{t("Plan {x} chosen", { x: chosen.letter })}</b> · {t("{a} of {n} votes. It's now the trip plan.", { a: chosen.votes, n: v.members })}</span>
           </div>
         ) : v.my_vote === selected.id ? (
-          <button className="btn ghost" disabled><ThumbsUp size={17} /> You voted for Plan {selected.letter} · {v.voted}/{v.members} voted</button>
+          <button className="btn ghost" disabled><ThumbsUp size={17} /> {t("You voted for Plan {x}", { x: selected.letter })} · {t("{a}/{n} voted", { a: v.voted, n: v.members })}</button>
         ) : (
           <button className="btn blue" disabled={vote.isPending} onClick={() => vote.mutate(selected.id)}>
-            <ThumbsUp size={17} /> Vote for Plan {selected.letter} <span style={{ opacity: 0.7, fontWeight: 500 }}>· {v.voted}/{v.members} voted</span>
+            <ThumbsUp size={17} /> {t("Vote for Plan {x}", { x: selected.letter })} <span style={{ opacity: 0.7, fontWeight: 500 }}>· {t("{a}/{n} voted", { a: v.voted, n: v.members })}</span>
           </button>
         )}
       </main>

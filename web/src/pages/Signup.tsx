@@ -8,6 +8,7 @@ import type { TokenOut } from "../types";
 import { ErrorBox } from "../ui";
 import AuthShell from "../components/AuthShell";
 import PasswordInput from "../components/PasswordInput";
+import { t } from "../i18n";
 
 // How strong is the password? 0 = too short, 1 = okay, 2 = good, 3 = strong. Only "8+ characters" is required.
 function strength(pw: string): 0 | 1 | 2 | 3 {
@@ -47,7 +48,7 @@ export default function Signup() {
 
   const signup = (e: FormEvent) => {
     e.preventDefault();
-    if (password !== confirm) { setError("The two passwords are different."); return; }
+    if (password !== confirm) { setError(t("The two passwords are different.")); return; }
     run(async () => {
       await api.post("/auth/signup", { email, name: name.trim(), password });  // the confirm field never leaves the browser
       setStep("code");
@@ -63,32 +64,32 @@ export default function Signup() {
 
   const resend = () => run(async () => {
     await api.post("/auth/resend-code", { email });
-    setInfo("A new code is on its way (unless you asked for one less than a minute ago).");
+    setInfo(t("A new code is on its way (unless you asked for one less than a minute ago)."));
   });
 
   // ---------- step 2: the code ----------
   if (step === "code")
     return (
-      <AuthShell title="Check your email" sub={<>We sent a 6-digit code to <b>{email}</b>.</>}>
+      <AuthShell title={t("Check your email")} sub={<>{t("We sent a 6-digit code to")} <b>{email}</b></>}>
         <form className="auth-form" onSubmit={verify}>
           <label className="auth-field">
-            <span>Verification code</span>
+            <span>{t("Verification code")}</span>
             {/* One real input (for typing, pasting and autofill) drawn as six boxes. */}
             <div className="code-boxes" onClick={() => codeRef.current?.focus()}>
               <input ref={codeRef} id="verify-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus
-                aria-label="6-digit code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                aria-label={t("6-digit code")} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
               {Array.from({ length: 6 }, (_, i) => (
                 <span key={i} className={"code-box" + (i === Math.min(code.length, 5) ? " on" : "")} aria-hidden="true">{code[i] ?? ""}</span>
               ))}
             </div>
           </label>
-          <p className="auth-hint">While developing, the code is printed in the backend terminal.</p>
+          <p className="auth-hint">{t("Didn't get it? Check your spam folder, or send a new code.")}</p>
           <ErrorBox error={error} />
           {info && <div className="auth-note">{info}</div>}
-          <button className="btn blue" disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Verify and continue"}</button>
+          <button className="btn blue" disabled={busy || code.length !== 6}>{busy ? t("Checking…") : t("Verify and continue")}</button>
           <div className="auth-row-links">
-            <button type="button" className="auth-link" onClick={resend} disabled={busy}>Send a new code</button>
-            <button type="button" className="auth-link" onClick={() => { setStep("form"); setCode(""); }}>Use a different email</button>
+            <button type="button" className="auth-link" onClick={resend} disabled={busy}>{t("Send a new code")}</button>
+            <button type="button" className="auth-link" onClick={() => { setStep("form"); setCode(""); }}>{t("Use a different email")}</button>
           </div>
         </form>
       </AuthShell>
@@ -96,18 +97,18 @@ export default function Signup() {
 
   // ---------- step 1: the form ----------
   return (
-    <AuthShell title="Create your account" sub="Plan one trip that everyone is happy with.">
+    <AuthShell title={t("Create your account")} sub={t("Plan one trip that everyone is happy with.")}>
       <form className="auth-form" onSubmit={signup}>
         <label className="auth-field">
-          <span>Name</span>
+          <span>{t("Name")}</span>
           <div className="inp">
             <User size={17} className="inp-ico" aria-hidden="true" />
-            <input id="signup-name" autoComplete="name" placeholder="What your friends call you" required maxLength={80}
+            <input id="signup-name" autoComplete="name" placeholder={t("What your friends call you")} required maxLength={80}
               value={name} onChange={(e) => setName(e.target.value)} />
           </div>
         </label>
         <label className="auth-field">
-          <span>Email</span>
+          <span>{t("Email")}</span>
           <div className="inp">
             <Mail size={17} className="inp-ico" aria-hidden="true" />
             <input id="signup-email" type="email" autoComplete="email" placeholder="you@example.com" required
@@ -115,31 +116,31 @@ export default function Signup() {
           </div>
         </label>
         <label className="auth-field">
-          <span>Password</span>
-          <PasswordInput id="signup-password" autoComplete="new-password" placeholder="At least 8 characters" required minLength={8}
+          <span>{t("Password")}</span>
+          <PasswordInput id="signup-password" autoComplete="new-password" placeholder={t("At least 8 characters")} required minLength={8}
             value={password} onChange={(e) => setPassword(e.target.value)} />
           {password && (
             <div className="pw-meter" data-level={level}>
               <div className="pw-bars"><i /><i /><i /></div>
-              <span>{STRENGTH[level]}</span>
+              <span>{t(STRENGTH[level])}</span>
             </div>
           )}
         </label>
         <label className="auth-field">
-          <span>Confirm password</span>
-          <PasswordInput id="signup-confirm" autoComplete="new-password" placeholder="Type it again" required
+          <span>{t("Confirm password")}</span>
+          <PasswordInput id="signup-confirm" autoComplete="new-password" placeholder={t("Type it again")} required
             value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-invalid={confirm.length > 0 && !matches} />
           {confirm && (
             <div className={"pw-match " + (matches ? "ok" : "bad")} role="status">
-              {matches ? <><Check size={14} /> Passwords match</> : <><X size={14} /> Passwords don't match yet</>}
+              {matches ? <><Check size={14} /> {t("Passwords match")}</> : <><X size={14} /> {t("Passwords don't match yet")}</>}
             </div>
           )}
         </label>
         <ErrorBox error={error} />
-        <button className="btn blue" disabled={!canSubmit}>{busy ? "Creating account…" : "Create account"}</button>
+        <button className="btn blue" disabled={!canSubmit}>{busy ? t("Creating account…") : t("Create account")}</button>
       </form>
       <p className="auth-foot">
-        Already have an account? <Link to={`/login?next=${encodeURIComponent(next)}`}>Log in</Link>
+        {t("Already have an account?")} <Link to={`/login?next=${encodeURIComponent(next)}`}>{t("Log in")}</Link>
       </p>
     </AuthShell>
   );

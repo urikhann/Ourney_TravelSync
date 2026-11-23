@@ -8,6 +8,7 @@ import { api, message } from "../api";
 import type { Tastes as TastesT, TastesMeta } from "../types";
 import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
+import { lang, t } from "../i18n";
 
 export default function Tastes() {
   const nav = useNavigate();
@@ -32,7 +33,8 @@ export default function Tastes() {
     },
   });
 
-  const title = editing ? "Your travel tastes" : "Tell us your tastes";
+  const ko = lang() === "ko";
+  const title = editing ? t("Your travel tastes") : t("Tell us your tastes");
   const back = editing ? next : undefined;
   if (meta.isError || mine.isError) return <><TopBar title={title} back={back} /><main className="content"><ErrorBox error={message(meta.error ?? mine.error)} /></main></>;
   if (!meta.data || !answers) return <><TopBar title={title} back={back} /><Loading /></>;
@@ -49,8 +51,8 @@ export default function Tastes() {
     <>
       <TopBar title={title} back={back} />
       <main className="content">
-        <h2 className="title">What kind of traveller are you?</h2>
-        <p className="muted small">Pick up to {max} in each. This helps us suggest better places from your very first trip.</p>
+        <h2 className="title">{t("What kind of traveller are you?")}</h2>
+        <p className="muted small">{t("Pick up to {n} in each. This helps us suggest better places from your very first trip.", { n: max })}</p>
 
         {meta.data.questions.map((q) => {
           const picked = answers[q.code] ?? [];
@@ -59,8 +61,8 @@ export default function Tastes() {
             <section key={q.code} className="card" style={{ padding: 16, marginTop: 14 }}>
               <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
                 <div>
-                  <div className="b" style={{ fontWeight: 700 }}>{q.label_en}</div>
-                  <div className="muted tiny">{q.label_ko}</div>
+                  <div className="b" style={{ fontWeight: 700 }}>{ko ? q.label_ko : q.label_en}</div>
+                  {!ko && <div className="muted tiny">{q.label_ko}</div>}
                 </div>
                 <span className={"chip " + (picked.length === max ? "amber" : "white")}>{picked.length}/{max}</span>
               </div>
@@ -73,15 +75,14 @@ export default function Tastes() {
                       className={"chip " + (on ? (avoid ? "rose" : "dark") : "dashed")}
                       style={{ padding: "8px 12px", fontSize: 13, opacity: full ? 0.45 : 1 }}>
                       {on ? (avoid ? <X size={13} /> : <Check size={13} />) : <Plus size={13} />}
-                      {o.label_en} <span style={{ opacity: 0.7, fontWeight: 500 }}>{o.label_ko}</span>
+                      {ko ? o.label_ko : <>{o.label_en} <span style={{ opacity: 0.7, fontWeight: 500 }}>{o.label_ko}</span></>}
                     </button>
                   );
                 })}
               </div>
               {avoid && (
                 <p className="muted tiny" style={{ marginTop: 10 }}>
-                  Hiking, raw fish and bars are removed from your trips completely (you can change this per trip).
-                  The others just count against a place.
+                  {t("Hiking, raw fish and bars are removed from your trips completely (you can change this per trip). The others just count against a place.")}
                 </p>
               )}
             </section>
@@ -91,11 +92,11 @@ export default function Tastes() {
         <div style={{ height: 14 }} />
         <ErrorBox error={save.error ? message(save.error) : null} />
         <button className="btn" disabled={save.isPending || total === 0} onClick={() => save.mutate({ answers })}>
-          {save.isPending ? "Saving…" : editing ? "Save my tastes" : "Continue"}
+          {save.isPending ? t("Saving…") : editing ? t("Save my tastes") : t("Continue")}
         </button>
         {!editing && (
           <button className="btn ghost" style={{ marginTop: 8 }} disabled={save.isPending} onClick={() => save.mutate({ skipped: true })}>
-            Skip for now
+            {t("Skip for now")}
           </button>
         )}
         <div style={{ height: 24 }} />

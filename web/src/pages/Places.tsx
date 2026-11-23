@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { ApiError, api, message } from "../api";
 import type { GroupPick, Method, Recommendations, Trip } from "../types";
-import { ErrorBox, Loading, pct, won } from "../ui";
+import { ErrorBox, Loading, pct, reasonText, won } from "../ui";
+import { t as tr } from "../i18n";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceThumb, { gradient, placeLook } from "../components/PlaceThumb";
@@ -53,19 +54,19 @@ export default function Places() {
   const f = FILTERS.find((x) => x.key === filter)!;
   const list: GroupPick[] = (r?.group ?? []).filter((x) => filter === "all" || x.place?.features.some((c) => f.has.includes(c)));
   const open = r?.group.find((x) => x.poi_id === openPoi);
-  const right = <button className="iconbtn" aria-label="Why places were removed" onClick={() => setShowRemoved(true)} disabled={!r}><SlidersHorizontal size={17} /></button>;
+  const right = <button className="iconbtn" aria-label={tr("Why places were removed")} onClick={() => setShowRemoved(true)} disabled={!r}><SlidersHorizontal size={17} /></button>;
   const nameOf = (s: string) => s.replace(/[0-9a-f-]{36}|u_[\w-]+/g, (m) => r?.members[m] ?? m);
 
   return (
     <>
-      <TopBar title="Picked for your group" back={`/trips/${id}`} right={right} />
+      <TopBar title={tr("Picked for your group")} back={`/trips/${id}`} right={right} />
       <main className="content">
         {recs.isLoading ? <Loading /> : none || !r ? (
           <div className="empty">
             <div className="ic"><Sparkles size={30} /></div>
-            <div className="title" style={{ fontSize: 18 }}>No recommendations yet</div>
-            <p className="muted small">Once everyone has answered, run the recommender.</p>
-            <button className="btn blue" onClick={() => rerun.mutate("gfar")} disabled={rerun.isPending}>Get recommendations</button>
+            <div className="title" style={{ fontSize: 18 }}>{tr("No recommendations yet")}</div>
+            <p className="muted small">{tr("Once everyone has answered, run the recommender.")}</p>
+            <button className="btn blue" onClick={() => rerun.mutate("gfar")} disabled={rerun.isPending}>{tr("Get recommendations")}</button>
             <div style={{ marginTop: 10 }}><ErrorBox error={rerun.error ? message(rerun.error) : null} /></div>
           </div>
         ) : (
@@ -74,16 +75,16 @@ export default function Places() {
               <ShieldCheck size={20} color="var(--green)" />
               <div className="grow">
                 {r.method === "gfar"
-                  ? <><b>Fair for everyone.</b> Each pick goes to whoever is least served so far.</>
+                  ? <><b>{tr("Fair for everyone.")}</b> {tr("Each pick goes to whoever is least served so far.")}</>
                   : r.method === "awm"
-                    ? <><b>No one unhappy.</b> Places anyone would score too low are removed, then the best average wins.</>
-                    : <><b>Plain average.</b> For comparison: the most popular places, no turn-taking.</>}
+                    ? <><b>{tr("No one unhappy.")}</b> {tr("Places anyone would score too low are removed, then the best average wins.")}</>
+                    : <><b>{tr("Plain average.")}</b> {tr("For comparison: the most popular places, no turn-taking.")}</>}
               </div>
             </div>
             <div className="seg" style={{ gridTemplateColumns: `repeat(${METHODS.length}, 1fr)`, marginBottom: 10 }}>
               {METHODS.map((m) => (
                 <button key={m.key} type="button" className={r.method === m.key ? "on" : ""} disabled={rerun.isPending}
-                  onClick={() => r.method !== m.key && rerun.mutate(m.key)}>{m.label}</button>
+                  onClick={() => r.method !== m.key && rerun.mutate(m.key)}>{tr(m.label)}</button>
               ))}
             </div>
             <ErrorBox error={rerun.error ? message(rerun.error) : null} />
@@ -91,12 +92,12 @@ export default function Places() {
             <div className="chips" style={{ marginBottom: 12 }}>
               {FILTERS.map((x) => (
                 <button key={x.key} className={"chip " + (filter === x.key ? "dark" : "white")} onClick={() => setFilter(x.key)}>
-                  {x.label}{x.key === "all" ? ` ${r.group.length}` : ""}
+                  {tr(x.label)}{x.key === "all" ? ` ${r.group.length}` : ""}
                 </button>
               ))}
             </div>
 
-            {list.length === 0 && <p className="muted small center">No places in this filter.</p>}
+            {list.length === 0 && <p className="muted small center">{tr("No places in this filter.")}</p>}
             <div className="stack" style={{ gap: 10 }}>
               {list.map((x, i) => {
                 const p = x.place;
@@ -106,15 +107,15 @@ export default function Places() {
                     <button key={x.poi_id} className="card place-hero" onClick={() => setOpenPoi(x.poi_id)}>
                       <div className="cover" style={{ background: p?.image_url ? `center / cover url("${p.image_url}"), ${gradient(p?.features)}` : gradient(p?.features) }}>
                         <span className="chip"><Icon size={13} /> {p?.area}</span>
-                        <span className="lbl">#{x.group_rank} GROUP PICK</span>
+                        <span className="lbl">{tr("#{n} GROUP PICK", { n: x.group_rank })}</span>
                         <ScoreRing score={x.fit} />
                       </div>
                       <div className="body">
                         <div className="pname">{p?.name ?? x.poi_id}</div>
-                        <div className="muted small" style={{ marginTop: 2 }}>{p ? `${won(p.avg_cost_krw)} · ~${p.duration_min} min${p.indoor ? " · indoor" : ""}` : ""}</div>
+                        <div className="muted small" style={{ marginTop: 2 }}>{p ? `${won(p.avg_cost_krw)} · ~${tr("{n} min", { n: p.duration_min })}${p.indoor ? " · " + tr("indoor") : ""}` : ""}</div>
                         <div style={{ margin: "12px 0" }}><MemberScores scores={x.member_fit} names={r.members} /></div>
-                        <div className="eyebrow muted" style={{ marginBottom: 7 }}>Why this place</div>
-                        <div className="chips">{x.reasons.map((re) => <span key={re.code + re.text} className="chip green">{re.text}</span>)}</div>
+                        <div className="eyebrow muted" style={{ marginBottom: 7 }}>{tr("Why this place")}</div>
+                        <div className="chips">{x.reasons.map((re) => <span key={re.code + re.text} className="chip green">{reasonText(re.text)}</span>)}</div>
                       </div>
                     </button>
                   );
@@ -124,7 +125,7 @@ export default function Places() {
                     <PlaceThumb features={p?.features} image={p?.image_url} size={50} />
                     <div className="grow">
                       <div className="b" style={{ fontSize: 14 }}>{p?.name ?? x.poi_id}</div>
-                      <div className="muted tiny" style={{ marginTop: 2 }}>{x.reasons.slice(0, 2).map((re) => re.text).join(" · ")}</div>
+                      <div className="muted tiny" style={{ marginTop: 2 }}>{x.reasons.slice(0, 2).map((re) => reasonText(re.text)).join(" · ")}</div>
                     </div>
                     <div className="score" style={{ fontSize: 13 }}>{pct(x.fit)}</div>
                   </button>
@@ -133,10 +134,10 @@ export default function Places() {
             </div>
 
             <button className="row muted small" style={{ gap: 6, margin: "14px 2px 0" }} onClick={() => setShowRemoved(true)}>
-              <Info size={14} /> {r.removed.length} places removed — see why
+              <Info size={14} /> {tr("{n} places removed — see why", { n: r.removed.length })}
             </button>
             <p className="muted tiny center" style={{ marginTop: 12 }}>
-              Model {r.model_version} · data {r.dataset_version} · run #{r.run_id}
+              {tr("Model {m} · data {d} · run #{id}", { m: r.model_version, d: r.dataset_version, id: r.run_id })}
             </p>
           </>
         )}
@@ -146,18 +147,18 @@ export default function Places() {
       <PlaceSheet poiId={openPoi} onClose={() => setOpenPoi(null)} dates={tripDates(trip.data)} version={r?.dataset_version}
         rec={open} names={r?.members} />
 
-      <Sheet open={showRemoved} onClose={() => setShowRemoved(false)} label="Removed places">
-        <div style={{ font: "800 18px var(--display)" }}>Why places were removed</div>
-        <p className="muted small">Before scoring, places that break someone's "never take me to" rule are removed (step E1). With AWM, places someone would score too low are removed too.</p>
+      <Sheet open={showRemoved} onClose={() => setShowRemoved(false)} label={tr("Removed places")}>
+        <div className="sheet-title">{tr("Why places were removed")}</div>
+        <p className="muted small">{tr("Before scoring, places that break someone's \"never take me to\" rule are removed (step E1). With AWM, places someone would score too low are removed too.")}</p>
         <div className="card list">
-          {r?.removed.length === 0 && <div className="list-row muted small">Nothing was removed.</div>}
+          {r?.removed.length === 0 && <div className="list-row muted small">{tr("Nothing was removed.")}</div>}
           {r?.removed.map((x) => (
             <div className="list-row" key={x.poi_id}>
               <PlaceThumb features={x.place?.features} size={34} />
               <div className="grow">
                 <div className="b" style={{ fontWeight: 600 }}>{x.place?.name ?? x.poi_id}</div>
                 <div className="tiny" style={{ color: "var(--rose)" }}>
-                  {x.rule === "misery" ? "Someone would score it too low (AWM)" : x.rule === "no_features" ? "No taste features in the data" : "Personal rule"} · {nameOf(x.detail)}
+                  {tr(x.rule === "misery" ? "Someone would score it too low (AWM)" : x.rule === "no_features" ? "No taste features in the data" : "Personal rule")} · {nameOf(x.detail)}
                 </div>
               </div>
             </div>

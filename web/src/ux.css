@@ -1,0 +1,112 @@
+/* Styles for: language switch, trip settings + account sheets (issue #18), the new planning form,
+   the location picker and the chat mention pill. Uses the tokens from theme.css. Import after theme.css. */
+
+/* ---------- language switch ---------- */
+.lang-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--fill); flex: none; }
+.lang-switch button { height: 30px; padding: 0 11px; border-radius: 999px; border: 0; background: transparent;
+  color: var(--muted); font-weight: 650; font-size: 12px; cursor: pointer; }
+.lang-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(15, 23, 41, .1); }
+.lang-switch.dark { background: rgba(255, 255, 255, .14); }
+.lang-switch.dark button { color: rgba(255, 255, 255, .7); }
+.lang-switch.dark button[aria-pressed="true"] { background: #fff; color: var(--ink); }
+.ts-auth-inner { position: relative; }
+.ts-auth-lang { position: absolute; top: 0; right: 0; }
+
+/* compact header button: shows the language you switch TO */
+.lang-toggle { display: inline-flex; align-items: center; gap: 5px; height: 40px; padding: 0 12px; border-radius: 999px; flex: none;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 650; font-size: 13px; cursor: pointer; }
+.lang-toggle:hover { background: var(--fill); }
+
+/* ---------- sheets: trip settings, account ---------- */
+.sheet-title { font-weight: 750; font-size: 19px; letter-spacing: -0.02em; margin: 4px 2px 2px; }
+.ico-sq.rose { background: var(--rose-50); color: var(--rose); }
+.invite-box { border: 1px solid var(--line); }
+.invite-owner { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.confirm-box { background: var(--rose-50); border-radius: var(--r-md); padding: 14px; }
+.confirm-box p { margin: 6px 0 12px; }
+.btn.danger { background: var(--rose); }
+.btn.danger:hover { background: var(--rose-d); }
+.btn.danger-text { color: var(--rose); }
+.btn .grow, .btn.grow { flex: 1; }
+.row > .btn.sm { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.stack > .btn.sm { display: flex; align-items: center; justify-content: center; gap: 7px; }
+
+/* ---------- planning form ---------- */
+.plan-form { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.pf-head { padding: 2px 4px; }
+.pf-title { font-weight: 750; font-size: 20px; letter-spacing: -0.02em; }
+.pf-step, .pf-more, .pf-days { background: var(--surface); border-radius: var(--r-lg); padding: 16px; }
+.pf-step-head { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+.pf-num { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; flex: none; }
+.pf-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.pf-time + .pf-time { margin-top: 14px; }
+.pf-time .chip { height: 36px; padding: 0 14px; font-size: 14px; cursor: pointer; }
+.chip.time-input { border: 1.5px solid var(--ink); background: #fff; color: var(--ink); font: inherit; font-weight: 650; height: 36px; }
+.pf-place { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: var(--r-md);
+  border: 1.5px dashed #CBD2DC; background: var(--bg); cursor: pointer; }
+.pf-place.set { border: 1px solid var(--line); background: var(--surface); }
+.pf-place .grow { display: flex; flex-direction: column; min-width: 0; }
+.pf-place .b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-place:not(.set) .b { color: var(--soft); font-weight: 500; }
+.pf-place .pf-label { margin-bottom: 2px; }
+.pf-place-ico { width: 36px; height: 36px; border-radius: 12px; background: var(--blue-50); color: var(--blue); display: grid; place-items: center; flex: none; }
+.pf-switch { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pf-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pf-switch .track { width: 42px; height: 26px; border-radius: 999px; background: #D0D5DD; position: relative; flex: none; transition: background .2s; }
+.pf-switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .2s; }
+.pf-switch input:checked + .track { background: var(--ink); }
+.pf-switch input:checked + .track::after { transform: translateX(16px); }
+.pf-switch input:focus-visible + .track { outline: 3px solid rgba(45, 91, 255, .35); outline-offset: 2px; }
+.pf-more summary { cursor: pointer; font-weight: 700; font-size: 15px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; list-style: none; }
+.pf-more summary::-webkit-details-marker { display: none; }
+.pf-more summary::before { content: "＋"; font-weight: 700; color: var(--muted); }
+.pf-more[open] summary::before { content: "－"; }
+.pf-chosen { margin-top: 10px; padding: 12px; border-radius: var(--r-md); background: var(--bg); }
+.pf-min { width: 72px; height: 40px; border-radius: 12px; border: 1px solid var(--line); padding: 0 10px; font-size: 15px; background: #fff; }
+.chip-x { border: 0; background: transparent; color: inherit; padding: 0 0 0 2px; display: inline-grid; place-items: center; cursor: pointer; opacity: .7; }
+.pf-rules { margin: 10px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.55; }
+.pf-todo { color: var(--amber-d); background: var(--amber-50); border-radius: var(--r-md); padding: 10px 14px; }
+.pf-build { display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* ---------- location picker ---------- */
+.loc-search { display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; margin-top: 12px; border-radius: var(--r-md);
+  background: var(--fill); color: var(--muted); }
+.loc-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px; color: var(--ink); }
+.loc-search.small-search { height: 44px; margin-top: 0; }
+.loc-clear { border: 0; background: var(--line); color: var(--muted); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.loc-list { margin-top: 6px; min-height: 280px; }
+.loc-head { font-size: 12px; font-weight: 600; color: var(--soft); margin: 14px 2px 4px; }
+.loc-row { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 2px; border: 0; background: transparent;
+  border-bottom: 1px solid var(--line); cursor: pointer; }
+.loc-row .grow { display: flex; flex-direction: column; min-width: 0; }
+.loc-row .grow > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loc-row:active { background: var(--bg); }
+.loc-ico { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex: none; background: var(--fill); color: var(--muted); }
+.loc-ico.popular { background: var(--amber-50); color: var(--amber); }
+.loc-ico.kakao { background: var(--blue-50); color: var(--blue); }
+.loc-ico.place { background: var(--green-50); color: var(--green); }
+.loc-ico.mine { background: var(--ink); color: #fff; }
+.loc-empty { padding: 14px 2px; }
+
+/* ---------- chat: ask TravelSync ---------- */
+.chat-at.on { background: var(--purple, #7c3aed); color: #fff; }
+.mention-pill { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 9px; border-radius: 999px; border: 0; flex: none;
+  background: var(--purple-50, #f3ecff); color: var(--purple, #7c3aed); font-weight: 700; font-size: 13px; cursor: pointer; }
+.chat-suggest { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--line);
+  border-radius: var(--r-md); background: var(--surface); font-size: 14px; cursor: pointer; text-align: left; }
+.chat-suggest .agent-av { width: 24px; height: 24px; }
+.chat-hint { color: var(--soft); }
+.chat-input.asking + .chat-hint { color: var(--purple, #7c3aed); }
+
+/* ---------- profile + saved preferences (issue #21) ---------- */
+.home-profile { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; border: 0; background: transparent;
+  padding: 0; text-align: left; cursor: pointer; color: inherit; }
+.home-profile .grow { display: flex; flex-direction: column; min-width: 0; }
+.saved-box { border: 1px solid var(--line); }
+.saved-edit { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-weight: 600; color: var(--blue); }
+.saved-note { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--blue-50); color: var(--ink); line-height: 1.45; }
+.saved-note svg { color: var(--blue); flex: none; margin-top: 2px; }
+.seg button { line-height: 1.25; }

@@ -5,6 +5,7 @@ import { api, message } from "../api";
 import type { Trip, TripSummary } from "../types";
 import { ErrorBox, Loading, fmtDate } from "../ui";
 import TopBar from "../components/TopBar";
+import { t as tr } from "../i18n";
 
 export default function Join() {
   const { code = "" } = useParams();
@@ -18,19 +19,19 @@ export default function Join() {
 
   return (
     <>
-      <TopBar title="Trip invite" back="/trips" />
+      <TopBar title={tr("Trip invite")} back="/trips" />
       <main className="content">
         {invite.isLoading ? <Loading /> : invite.error ? <ErrorBox error={message(invite.error)} /> : invite.data && (
           <div className="stack">
             <div className="hero">
-              <div className="eyebrow" style={{ opacity: 0.7 }}>You're invited</div>
+              <div className="eyebrow" style={{ opacity: 0.7 }}>{tr("You're invited")}</div>
               <div className="name">{invite.data.name}</div>
-              <div className="meta"><Calendar size={14} />{fmtDate(invite.data.start_date)} – {fmtDate(invite.data.end_date)} · {invite.data.member_count} going</div>
+              <div className="meta"><Calendar size={14} />{fmtDate(invite.data.start_date)} – {fmtDate(invite.data.end_date)} · {tr("{n} going", { n: invite.data.member_count })}</div>
             </div>
             <ErrorBox error={join.error ? message(join.error) : null} />
             {invite.data.already_member
-              ? <button className="btn" onClick={() => nav(`/trips/${invite.data.id}`)}>You're already in — open the trip</button>
-              : <button className="btn blue" disabled={join.isPending} onClick={() => join.mutate()}>Join this trip</button>}
+              ? <button className="btn" onClick={() => nav(`/trips/${invite.data.id}`)}>{tr("You're already in — open the trip")}</button>
+              : <button className="btn blue" disabled={join.isPending} onClick={() => join.mutate()}>{tr("Join this trip")}</button>}
           </div>
         )}
       </main>

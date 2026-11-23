@@ -1,7 +1,9 @@
 // Trip chat: the group talks here, and TravelSync (the AI agent) answers when someone asks it.
-// Only messages that start with "@TravelSync" or come from a quick-action chip go to the AI.
+// Only messages that start with "@TravelSync" (short: "@ai" or "@ts") or come from a quick-action chip go to the AI.
+// Tapping the @ button (or typing "@ai ") turns on "ask TravelSync" mode: a pill shows in the box and the
+// message is sent as "@TravelSync …". Backspace on an empty box turns it off again.
 // The screen polls every few seconds; the backend keeps the history (GET/POST /trips/{id}/chat).
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle, X } from "lucide-react";
@@ -11,16 +13,17 @@ import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import { Avatar } from "../components/Avatar";
+import { locale, t as tr } from "../i18n";
 import "./chat.css";
 
 const AGENT = "TravelSync";
-const MENTION = /^\s*@travelsync(\s|$)/i;
+const MENTION = /^\s*@(travelsync|ai|ts)(\s|$)/i;
 const QUICK = [
   { Icon: CloudRain, label: "It's raining", text: "It's raining — can we swap outdoor stops for indoor places?" },
   { Icon: Footprints, label: "Less walking", text: "We're tired — please make today's plan need less walking." },
   { Icon: Lightbulb, label: "Why this plan?", text: "Why were these places picked for our group?" },
 ];
-const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const time = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
 
 export default function Chat() {
   const { id = "" } = useParams();
@@ -31,6 +34,8 @@ export default function Chat() {
     refetchInterval: 3000, // simple polling; WebSockets can replace this later without changing the screen
   });
   const [text, setText] = useState("");
+  const [askAI, setAskAI] = useState(false);  // "ask TravelSync" mode (pill in the box)
+  const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<string | null>(null); // the question TravelSync is answering right now
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -51,15 +56,24 @@ export default function Chat() {
     e?.preventDefault();
     const t = text.trim();
     if (!t || send.isPending) return;
-    send.mutate({ text: t, trigger: MENTION.test(t) ? "MENTION" : "MESSAGE" }, { onSuccess: () => setText("") });
+    const toAI = askAI || MENTION.test(t);
+    const body = askAI ? `@${AGENT} ${t}` : t;
+    send.mutate({ text: body, trigger: toAI ? "MENTION" : "MESSAGE" }, { onSuccess: () => { setText(""); setAskAI(false); } });
   };
-  const ask = (q: string) => send.mutate({ text: `@${AGENT} ${q}`, trigger: "QUICK_ACTION" });
-  const mention = () => setText((t) => (MENTION.test(t) ? t : `@${AGENT} ${t}`));
-  const asking = MENTION.test(text);
+  const ask = (q: string) => send.mutate({ text: `@${AGENT} ${tr(q)}`, trigger: "QUICK_ACTION" });
+  const mention = () => { setAskAI((on) => !on); inputRef.current?.focus(); };
+  const type = (v: string) => {
+    const m = v.match(MENTION);
+    if (m && !askAI) { setAskAI(true); setText(v.slice(m[0].length)); return; }  // "@ai " becomes the pill
+    setText(v);
+  };
+  const keys = (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Backspace" && askAI && !text) setAskAI(false); };
+  const asking = askAI || MENTION.test(text);
+  const suggest = !askAI && /^@\w{0,9}$/i.test(text) && !MENTION.test(text);  // typed "@": offer TravelSync
 
   return (
     <>
-      <TopBar title={trip.data ? trip.data.name : "Trip chat"} back={`/trips/${id}`} />
+      <TopBar title={trip.data ? trip.data.name : tr("Trip chat")} back={`/trips/${id}`} />
       <main className="content chat">
         {chat.isLoading ? <Loading /> : chat.isError ? <ErrorBox error={message(chat.error)} /> : (
           <div className="chat-list">
@@ -84,25 +98,35 @@ export default function Chat() {
       </main>
 
       <div className="chat-dock">
-        <div className="chat-quick" role="group" aria-label={`Ask ${AGENT}`}>
+        <div className="chat-quick" role="group" aria-label={tr("Ask {name}", { name: AGENT })}>
           {QUICK.map(({ Icon, label, text: q }) => (
             <button key={label} type="button" className="chat-chip" disabled={send.isPending} onClick={() => ask(q)}>
-              <Icon size={14} /> {label}
+              <Icon size={14} /> {tr(label)}
             </button>
           ))}
         </div>
+        {suggest && (
+          <button type="button" className="chat-suggest" onClick={() => { setText(""); setAskAI(true); inputRef.current?.focus(); }}>
+            <span className="agent-av"><Sparkles size={13} /></span><b>@ai</b> <span className="muted">{tr("Ask {name}", { name: AGENT })}</span>
+          </button>
+        )}
         <ErrorBox error={send.error ? message(send.error) : null} />
         <form className={"chat-input" + (asking ? " asking" : "")} onSubmit={submit}>
-          <button type="button" className="chat-at" aria-label={`Ask ${AGENT}`} title={`Ask ${AGENT}`} onClick={mention}>
+          <button type="button" className={"chat-at" + (askAI ? " on" : "")} aria-pressed={askAI}
+            aria-label={tr("Ask {name}", { name: AGENT })} title={tr("Ask {name}", { name: AGENT })} onClick={mention}>
             <AtSign size={17} />
           </button>
-          <input value={text} maxLength={2000} onChange={(e) => setText(e.target.value)}
-            placeholder={`Message the group, or @${AGENT} to ask`} aria-label="Message" />
-          <button className="chat-send" type="submit" aria-label="Send" disabled={!text.trim() || send.isPending}>
+          {askAI && <button type="button" className="mention-pill" onClick={() => setAskAI(false)} aria-label={tr("Stop asking {name}", { name: AGENT })}>
+            <Sparkles size={12} /> {AGENT} <X size={12} /></button>}
+          <input ref={inputRef} value={text} maxLength={2000} onChange={(e) => type(e.target.value)} onKeyDown={keys}
+            placeholder={askAI ? tr("Ask anything about the trip…") : tr("Message the group")} aria-label={tr("Message")} />
+          <button className="chat-send" type="submit" aria-label={tr("Send")} disabled={!text.trim() || send.isPending}>
             <SendHorizontal size={17} />
           </button>
         </form>
-        {asking && <div className="chat-hint"><Sparkles size={12} /> {AGENT} will read this message and the last few before it.</div>}
+        <div className="chat-hint">{asking
+          ? <><Sparkles size={12} /> {tr("{name} will read this message and the last few before it.", { name: AGENT })}</>
+          : <><AtSign size={12} /> {tr("Tap @ or start with @ai to ask {name}. Other messages stay between you.", { name: AGENT })}</>}</div>
       </div>
       <TabBar tripId={id} />
     </>
@@ -113,9 +137,8 @@ function AgentIntro() {
   return (
     <div className="chat-intro">
       <span className="agent-av lg"><Sparkles size={20} /></span>
-      <div className="b">Plan together here</div>
-      <p className="muted small">Chat with your group. Start a message with <b>@{AGENT}</b> or tap a chip below to ask the AI.
-        Normal messages stay between you.</p>
+      <div className="b">{tr("Plan together here")}</div>
+      <p className="muted small">{tr("Chat with your group. Tap @ (or type @ai) or a chip below to ask the AI. Normal messages stay between you.")}</p>
     </div>
   );
 }
@@ -144,13 +167,13 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
       <div className="msg-col">
         <div className="msg-name">{AGENT} <span className="ai-tag">AI</span></div>
         <div className={"bubble" + (failed ? " failed" : "")}>
-          {m.text}
-          {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">Reply with @{AGENT} to answer.</div>}
-          {failed && a?.error && <div className="agent-note">Error: {a.error}</div>}
+          {failed ? tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT }) : agentText(m)}
+          {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">{tr("Reply with @ai to answer.")}</div>}
+          {failed && a?.error && <div className="agent-note">{tr("Error: {code}", { code: a.error })}</div>}
         </div>
         {!!a?.tool_calls.length && (
           <div className="tools">
-            {a.tool_calls.map((t, i) => <span key={i} className="tool">{["gemini_error", "provider_error"].includes(t.name) ? <AlertTriangle size={12} /> : <Check size={12} />} {t.summary || t.name}</span>)}
+            {a.tool_calls.map((t, i) => <span key={i} className="tool">{["gemini_error", "provider_error"].includes(t.name) ? <AlertTriangle size={12} /> : <Check size={12} />} {toolText(t)}</span>)}
           </div>
         )}
         {a?.proposal && <ProposalCard m={m} tripId={tripId} />}
@@ -158,6 +181,28 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
       </div>
     </div>
   );
+}
+
+/** Group-vote result notes are written by the server in English; show them in the reader's language. */
+function agentText(m: ChatMessage): string {
+  const r = m.agent?.result;
+  if (m.agent?.event !== "proposal_result" || !r || r.approve == null) return m.text;
+  if (r.status === "APPLIED") {
+    const when = r.start ? tr(" at {time}", { time: r.start }) : "";
+    return tr("✅ {a} of {n} approved, so I updated the plan: {names} is now on {date}{when}.", {
+      a: r.approve, n: r.members ?? 0, names: (r.added ?? []).join(", "), date: r.date ?? "", when }) + " "
+      + (r.mode === "keep" ? tr("The other stops stay, though their times may shift a little to fit the new travel times.")
+        : tr("To fit it in, I rebuilt the day, so some other stops changed too.")) + " " + tr("Check the Plan tab.");
+  }
+  if (r.status === "REJECTED") return tr("The group rejected this suggestion, so the plan stays the same.");
+  if (r.status === "STALE") return tr("This suggestion is out of date because the plan changed. Ask me again for a new one.");
+  return tr("The group approved, but I couldn't fit this change into a valid plan ({reason}). The plan is unchanged.", { reason: r.reason ?? "" });
+}
+
+function toolText(tc: { name: string; summary: string }): string {
+  const vote = tc.summary.match(/^Group vote: (\d+) approve, (\d+) reject$/);
+  if (vote) return tr("Group vote: {a} approve, {r} reject", { a: vote[1], r: vote[2] });
+  return tr(tc.summary || tc.name);
 }
 
 const CLOSED: Record<Exclude<ProposalStatus, "PENDING">, string> = {
@@ -185,30 +230,30 @@ function ProposalCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const removed = a.removed ?? [];
   return (
     <div className={"proposal " + status.toLowerCase()}>
-      <div className="eyebrow" style={{ color: "var(--purple)" }}>Suggested change · {p.date}</div>
+      <div className="eyebrow" style={{ color: "var(--purple)" }}>{tr("Suggested change · {date}", { date: p.date })}</div>
       {removed.map((r) => <div key={r.poi_id} className="removed"><span className="num">{r.start}</span> <s>{r.name}</s></div>)}
       {!removed.length && p.remove_item_ids.length > 0 &&
-        <div className="small muted">Remove {p.remove_item_ids.length} stop{p.remove_item_ids.length > 1 ? "s" : ""}</div>}
+        <div className="small muted">{p.remove_item_ids.length > 1 ? tr("Remove {n} stops", { n: p.remove_item_ids.length }) : tr("Remove 1 stop")}</div>}
       {p.add.map((x) => <AddedStop key={x.poi_id + x.start} poiId={x.poi_id} start={x.start} />)}
       {status === "PENDING" ? (
         <>
           <div className="proposal-actions">
             <button className={"btn sm" + (v?.mine === true ? " green" : "")} disabled={vote.isPending}
-              aria-pressed={v?.mine === true} onClick={() => vote.mutate(true)}><Check size={15} /> Approve</button>
+              aria-pressed={v?.mine === true} onClick={() => vote.mutate(true)}><Check size={15} /> {tr("Approve")}</button>
             <button className={"btn ghost sm" + (v?.mine === false ? " picked" : "")} disabled={vote.isPending}
-              aria-pressed={v?.mine === false} onClick={() => vote.mutate(false)}><X size={15} /> Reject</button>
+              aria-pressed={v?.mine === false} onClick={() => vote.mutate(false)}><X size={15} /> {tr("Reject")}</button>
           </div>
           <div className="tiny muted">
-            {vote.isPending ? "Saving your vote… if it's the deciding one, the plan is rebuilt (up to a minute)."
-              : v ? `${v.approve} approve · ${v.reject} reject · ${v.needed} of ${v.members} approvals needed`
-              + (v.mine === null ? "" : ` · you ${v.mine ? "approved" : "rejected"}`) : ""}
+            {vote.isPending ? tr("Saving your vote… if it's the deciding one, the plan is rebuilt (up to a minute).")
+              : v ? tr("{a} approve · {r} reject · {need} of {n} approvals needed", { a: v.approve, r: v.reject, need: v.needed, n: v.members })
+              + (v.mine === null ? "" : " · " + (v.mine ? tr("you approved") : tr("you rejected"))) : ""}
           </div>
         </>
       ) : (
         <div className={"proposal-status " + status.toLowerCase()}>
-          {CLOSED[status]}
-          {status === "APPLIED" && <> <Link to={`/trips/${tripId}/plan`}>Open the plan</Link></>}
-          {v && status !== "STALE" && <span className="muted"> ({v.approve} approve · {v.reject} reject)</span>}
+          {tr(CLOSED[status])}
+          {status === "APPLIED" && <> <Link to={`/trips/${tripId}/plan`}>{tr("Open the plan")}</Link></>}
+          {v && status !== "STALE" && <span className="muted"> ({tr("{a} approve · {r} reject", { a: v.approve, r: v.reject })})</span>}
         </div>
       )}
       {vote.error && <div className="tiny proposal-error">{message(vote.error)}</div>}
@@ -228,7 +273,7 @@ function Thinking({ question }: { question: string }) {
       <div className="msg-col">
         <div className="msg-name">{AGENT} <span className="ai-tag">AI</span></div>
         <div className="bubble thinking" aria-live="polite" title={question}>
-          <span className="dots"><i /><i /><i /></span> Thinking…
+          <span className="dots"><i /><i /><i /></span> {tr("Thinking…")}
         </div>
       </div>
     </div>

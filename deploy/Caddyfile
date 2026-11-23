@@ -1,0 +1,17 @@
+# SITE_ADDRESS: ":80" for plain http on the server IP, or your domain (e.g. travelsync.example.com)
+# for automatic HTTPS with a free Let's Encrypt certificate.
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# /api/... goes to the FastAPI backend without the /api prefix
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	# everything else is the web app (single-page app: unknown paths load index.html)
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

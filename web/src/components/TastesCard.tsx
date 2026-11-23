@@ -1,6 +1,7 @@
 // "Your travel tastes": a summary of the onboarding survey answers with an Edit button.
 // Shown on the home screen and in each trip's "Me" tab, so tastes can be changed any time after sign-up.
 import { useLocation, useNavigate } from "react-router-dom";
+import { lang, t } from "../i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Heart, Pencil } from "lucide-react";
 import { api } from "../api";
@@ -15,7 +16,7 @@ export default function TastesCard({ compact = false }: { compact?: boolean }) {
 
   const edit = () => nav(`/welcome?edit=1&next=${encodeURIComponent(here)}`);
   const label: Record<string, string> = {};
-  meta.data.questions.forEach((q) => q.options.forEach((o) => { label[`${q.code}.${o.code}`] = o.label_en; }));
+  meta.data.questions.forEach((q) => q.options.forEach((o) => { label[`${q.code}.${o.code}`] = lang() === "ko" ? o.label_ko : o.label_en; }));
   const a = mine.data.answers;
   const likes = ["food", "places", "activities"].flatMap((q) => (a[q] ?? []).map((c) => label[`${q}.${c}`] ?? c));
   const avoid = (a.avoid ?? []).map((c) => label[`avoid.${c}`] ?? c);
@@ -28,19 +29,19 @@ export default function TastesCard({ compact = false }: { compact?: boolean }) {
         <div className="row" style={{ gap: 10, alignItems: "center" }}>
           <span className="chip blue" style={{ padding: 7, borderRadius: 12 }}><Heart size={15} /></span>
           <div>
-            <div className="b" style={{ fontWeight: 700 }}>Your travel tastes</div>
-            <div className="muted tiny">{empty ? "Not set yet — add them for better picks" : "Used for all your trips"}</div>
+            <div className="b" style={{ fontWeight: 700 }}>{t("Your travel tastes")}</div>
+            <div className="muted tiny">{empty ? t("Not set yet — add them for better picks") : t("Used for all your trips")}</div>
           </div>
         </div>
         <button className="btn ghost sm" style={{ width: "auto", padding: "0 14px" }} onClick={edit}>
-          <Pencil size={14} /> {empty ? "Add" : "Edit"}
+          <Pencil size={14} /> {empty ? t("Add") : t("Edit")}
         </button>
       </div>
       {!empty && (
         <div className="chips" style={{ marginTop: 10 }}>
           {shown.map((l) => <span key={l} className="chip white">{l}</span>)}
           {likes.length > shown.length && <span className="chip white">+{likes.length - shown.length}</span>}
-          {avoid.map((l) => <span key={l} className="chip rose">No {l.toLowerCase()}</span>)}
+          {avoid.map((l) => <span key={l} className="chip rose">{t("No {what}", { what: lang() === "ko" ? l : l.toLowerCase() })}</span>)}
         </div>
       )}
     </section>

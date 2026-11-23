@@ -10,8 +10,10 @@ import "@fontsource/plus-jakarta-sans/800.css";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./styles.css";
 import "./screens.css";
-import "./theme.css";  
+import "./theme.css";
+import "./ux.css";
 import { RequireAuth } from "./auth";
+import { LangProvider } from "./i18n";
 import { getToken } from "./api";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -24,6 +26,7 @@ import Places from "./pages/Places";
 import Plan from "./pages/Plan";
 import Tastes from "./pages/Tastes";
 import Chat from "./pages/Chat";
+import Profile from "./pages/Profile";
 
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
@@ -33,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={qc}>
       <BrowserRouter>
+        <LangProvider>
         <div className="app">
           <Routes>
             <Route path="/" element={<Navigate to={getToken() ? "/trips" : "/login"} replace />} />
@@ -41,6 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/forgot" element={<Forgot />} />
             <Route path="/welcome" element={guard(<Tastes />)} />
             <Route path="/trips" element={guard(<Trips />)} />
+            <Route path="/me" element={guard(<Profile />)} />
             <Route path="/join/:code" element={guard(<Join />)} />
             <Route path="/trips/:id" element={guard(<TripRoom />)} />
             <Route path="/trips/:id/preferences" element={guard(<Preferences />)} />
@@ -50,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
+        </LangProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

@@ -1,0 +1,51 @@
+# Production overrides for one server (AWS Lightsail):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# - the web app is built once and served by Caddy on ports 80/443 (HTTPS when SITE_ADDRESS is a domain)
+# - every other service is reachable only from inside the server
+services:
+  web:
+    build: {context: ./web, dockerfile: Dockerfile.prod}
+    image: travelsync-web-prod
+    working_dir: /srv
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports: !override ["80:80", "443:443"]
+    volumes: !override
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+  api:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      WEB_ORIGIN: ${PUBLIC_URL:-http://localhost}
+      WEB_URL: ${PUBLIC_URL:-http://localhost}
+    ports: !override ["127.0.0.1:8000:8000"]
+    restart: unless-stopped
+
+  db:
+    ports: !override ["127.0.0.1:5432:5432"]
+    restart: unless-stopped
+
+  recommender:
+    ports: !override ["127.0.0.1:8002:8002"]
+    restart: unless-stopped
+
+  mocks:
+    ports: !override ["127.0.0.1:8001:8001"]
+    restart: unless-stopped
+
+  optimizer:
+    restart: unless-stopped
+
+  planning-data:
+    restart: unless-stopped
+
+  agent:
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

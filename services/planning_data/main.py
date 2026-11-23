@@ -827,6 +827,18 @@ async def _build_drive_edges(request: dict) -> list[dict]:
 
 @app.get("/health")
 def health():
+    try:
+        budget = _budget_status()
+    except HTTPException:
+        calls_today = None
+    else:
+        batch = budget["endpoints"]["batch"]
+        calls_today = {
+            "day": budget["day_kst"],
+            "multi_destination": batch["local_attempts"],
+            "directions": budget["endpoints"]["point"]["local_attempts"],
+            "multi_destination_paused": bool(batch["cooldown_seconds"] or not batch["remaining"]),
+        }
     return {
         "ok": True,
         "module": "planning-data",
@@ -837,6 +849,7 @@ def health():
                           "max_requests_per_plan": KAKAO_ROUTE_MAX_REQUESTS,
                           "endpoint_share_percent": KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT},
         "route_cache": {"persistent": True, "expires": False, "mode": "demo_snapshot"},
+        "kakao_calls_today": calls_today,
     }
 
 

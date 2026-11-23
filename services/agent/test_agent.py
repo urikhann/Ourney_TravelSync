@@ -131,8 +131,8 @@ def test_rules_without_key_and_without_plan():
     HOURS.clear()
     out = brain.turn(req("@TravelSync we're tired, less walking please"))
     assert out["proposal"]["remove_item_ids"] == ["2026-11-21@10:00"] and out["proposal"]["add"][0]["poi_id"] == "museum"
-    out = brain.turn(req("@TravelSync 비가 와요"))  # Korean keywords work too
-    assert out["proposal"] is not None
+    out = brain.turn(req("@TravelSync 비가 와요"))  # Korean keywords work too, and the reply is Korean
+    assert out["proposal"] is not None and "대신" in out["reply"]
     out = brain.turn(req("@TravelSync it's raining", itinerary_id=None))
     assert out["proposal"] is None and "Plan tab" in out["reply"]
     out = brain.turn(req("@TravelSync hello"))

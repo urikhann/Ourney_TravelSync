@@ -1,12 +1,13 @@
+import { t } from "../i18n";
 import { Avatar } from "./Avatar";
 
 /** Circular group fit: 0–1 "fit" from the backend (1–5 scores are converted there), shown as a percentage. */
 export function ScoreRing({ score, bad }: { score: number | null; bad?: boolean }) {
-  if (score == null) return <div className="tiny muted">Rank relevance</div>;
+  if (score == null) return <div className="tiny muted">{t("Rank relevance")}</div>;
   const pct = Math.max(0, Math.min(100, score * 100));
   const col = bad ? "#E11D48" : "#0F9F6E";
   return (
-    <div className="ring" aria-label={`Group fit ${Math.round(pct)} percent`}>
+    <div className="ring" aria-label={t("Group fit {n} percent", { n: Math.round(pct) })}>
       <div style={{ background: `conic-gradient(${col} 0 ${pct}%, #E2E8F0 0 100%)` }}>
         <div style={{ color: bad ? "var(--rose)" : undefined, fontSize: 13 }}>{Math.round(pct)}%</div>
       </div>
@@ -16,7 +17,7 @@ export function ScoreRing({ score, bad }: { score: number | null; bad?: boolean 
 
 /** Each member's 0–1 fit as a small bar. Optional threshold (same 0–1 scale) turns bars red. */
 export function MemberScores({ scores, names, threshold }: { scores: Record<string, number | null>; names: Record<string, string>; threshold?: number | null }) {
-  if (Object.values(scores).some(s => s == null)) return <div className="tiny muted">Individual rankings use relevance; satisfaction is not predicted.</div>;
+  if (Object.values(scores).some(s => s == null)) return <div className="tiny muted">{t("Individual rankings use relevance; satisfaction is not predicted.")}</div>;
   const ids = Object.keys(scores);
   const max = Math.max(0.5, ...ids.map((u) => scores[u] ?? 0));  // scale bars so small differences are visible
   return (
