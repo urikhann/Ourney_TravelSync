@@ -7,7 +7,7 @@ from datetime import date, datetime
 from math import ceil, isfinite
 from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 NonNegative = Annotated[int, Field(strict=True, ge=0, le=10**9)]
 Minute = Annotated[int, Field(strict=True, ge=0, le=1440)]
@@ -48,6 +48,7 @@ class MealWindow(Window):
     name: Literal["breakfast", "lunch", "dinner"]
 
 
+BREAKFAST_WINDOW = MealWindow(name="breakfast", start_min=420, end_min=600)
 DEFAULT_MEAL_WINDOWS = (
     MealWindow(name="lunch", start_min=690, end_min=870),
     MealWindow(name="dinner", start_min=1050, end_min=1230),
@@ -70,6 +71,7 @@ class MealOverride(Contract):
 
 
 class DailyComposition(Contract):
+    breakfast_enabled: bool = False
     max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
     # Accepted for old clients; named requirements now determine the minimum.
     min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = Field(default=0, deprecated=True)
@@ -87,12 +89,16 @@ class DailyComposition(Contract):
     def sensible(self):
         if self.min_activity_categories > self.min_activities:
             raise ValueError("activity category minimum exceeds activity minimum")
-        windows = sorted(self.meal_windows, key=lambda w: w.start_min)
+        bases = self.meal_windows
+        if self.breakfast_enabled and not any(w.name == "breakfast" for w in bases):
+            bases = (BREAKFAST_WINDOW, *bases)
+        windows = sorted(bases, key=lambda w: w.start_min)
         if len({w.name for w in windows}) != len(windows) or any(a.end_min > b.start_min for a,b in zip(windows,windows[1:])):
             raise ValueError("meal windows must be distinct and non-overlapping")
         if len({(o.date, o.name) for o in self.meal_overrides}) != len(self.meal_overrides):
             raise ValueError("duplicate day/meal override")
-        if any(o.name not in {w.name for w in windows} for o in self.meal_overrides):
+        names = {w.name for w in windows} | ({"breakfast"} if self.breakfast_enabled else set())
+        if any(o.name not in names for o in self.meal_overrides):
             raise ValueError("override references unconfigured meal")
         return self
 
@@ -128,6 +134,8 @@ class Candidate(Contract):
     personal_scores: dict[str, Unit]
     relevance: dict[str, Unit]
     visit_category: Literal["cafe", "meal", "activity", "evening"] = "activity"
+    breakfast_offering: Fact[StrictBool] = Field(default_factory=Fact)
+    breakfast_hours: dict[date, Fact[tuple[Window, ...]]] = Field(default_factory=dict)
     activity_category: Literal["nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival", "other"] = "other"
     allowed_dates: tuple[date, ...] | None = None
     tags: tuple[str, ...] = ()

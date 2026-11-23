@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from .contracts import DayPlan, PlanRequest
-from .meals import effective_meals, meals_can_be_assigned
+from .meals import effective_meals, meals_can_be_assigned, meal_visit_matches
 from ..planning_categories import EVENING_START_MIN
 
 
@@ -137,12 +137,12 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if len({p.activity_category for p in activities}) < composition.min_activity_categories:
                 problem("ACTIVITY_CATEGORY_COUNT", day.date)
             effective = effective_meals(day, composition)
-            if not meals_can_be_assigned(effective, meals):
+            if not meals_can_be_assigned(effective, meals + cafes, pois, day.date, composition.max_meals):
                 problem("REQUIRED_MEAL_MISSING_OR_CONFLICT", day.date)
             # All selected meal visits must fit an effective slot; matching of
             # required meals above uses distinct visits even if overrides overlap.
             for visit in meals:
-                if not any(w.matches(visit.start_min, visit.departure_min) for w in effective):
+                if not any(meal_visit_matches(w, visit, pois[visit.poi_id], day.date) for w in effective):
                     problem("MEAL_WINDOW", day.date, visit.poi_id)
             if composition.separate_food_drink and any(
                     p.visit_category in ("meal", "cafe") and next_p.visit_category in ("meal", "cafe")

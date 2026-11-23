@@ -1,6 +1,7 @@
 """Exclusive visit roles derived from the existing imported feature taxonomy.
 
-A cafe is never counted as a meal, even when both source features are present.
+A cafe keeps its role even when both source features are present. The meal
+policy separately permits evidenced breakfast coverage without reclassification.
 Activity categories use the fixed feature order so one visit counts once.
 """
 import re

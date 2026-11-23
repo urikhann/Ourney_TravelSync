@@ -56,6 +56,7 @@ export type PlanItem = {
 };
 export type PlanningPoint = { label: string; latitude: number; longitude: number };
 export type DailyComposition = {
+  breakfast_enabled?: boolean;
   meal_overlap_min?: number; meal_timezone?: "Asia/Seoul"; meal_policy_version?: "meal-1.0";
   meal_overrides?: { date: string; name: "breakfast" | "lunch" | "dinner";
     window?: { start_min: number; end_min: number } | null;

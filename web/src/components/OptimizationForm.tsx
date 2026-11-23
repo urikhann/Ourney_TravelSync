@@ -14,6 +14,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const prior = view.latest_optimization?.configuration;
   const points = view.setup.points;
   const composition = prior?.daily_composition ?? view.setup.default_composition;
+  const [breakfast, setBreakfast] = useState(composition.breakfast_enabled ?? composition.meal_windows.some(w => w.name === "breakfast"));
   const [mode, setMode] = useState(prior?.transport_mode ?? "drive");
   const [sameTimes, setSameTimes] = useState(!prior);
   const [sameLocations, setSameLocations] = useState(!prior);
@@ -69,7 +70,9 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     e.preventDefault();
     generate.mutate({ budget_total: 0, transport_mode: mode as OptimizationInput["transport_mode"],
       max_leg_minutes: leg === "" ? null : Number(leg), max_total_walk_minutes: walk === "" ? null : Number(walk),
-      daily_composition: composition, duration_overrides: durations,
+      daily_composition: { ...composition, breakfast_enabled: breakfast,
+        meal_windows: breakfast ? composition.meal_windows : composition.meal_windows.filter(w => w.name !== "breakfast"),
+        meal_overrides: breakfast ? composition.meal_overrides : composition.meal_overrides?.filter(w => w.name !== "breakfast") }, duration_overrides: durations,
       required_access: prior?.required_access ?? [], locked_items: locks,
       days: daily.map((d, i) => {
         const timeRow = i && sameTimes ? daily[0] : d;
@@ -85,6 +88,8 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     </p>}
     <p className="small">New plans: at most {composition.max_cafes} caf&eacute;s and {composition.max_meals} meals, and at least {composition.min_activities} activities from {composition.min_activity_categories} categories each day. A meal is required when that day's travel hours overlap its window by at least {composition.meal_overlap_min} minutes. {composition.separate_food_drink && "An activity separates food/drink stops."} Base meal windows: {composition.meal_windows.map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}. Day-specific overrides take precedence.</p>
     <p className="small">Demo routes reuse saved Kakao results without expiry. Travel times may come from an earlier request.</p>
+    <label className="row small"><input type="checkbox" checked={breakfast} onChange={e => setBreakfast(e.target.checked)} />Include breakfast (07:00–10:00)</label>
+    <p className="small">When enabled, breakfast is required on days overlapping its window. It needs verified breakfast or brunch offerings, opening hours and breakfast-serving hours. Missing data or conflicting conditions may prevent a plan.</p>
     <p className="small">Known opening intervals and closures are respected. Unknown hours are allowed with a warning. Automatic weather handling and accessibility support are not included in this version.</p>
     <p className="small">Estimated visit times: cafés 45 min, meals 60 min, history/art/entertainment/festival 90 min, other activities 60 min. Place-specific overrides are available below.</p>
     <p className="muted small">Times are local. Every member must confirm every trip date. Missing route data stops planning; distance estimates are not substituted.</p>

@@ -85,6 +85,37 @@ def select_days(data, records, days, locks=(), composition=None):
             cluster_penalty = min(km(coordinates[j], coordinates[anchor]) / 15, 2) if anchor is not None else 0
             return base(j) - .12 * cluster_penalty
         if composition is not None:
+            breakfast_enabled = composition.get("breakfast_enabled", False) or any(
+                w["name"] == "breakfast" for w in composition.get("meal_windows", ()))
+            if breakfast_enabled:
+                from ..breakfast_metadata import breakfast_metadata
+                from ..optimizer.contracts import DailyComposition
+                from ..optimizer.meals import effective_meals
+                from types import SimpleNamespace
+                meal = next(m for m in effective_meals(
+                    SimpleNamespace(date=date.fromisoformat(d["date"]), **{k: d[k] for k in ("start_min", "end_min")}),
+                    DailyComposition.model_validate(composition)) if m.name == "breakfast")
+                options = []
+                for j in pool:
+                    if roles[j][0] not in ("meal", "cafe"):
+                        continue
+                    offering, hours = breakfast_metadata(records[data.poi_ids[j]])
+                    serving = hours.get(date.fromisoformat(d["date"]))
+                    duration = records[data.poi_ids[j]].get("duration_min")
+                    dwell = duration if type(duration) is int and duration > 0 else 0
+                    if (offering.known and offering.value is True and serving is not None and serving.known
+                            and any(min(w.end_min, meal.end_min, d["end_min"]) -
+                                    max(w.start_min, meal.start_min, d["start_min"]) >= max(1, dwell)
+                                    and (meal.fixed_start_min is None or
+                                         max(w.start_min, d["start_min"]) <= meal.fixed_start_min
+                                         and meal.fixed_start_min + dwell <= min(w.end_min, d["end_min"]))
+                                    for w in serving.value)):
+                        options.append(j)
+                # Reserve up to three alternatives before ordinary role quotas.
+                # GFAR scores and ranking still run normally on the retained pool.
+                for j in sorted(options, key=lambda j: (value(j), -j), reverse=True)[:3]:
+                    if j not in chosen and len(chosen) < limit:
+                        chosen.append(j)
             # Reserve alternatives before preferences can fill the pool with cafes.
             # These are retrieval opportunities; only CP-SAT enforces visit counts.
             targets = (("meal", max(6, composition["max_meals"] * 2)),
