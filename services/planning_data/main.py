@@ -19,7 +19,7 @@ import sqlite3
 import weakref
 from pathlib import Path
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
@@ -55,37 +55,6 @@ logger = logging.getLogger(__name__)
 PROVIDER = "KAKAO_MOBILITY_MULTI_DESTINATION_V1_TOLL_FREE"
 ROUTING_VERSION = "kakao-drive-multidestination-with-point-fallback-v2"
 ROUTING_LIMITS = {"routing_quota_exceeded", "routing_daily_budget_exceeded", "routing_request_budget_exceeded"}
-
-# Kakao's free daily quotas (developers.kakao.com quota page): multi-destination 1,000 calls/day,
-# single-route directions 10,000 calls/day, reset at midnight Korea time. When the multi-destination
-# quota runs out, the rest of the day uses single-route calls for the same legs (same route data,
-# more calls, but a 10x larger quota). Calls are counted per Korea day and shown in GET /health.
-KST = timezone(timedelta(hours=9))
-_usage: dict = {"day": None, "multi_destination": 0, "directions": 0}
-_multi_paused_until: datetime | None = None
-
-
-def _kst_day() -> str:
-    return datetime.now(KST).date().isoformat()
-
-
-def _count(endpoint: str) -> None:
-    if _usage["day"] != _kst_day():
-        _usage.update(day=_kst_day(), multi_destination=0, directions=0)
-    _usage[endpoint] += 1
-
-
-def _multi_paused() -> bool:
-    return _multi_paused_until is not None and datetime.now(KST) < _multi_paused_until
-
-
-def _pause_multi_until_midnight() -> None:
-    global _multi_paused_until
-    tomorrow = datetime.now(KST).date() + timedelta(days=1)
-    _multi_paused_until = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=KST)
-    logger.warning("Kakao multi-destination quota used up; using single-route calls until %s KST",
-                   _multi_paused_until.isoformat())
-
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 app = FastAPI(title="TravelSync planning data", version="1.0")
@@ -323,7 +292,19 @@ async def _route_request(client, semaphore, method, url, **kwargs):
         client._travelsync_reservation_lock = asyncio.Lock()
     for attempt in range(3):
         async with semaphore:
-            _count("directions" if url == KAKAO_DIRECTIONS_URL else "multi_destination")
+            # A rejected daily reservation must never occupy the last plan slot
+            # while another endpoint still has room to serve it.
+            async with client._travelsync_reservation_lock:
+                limit = min(getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
+                total = getattr(client, "_travelsync_route_requests", 0)
+                counts = getattr(client, "_travelsync_endpoint_requests", {})
+                share = max(1, _daily_limit(endpoint) * KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT // 100)
+                if total >= limit or counts.get(endpoint, 0) >= share:
+                    raise HTTPException(503, "routing_request_budget_exceeded")
+                await asyncio.to_thread(_reserve_request, endpoint)
+                client._travelsync_route_requests = total + 1
+                counts[endpoint] = counts.get(endpoint, 0) + 1
+                client._travelsync_endpoint_requests = counts
             response = await client.request(method, url, **kwargs)
             if response.status_code == 429 or _provider_error_code(response) == -10:
                 await asyncio.to_thread(_block_requests, endpoint, response.headers.get("Retry-After"))
@@ -597,18 +578,28 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
         point_limit_reason = None
         by_key = None
         try:
-            if _multi_paused():
-                raise HTTPException(503, "routing_quota_exceeded")
-            response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
-            body = response.json()
-            by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
-        except HTTPException as e:
-            if e.detail != "routing_quota_exceeded":
+            if single_selected:
+                pid, point = batch[0]
+                try:
+                    by_key = {pid: await _point_route(client, semaphore, origin, point)}
+                except HTTPException as exc:
+                    if exc.detail not in ("routing_quota_exceeded", "routing_daily_budget_exceeded"):
+                        raise
+                    point_limit_reason = exc.detail
+            if by_key is None:
+                response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
+                body = response.json()
+                by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
+        except HTTPException as exc:
+            per_plan_total_spent = getattr(client, "_travelsync_route_requests", 0) >= min(
+                getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
+            if (single_selected or exc.detail not in ROUTING_LIMITS
+                    or (exc.detail == "routing_request_budget_exceeded" and per_plan_total_spent)):
                 raise
-            # Multi-destination quota is gone for today: ask for each leg on its own instead.
-            if not _multi_paused():
-                _pause_multi_until_midnight()
-            by_key = {pid: {"key": pid, "result_code": 304} for pid, _ in batch}
+            # Independent point quota can still serve this batch. This path is
+            # bounded by the same per-plan total/share limits as normal fallback.
+            client._travelsync_limit_reason = exc.detail
+            by_key = {pid: {"result_code": 304} for pid,_ in batch}
         except httpx.HTTPError:
             raise HTTPException(503, "routing_provider_unavailable") from None
         except (ValueError, AttributeError, TypeError):
@@ -836,6 +827,18 @@ async def _build_drive_edges(request: dict) -> list[dict]:
 
 @app.get("/health")
 def health():
+    try:
+        budget = _budget_status()
+    except HTTPException:
+        calls_today = None
+    else:
+        batch = budget["endpoints"]["batch"]
+        calls_today = {
+            "day": budget["day_kst"],
+            "multi_destination": batch["local_attempts"],
+            "directions": budget["endpoints"]["point"]["local_attempts"],
+            "multi_destination_paused": bool(batch["cooldown_seconds"] or not batch["remaining"]),
+        }
     return {
         "ok": True,
         "module": "planning-data",
@@ -846,10 +849,7 @@ def health():
                           "max_requests_per_plan": KAKAO_ROUTE_MAX_REQUESTS,
                           "endpoint_share_percent": KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT},
         "route_cache": {"persistent": True, "expires": False, "mode": "demo_snapshot"},
-        "kakao_calls_today": {"day": _usage["day"] or _kst_day(),
-                              "multi_destination": _usage["multi_destination"] if _usage["day"] == _kst_day() else 0,
-                              "directions": _usage["directions"] if _usage["day"] == _kst_day() else 0,
-                              "multi_destination_paused": _multi_paused()},
+        "kakao_calls_today": calls_today,
     }
 
 

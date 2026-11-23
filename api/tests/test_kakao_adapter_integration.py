@@ -141,9 +141,6 @@ def test_multi_destination_quota_falls_back_to_single_routes(monkeypatch, tmp_pa
         return httpx.Response(200, json={"routes": [dict(result_code=0,
             summary=dict(duration=900, distance=4000, fare=dict(toll=0)))]})
 
-    async def no_wait(_):
-        return None
-    monkeypatch.setattr(adapter, "_retry_pause", no_wait)
     origin = {"latitude": 35.1151, "longitude": 129.0414}
     dests = [(f"p{i}", {"latitude": 35.10 + i / 100, "longitude": 129.05}) for i in range(3)]
 
@@ -153,11 +150,12 @@ def test_multi_destination_quota_falls_back_to_single_routes(monkeypatch, tmp_pa
 
     edges = asyncio.run(fetch())
     assert [e["status"] for e in edges] == ["KNOWN"] * 3 and all(e["duration_minutes"] == 15 for e in edges)
-    assert calls == {"POST": 3, "GET": 3}  # 1 call + 2 retries, then one single-route call per leg
+    assert calls == {"POST": 1, "GET": 3}  # Quota responses switch endpoints immediately.
     health = TestClient(adapter.app).get("/health").json()["kakao_calls_today"]
-    assert health["multi_destination_paused"] is True and health["directions"] == 3
+    assert health["multi_destination_paused"] is True
+    assert health["multi_destination"] == 1 and health["directions"] == 3
 
     calls.update(POST=0, GET=0)
     asyncio.run(fetch())
-    assert calls == {"POST": 0, "GET": 3}  # paused until midnight: no more wasted multi-destination calls
+    assert calls == {"POST": 0, "GET": 3}  # The cooldown also applies to a fresh client.
     adapter.engine.dispose()

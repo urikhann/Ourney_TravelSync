@@ -56,12 +56,12 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
             {m.description_summary}
             {source && (
               <div className="muted tiny" style={{ marginTop: 6 }}>
-                {fromMenu ? "Summary from menu info · " : ""}Source: {source}
+                {fromMenu ? t("Summary from menu info") + " · " : ""}{t("Source: {src}", { src: source })}
                 {sourceLinks.map((url, index) => (
                   <span key={url} style={{ whiteSpace: "nowrap" }}>
                     {" · "}
                     <a href={url} target="_blank" rel="noreferrer">
-                      {sourceLinks.length === 1 ? "Open source" : `Open source ${index + 1}`}
+                      {sourceLinks.length === 1 ? t("Open source") : t("Open source {n}", { n: index + 1 })}
                       {" "}<ExternalLink size={11} style={{ display: "inline", verticalAlign: "-1px" }} />
                     </a>
                   </span>

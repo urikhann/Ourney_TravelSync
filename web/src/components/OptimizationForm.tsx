@@ -67,9 +67,6 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
 
   // ---- optional: must-visit places, visit durations, travel limits ----
   const [breakfast, setBreakfast] = useState(composition.breakfast_enabled ?? composition.meal_windows.some(w => w.name === "breakfast"));
-  const [mode, setMode] = useState(prior?.transport_mode ?? "drive");
-  const [sameTimes, setSameTimes] = useState(!prior);
-  const [sameLocations, setSameLocations] = useState(!prior);
   const [locks, setLocks] = useState(prior?.locked_items ?? []);
   const [durations, setDurations] = useState<Record<string, number>>(prior?.duration_overrides ?? {});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -79,8 +76,8 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const [duration, setDuration] = useState("");
   const [leg, setLeg] = useState(prior?.max_leg_minutes == null ? "" : String(prior.max_leg_minutes));
   const [walk, setWalk] = useState(prior?.max_total_walk_minutes == null ? "" : String(prior.max_total_walk_minutes));
-  const [names, setNames] = useState<Record<string, string>>({});
   const [eveningSearch, setEveningSearch] = useState("");
+  const [eveningDay, setEveningDay] = useState(dates[0] ?? "");
   const evening = useQuery({ queryKey: ["evening-choices", tripId, eveningSearch],
     queryFn: () => api.get<{ id: string; name: string; category: string; hours_verified: boolean }[]>(
       `/trips/${tripId}/evening-choices?q=${encodeURIComponent(eveningSearch)}`),
@@ -170,6 +167,10 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
 
       <details className="pf-more">
         <summary>{t("More options")} <span className="muted tiny">{t("must-visit places, visit time, travel limits")}</span></summary>
+        <label className="pf-switch" style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
+          <span className="track" aria-hidden="true" /> {t("Include breakfast when the schedule allows")}
+        </label>
         <div className="pf-label" style={{ marginTop: 12 }}>{t("Must-visit places")}</div>
         <div className="loc-search small-search">
           <input value={search} onChange={(e) => setSearch(e.target.value)} maxLength={120} placeholder={t("Search all places (2+ letters)")} aria-label={t("Search places")} />
@@ -213,6 +214,28 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
       </details>
 
       <details className="pf-more">
+        <summary>{t("Optional evening bars and pubs")}</summary>
+        <p className="small">{t("Choose a place and day, then rebuild. Evening stops start at 18:00 or later and do not count as dinner.")}</p>
+        <label className="field">{t("Search evening places")}<input maxLength={120} value={eveningSearch} onChange={(e) => setEveningSearch(e.target.value)} /></label>
+        <label className="field">{t("Evening date")}<select value={eveningDay} onChange={(e) => setEveningDay(e.target.value)}>
+          {dates.map((date) => <option key={date} value={date}>{fmtDate(date)}</option>)}
+        </select></label>
+        <ErrorBox error={evening.error ? message(evening.error) : null} />
+        {evening.isLoading && <p className="small">{t("Loading evening choices…")}</p>}
+        {evening.data?.length === 0 && <p className="small">{t("No matching evening places are available under your group's exclusions.")}</p>}
+        {evening.data?.map((p) => {
+          const selected = locks.some((l) => l.poi_id === p.id);
+          return <div key={p.id} className="row" style={{ justifyContent: "space-between", margin: "8px 0" }}>
+            <span className="small">{p.name}<br /><span className="muted tiny">{t(p.hours_verified ? "Saved hours available; checked when rebuilding" : "Hours unverified — confirm before visiting")}</span></span>
+            <button type="button" className="chip white" disabled={selected || !eveningDay || locks.length >= 60} onClick={() => {
+              setLocks([...locks, { poi_id: p.id, date: eveningDay }]);
+              setNames((old) => ({ ...old, [p.id]: p.name }));
+            }}>{t(selected ? "Selected" : "Include")}</button>
+          </div>;
+        })}
+      </details>
+
+      <details className="pf-more">
         <summary>{t("How planning works")}</summary>
         <ul className="pf-rules small">
           {view.latest_optimization?.candidate_selection && <li>{t("Reviewed {n} places and shortlisted {k} for your days.", {
@@ -240,85 +263,4 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
         onClose={() => setPicker(null)} onPick={(p) => set(picker === "to" ? { to: p } : { from: p })} />
     </form>
   );
-      days: daily.map((d, i) => {
-        const timeRow = i && sameTimes ? daily[0] : d;
-        const locationRow = i && sameLocations ? daily[0] : d;
-        return { date: d.date, start_min: minute(timeRow.start), end_min: timeRow.end === "00:00" ? 1440 : minute(timeRow.end),
-          start_point: point(locationRow.from, locationRow, "from"), end_point: point(locationRow.to, locationRow, "to") };
-      }) });
-  }}>
-    <h2 style={{ fontSize: 17, marginTop: 0 }}>Planning conditions</h2>
-    <p className="muted small">Candidates are retrieved from the full catalogue for each day using group preferences, exclusions, start/end locations, nearby clusters, and visit duration.</p>
-    {view.latest_optimization?.candidate_selection && <p className="small">
-      Reviewed {view.latest_optimization.candidate_selection.catalogue_count.toLocaleString()} places &middot; selected {view.latest_optimization.candidate_selection.selected_count} candidates across the trip.
-    </p>}
-    <p className="small">New plans: at most {composition.max_cafes} caf&eacute;s and {composition.max_meals} meals, and at least {composition.min_activities} activities from {composition.min_activity_categories} categories each day. A meal is required when that day's travel hours overlap its window by at least {composition.meal_overlap_min} minutes. {composition.separate_food_drink && "An activity separates food/drink stops."} Base meal windows: {composition.meal_windows.map(w => `${w.name} ${clock(w.start_min)}\u2013${clock(w.end_min)}`).join(", ")}. Day-specific overrides take precedence.</p>
-    <p className="small">Demo routes reuse saved Kakao results without expiry. Travel times may come from an earlier request.</p>
-    <label className="row small"><input type="checkbox" checked={breakfast} onChange={e => setBreakfast(e.target.checked)} />Include breakfast (07:00–10:00)</label>
-    <p className="small">When enabled, breakfast is required on days overlapping its window. It needs verified breakfast or brunch offerings, opening hours and breakfast-serving hours. Missing data or conflicting conditions may prevent a plan.</p>
-    <p className="small">Known opening intervals and closures are respected. Unknown hours are allowed with a warning. Automatic weather handling and accessibility support are not included in this version.</p>
-    <p className="small">Estimated visit times: cafés 45 min, meals 60 min, history/art/entertainment/festival 90 min, other activities 60 min. Place-specific overrides are available below.</p>
-    <p className="muted small">Times are local. Every member must confirm every trip date. We use geographic distance to draft a compact route, then check driving times before saving the itinerary.</p>
-    {!!prior?.locked_items?.length && <p className="small">{prior.locked_items.length} locked visits will be retained.</p>}
-    {!!prior?.required_access?.length && <p className="small">Required access retained: {prior.required_access.join(", ")}</p>}
-    {!view.setup.planning_data_configured && <div className="banner amber" role="status">Verified operating and route data are not configured. Recommendations stay available; an itinerary cannot be verified yet.</div>}
-    <label className="field">Transport<select required value={mode} onChange={e => setMode(e.target.value as typeof mode)}>
-      <option value="drive">Driving</option>{mode !== "drive" && <option value={mode} disabled>{mode} — unsupported; choose driving</option>}
-    </select></label>
-    {daily.length > 1 && <>
-      <label className="row small"><input type="checkbox" checked={sameTimes} onChange={e => setSameTimes(e.target.checked)} />Use the first day's start and end times for every day</label>
-      <label className="row small"><input type="checkbox" checked={sameLocations} onChange={e => setSameLocations(e.target.checked)} />Use the first day's start and end locations for every day</label>
-      <p className="muted small">Uncheck to enter each day separately. Individual entries are kept.</p>
-    </>}
-    {daily.map((d, i) => <fieldset key={d.date} style={{ border: "1px solid var(--line)", borderRadius: 10, margin: "12px 0", padding: 12 }}>
-      <legend>{d.date}</legend>
-      {i > 0 && sameTimes ? <p className="small">Times follow the first day: {daily[0].start || "—"}–{daily[0].end || "—"}</p> : (["start", "end"] as const).map(field => <label className="field" key={field}>{field === "start" ? "Leave at" : "Return by (00:00 = midnight)"}
-        <input type="time" required value={d[field]} onChange={e => setDaily(daily.map((row, j) => j === i ? { ...row, [field]: e.target.value } : row))} />
-      </label>)}
-      {i > 0 && sameLocations ? <p className="small">Locations follow the first day.</p> : (["from", "to"] as const).map(field => <div key={field} onBlur={rememberLocations}><label className="field">{field === "from" ? "Start location" : "End location"}
-        <select required value={d[field]} onChange={e => { rememberLocations(); setDaily(daily.map((row, j) => j === i ? { ...row, [field]: e.target.value } : row)); }}>
-          <option value="">Choose location</option><option value="custom">Enter another location</option>{locationChoices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </label>{d[field] === "custom" && <>
-        <label className="field">Location name<input required maxLength={120} value={d[`${field}Label`]} onChange={e => setDaily(daily.map((row, j) => j === i ? { ...row, [`${field}Label`]: e.target.value } : row))} /></label>
-        <label className="field">Latitude<input required type="number" min="-90" max="90" step="any" value={d[`${field}Lat`]} onChange={e => setDaily(daily.map((row, j) => j === i ? { ...row, [`${field}Lat`]: e.target.value } : row))} /></label>
-        <label className="field">Longitude<input required type="number" min="-180" max="180" step="any" value={d[`${field}Lng`]} onChange={e => setDaily(daily.map((row, j) => j === i ? { ...row, [`${field}Lng`]: e.target.value } : row))} /></label>
-      </>}</div>)}
-    </fieldset>)}
-    <details className="card pad" style={{ marginTop: 12 }}>
-      <summary>Optional evening bars and pubs</summary>
-      <p className="small">Choose a place and day, then rebuild the itinerary. Selected places are scheduled after 18:00, checked against saved routes and available hours, and never counted as dinner. Group exclusions apply. Nothing is added automatically.</p>
-      <label className="field">Search evening places<input maxLength={120} value={eveningSearch} onChange={e => setEveningSearch(e.target.value)} /></label>
-      <label className="field">Evening date<select value={chosenDay} onChange={e => setChosenDay(e.target.value)}>{view.setup.dates.map(d => <option key={d}>{d}</option>)}</select></label>
-      <ErrorBox error={evening.error ? message(evening.error) : null} />
-      {evening.isLoading ? <p className="small">Loading evening choices…</p> : evening.data?.length === 0 ? <p className="small">No matching evening places are available under your group's exclusions.</p> : evening.data?.map(p => <div key={p.id} className="row" style={{ justifyContent: "space-between", margin: "8px 0" }}>
-        <span className="small">{p.name}<br /><span className="muted tiny">{p.hours_verified ? "Saved hours available; checked when rebuilding" : "Hours unverified — confirm before visiting"}</span></span>
-        <button type="button" disabled={locks.some(l => l.poi_id === p.id)} onClick={() => {
-          setLocks([...locks, { poi_id: p.id, date: chosenDay }]); setNames({ ...names, [p.id]: p.name });
-        }}>{locks.some(l => l.poi_id === p.id) ? "Selected" : "Include"}</button>
-      </div>)}
-    </details>
-    <h3>Must-visit places and visit durations</h3>
-    <p className="small">Choose a recommended place or search the full catalogue. Confirmed must-visits are required on the selected day; conflicts are reported.</p>
-    <label className="field">Search places<input maxLength={120} placeholder="Enter at least 2 characters" value={search} onChange={e => setSearch(e.target.value)} /></label>
-    <ErrorBox error={searchQuery.error ? message(searchQuery.error) : null} />
-    <label className="field">Place<select value={chosen} onChange={e => {
-      const id = e.target.value, p = choices.find(p => p.id === id); setChosen(id);
-      if (p) setNames(old => ({ ...old, [id]: p.name }));
-      setDuration(id in durations ? String(durations[id]) : p?.duration_min == null ? "" : String(p.duration_min));
-    }}><option value="">Choose a place</option>{chosen && !choices.some(p => p.id === chosen) && <option value={chosen}>{names[chosen] ?? chosen}</option>}
-      {choices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-    <label className="field">Visit day<select value={chosenDay} onChange={e => setChosenDay(e.target.value)}>{daily.map(d => <option key={d.date}>{d.date}</option>)}</select></label>
-    <button type="button" className="btn" disabled={!chosen || locks.some(l => l.poi_id === chosen) || locks.length >= 60} onClick={() => setLocks([...locks, { poi_id: chosen, date: chosenDay }])}>Add must-visit</button>
-    {locks.map(l => <p className="small" key={l.poi_id}>{names[l.poi_id] ?? choices.find(p => p.id === l.poi_id)?.name ?? l.poi_id} · {l.date}{l.start_min != null && ` · fixed ${clock(l.start_min)}`} <button type="button" onClick={() => setLocks(locks.filter(x => x.poi_id !== l.poi_id))}>Remove</button></p>)}
-    <label className="field">Visit duration (minutes)<input type="number" min="1" max="1440" step="1" value={duration} onChange={e => setDuration(e.target.value)} placeholder="Use category default" /></label>
-    <button type="button" className="btn" disabled={!chosen || !Number.isInteger(Number(duration)) || Number(duration) < 1 || Number(duration) > 1440 || (!(chosen in durations) && Object.keys(durations).length >= 60)} onClick={() => setDurations({ ...durations, [chosen]: Number(duration) })}>Set duration</button>
-    {Object.entries(durations).map(([id, minutes]) => <p className="small" key={id}>{names[id] ?? choices.find(p => p.id === id)?.name ?? id} · {minutes} min <button type="button" onClick={() => setDurations(Object.fromEntries(Object.entries(durations).filter(([key]) => key !== id)))}>Use default</button></p>)}
-    <label className="field">Maximum travel per leg (minutes, optional)<input type="number" min="0" max="1440" step="1" value={leg} onChange={e => setLeg(e.target.value)} /></label>
-    <label className="field">Maximum walking per day (minutes, optional)<input type="number" min="0" max="1440" step="1" value={walk} onChange={e => setWalk(e.target.value)} /></label>
-    <button className="btn blue" disabled={generate.isPending || !view.setup.planning_data_configured || mode !== "drive"}>
-      {generate.isPending ? <><Loader size={17} className="spin" /> Checking and optimizing…</> : view.plans.length ? "Rebuild itinerary" : "Build itinerary"}
-    </button>
-    <ErrorBox error={generate.error ? message(generate.error) : null} />
-  </form>;
 }
