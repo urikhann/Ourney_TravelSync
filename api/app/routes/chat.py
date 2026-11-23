@@ -2,11 +2,12 @@
 
     GET  /trips/{trip_id}/chat?after=<message id>   messages (oldest first), only newer ones when `after` is given
     POST /trips/{trip_id}/chat                       {"text": "...", "trigger": "MESSAGE" | "MENTION" | "QUICK_ACTION"}
+    POST /trips/{trip_id}/chat/{message_id}/vote     {"approve": true | false}  vote on a TravelSync suggestion
 
 Ordinary messages are only shared with the group; they are never sent to the AI.
 The agent is asked only when a message starts with "@TravelSync" (MENTION) or comes from a quick-action button.
-Today the agent is the mock on port 8001 (contracts/agent.*.json). When the real agent is ready, only
-`ask_agent` below (and AGENT_URL) change — the chat screen and this API stay the same.
+The agent is the Gemini service on port 8005 (contracts/agent.*.json).
+A suggested change only reaches the plan after the group approves it (issue #19, see app/proposals.py).
 """
 import re
 from datetime import datetime, timezone
@@ -17,10 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import services
+from .. import proposals, services
 from ..db import get_db
 from ..deps import member_trip
-from ..models import ChatMessage, Itinerary, Trip, User
+from ..models import ChatMessage, ProposalVote, Trip, User
 from .auth import current_user
 
 router = APIRouter(tags=["chat"])
@@ -44,10 +45,16 @@ class ChatIn(BaseModel):
         return v.strip()
 
 
-def message_dict(m: ChatMessage, names: dict[str, str]) -> dict:
+def message_dict(m: ChatMessage, names: dict[str, str], views: dict[int, dict] | None = None) -> dict:
     return {"id": m.id, "kind": m.kind, "text": m.text, "reply_to": m.reply_to,
             "author": None if m.kind == "agent" else {"id": m.author_id, "name": names.get(m.author_id or "", "Former member")},
-            "agent": m.agent, "created_at": m.created_at.isoformat()}
+            "agent": (views or {}).get(m.id, m.agent), "created_at": m.created_at.isoformat()}
+
+
+def messages_out(db: Session, trip: Trip, rows: list[ChatMessage], user: User) -> list[dict]:
+    views = proposals.agent_views(db, trip, rows, user.id)
+    names = _names(db, trip)
+    return [message_dict(m, names, views) for m in rows]
 
 
 def _names(db: Session, trip: Trip) -> dict[str, str]:
@@ -62,7 +69,7 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
     """Send one request to the agent service. Returns the `agent` field saved on the reply message."""
     recent = db.scalars(select(ChatMessage).where(ChatMessage.trip_id == trip.id, ChatMessage.id < msg.id)
                         .order_by(ChatMessage.id.desc()).limit(CONTEXT)).all()
-    plan = db.scalar(select(Itinerary).where(Itinerary.trip_id == trip.id).order_by(Itinerary.letter))
+    plan, plan_run = proposals.published_plan(db, trip.id)
     payload = {
         "trip_id": trip.id,
         "itinerary_id": plan.id if plan else None,
@@ -75,23 +82,28 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
     except HTTPException as e:  # e.detail: agent_unavailable (not running / too slow) or agent_error_500 (it crashed)
         return {"state": "FAILED", "reply": f"{AGENT_NAME} can't answer right now. Please try again in a moment.",
                 "tool_calls": [], "proposal": None, "error": e.detail}
-    return {"state": "NEEDS_CLARIFICATION" if out.get("needs_clarification") else "SUCCEEDED",
-            "reply": out.get("reply") or "", "tool_calls": out.get("tool_calls") or [],
-            "proposal": out.get("proposal")}
+    answer = {"state": "NEEDS_CLARIFICATION" if out.get("needs_clarification") else "SUCCEEDED",
+              "reply": out.get("reply") or "", "tool_calls": out.get("tool_calls") or [],
+              "proposal": out.get("proposal")}
+    if answer["proposal"] and plan:  # waits for the group's vote; tied to the plan the agent looked at
+        answer.update(proposal_status=proposals.PENDING, plan_run_id=plan_run.id,
+                      removed=proposals.removed_stops(db, plan, answer["proposal"]))
+    elif answer["proposal"]:
+        answer["proposal"] = None
+    return answer
 
 
 @router.get("/trips/{trip_id}/chat")
-def list_chat(after: int = 0, trip: Trip = Depends(member_trip), db: Session = Depends(get_db)):
+def list_chat(after: int = 0, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
+              db: Session = Depends(get_db)):
     q = select(ChatMessage).where(ChatMessage.trip_id == trip.id, ChatMessage.id > after)
     rows = db.scalars(q.order_by(ChatMessage.id.desc()).limit(PAGE)).all()[::-1]  # newest PAGE, oldest first
-    names = _names(db, trip)
-    return {"agent_name": AGENT_NAME, "messages": [message_dict(m, names) for m in rows]}
+    return {"agent_name": AGENT_NAME, "messages": messages_out(db, trip, rows, user)}
 
 
 @router.post("/trips/{trip_id}/chat", status_code=201)
 async def post_chat(body: ChatIn, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
                     db: Session = Depends(get_db)):
-    names = _names(db, trip)
     mine = ChatMessage(trip_id=trip.id, author_id=user.id, kind="user", text=body.text,
                        created_at=datetime.now(timezone.utc))
     db.add(mine)
@@ -104,4 +116,55 @@ async def post_chat(body: ChatIn, trip: Trip = Depends(member_trip), user: User 
         db.add(reply)
         db.commit()
         created.append(reply)
-    return {"messages": [message_dict(m, names) for m in created]}
+    return {"messages": messages_out(db, trip, created, user)}
+
+
+class VoteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool
+
+
+@router.post("/trips/{trip_id}/chat/{message_id}/vote")
+async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(member_trip),
+                           user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """A member approves or rejects a TravelSync suggestion. A majority of members decides (issue #19)."""
+    msg = db.scalar(select(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.trip_id == trip.id)
+                    .with_for_update())
+    if not msg or msg.kind != "agent" or not (msg.agent or {}).get("proposal"):
+        raise HTTPException(404, "proposal_not_found")
+    status = proposals.agent_views(db, trip, [msg], user.id)[msg.id]["proposal_status"]
+    if status == proposals.STALE and msg.agent.get("proposal_status", proposals.PENDING) == proposals.PENDING:
+        msg.agent = {**msg.agent, "proposal_status": proposals.STALE}
+        db.commit()
+    if status != proposals.PENDING:
+        raise HTTPException(409, {"code": "proposal_closed", "status": status})
+    vote = db.scalar(select(ProposalVote).where(ProposalVote.message_id == msg.id, ProposalVote.user_id == user.id))
+    if vote:
+        vote.approve = body.approve  # members may change their mind while it is open
+    else:
+        db.add(ProposalVote(message_id=msg.id, user_id=user.id, approve=body.approve))
+    db.commit()
+
+    votes = proposals.tally(db, msg.id)
+    approve, reject, members = sum(v.approve for v in votes), sum(not v.approve for v in votes), len(trip.members)
+    decision = proposals.decide(approve, reject, members)
+    created = []
+    if decision:
+        if decision == "APPROVED":
+            msg.agent = {**msg.agent, "proposal_status": proposals.APPLYING}  # blocks a second apply
+            db.commit()
+            result = await proposals.apply(db, trip, msg)
+        else:
+            result = {"status": proposals.REJECTED}
+        msg = db.get(ChatMessage, message_id)
+        msg.agent = {**msg.agent, "proposal_status": result["status"], "result": result}
+        text = proposals.result_text(db, msg, result, approve, members)
+        note = ChatMessage(trip_id=trip.id, author_id=None, kind="agent", text=text, reply_to=msg.id,
+                           agent={"state": "SUCCEEDED", "reply": text, "proposal": None, "event": "proposal_result",
+                                  "tool_calls": [{"name": "group_vote",
+                                                  "summary": f"Group vote: {approve} approve, {reject} reject"}]},
+                           created_at=datetime.now(timezone.utc))
+        db.add(note)
+        db.commit()
+        created.append(note)
+    return {"messages": messages_out(db, db.get(Trip, trip.id), [db.get(ChatMessage, message_id), *created], user)}
