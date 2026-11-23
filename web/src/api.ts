@@ -60,6 +60,8 @@ const MESSAGES: Record<string, string> = {
   routing_credentials_rejected: "Kakao rejected the routing key or API permission. Check the planning-data service's REST API key and Kakao Mobility access, then restart that service.",
   kakao_rest_api_key_not_configured: "The planning-data service has no Kakao REST API key. Configure it and restart that service.",
   routing_quota_exceeded: "Kakao's routing request limit was reached. Check the API quota and try again later.",
+  routing_request_budget_exceeded: "This plan reached its routing request allowance. Saved routes and your previous plan are kept; choose closer places or a smaller candidate pool.",
+  routing_daily_budget_exceeded: "Today's local routing allowance is used up. Saved routes can still be reused. Try again after the allowance resets.",
   routing_request_rejected: "Kakao rejected a routing request. Check the planning-data logs for its HTTP status and provider error code.",
   routing_provider_error: "Kakao rejected the routing request. Check the planning-data service and Kakao API configuration.",
   routing_provider_unavailable: "The planning-data service could not reach Kakao routing. Check its network connection and try again.",
