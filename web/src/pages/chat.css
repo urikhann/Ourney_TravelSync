@@ -50,7 +50,14 @@
 .proposal .added { font-size: 13.5px; }
 .proposal .num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--purple, #7c3aed); }
 .proposal-actions { display: flex; gap: 8px; margin-top: 4px; }
-.proposal-actions .btn { flex: 1; }
+.proposal-actions .btn { flex: 1; gap: 6px; }
+.proposal-actions .btn.picked { border-color: var(--muted); background: var(--fill); }
+.proposal .removed { font-size: 13.5px; color: var(--muted); }
+.proposal-status { font-size: 13px; font-weight: 600; padding-top: 2px; }
+.proposal-status.applied { color: var(--green-d, #087F5B); }
+.proposal-status.rejected, .proposal-status.stale { color: var(--muted); }
+.proposal-status.failed, .proposal-error { color: #C92A2A; }
+.proposal.stale, .proposal.rejected { opacity: .75; }
 
 /* composer, docked above the tab bar */
 /* the tab bar is also sticky at the bottom (52px tabs + 12px padding + 14px margin), so the dock sits just above it */

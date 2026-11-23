@@ -3,6 +3,7 @@
 Only operational facts/routes come from the configured trusted adapter. It
 cannot replace recommendation scores, member rules, dates or budget.
 """
+import copy
 import hashlib
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -49,6 +50,9 @@ class GenerateInput(Contract):
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     required_access: Annotated[tuple[Annotated[str, Field(min_length=1, max_length=60)], ...], Field(max_length=20)] = ()
     locked_items: Annotated[tuple[Lock, ...], Field(max_length=60)] = ()
+    # Places the group removed by approving a TravelSync suggestion (issue #19). They are left out
+    # of planning-candidate retrieval only; member preferences and exclusions are unchanged.
+    excluded_poi_ids: Annotated[tuple[Annotated[str, Field(min_length=1, max_length=64)], ...], Field(max_length=60)] = ()
 
     @model_validator(mode="after")
     def valid_meals(self):
@@ -124,7 +128,8 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
     group = recommendation.get("group", [])
     ids = {r["poi_id"] for r in group}
     if (len({l.poi_id for l in body.locked_items}) != len(body.locked_items)
-            or any((not preflight_only and l.poi_id not in ids) or l.date.isoformat() not in dates(trip) for l in body.locked_items)):
+            or any((not preflight_only and l.poi_id not in ids) or l.date.isoformat() not in dates(trip) for l in body.locked_items)
+            or set(body.excluded_poi_ids) & {l.poi_id for l in body.locked_items}):
         raise HTTPException(422, "optimizer_invalid_locks")
     if preflight_only and body.locked_items:
         locked_rows = db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version,
@@ -179,7 +184,14 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
 def catalogue_request(run, body, db):
     """Reuse pinned member preferences; retrieve all rows of the pinned dataset."""
     rows = db.scalars(select(Poi).where(Poi.dataset_version == run.dataset_version).order_by(Poi.id)).all()
-    return {**run.request,
+    request = copy.deepcopy(run.request)  # never mutate the stored run
+    if body.excluded_poi_ids and request.get("members"):
+        # E1 removes these for the whole group, like a member's own place exclusion.
+        first = request["members"][0]
+        first["exclusions"] = {**(first.get("exclusions") or {}),
+                               "resolved": {**((first.get("exclusions") or {}).get("resolved") or {}),
+                                            **{pid: "group_removed" for pid in body.excluded_poi_ids}}}
+    return {**request,
         "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
             category_name=p.category, latitude=p.lat, longitude=p.lng,
             enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features)),

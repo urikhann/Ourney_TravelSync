@@ -280,3 +280,15 @@ class ChatMessage(Base):
     agent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reply_to: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the member message an agent reply answers
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ProposalVote(Base):
+    """A member's vote on a change TravelSync suggested in the chat (issue #19).
+    The plan only changes after a majority of the trip's members approve."""
+    __tablename__ = "proposal_votes"
+    __table_args__ = (UniqueConstraint("message_id", "user_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    approve: Mapped[bool] = mapped_column(Boolean)
+    voted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

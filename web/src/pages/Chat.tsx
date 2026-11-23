@@ -2,11 +2,11 @@
 // Only messages that start with "@TravelSync" or come from a quick-action chip go to the AI.
 // The screen polls every few seconds; the backend keeps the history (GET/POST /trips/{id}/chat).
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle } from "lucide-react";
+import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle, X } from "lucide-react";
 import { api, message } from "../api";
-import type { AgentProposal, ChatMessage, ChatPage, Place, Trip } from "../types";
+import type { ChatMessage, ChatPage, Place, ProposalStatus, Trip } from "../types";
 import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
@@ -68,7 +68,7 @@ export default function Chat() {
               const prev = msgs[i - 1];
               const grouped = prev && prev.kind === m.kind && prev.author?.id === m.author?.id;
               return m.kind === "agent"
-                ? <AgentBubble key={m.id} m={m} />
+                ? <AgentBubble key={m.id} m={m} tripId={id} />
                 : <UserBubble key={m.id} m={m} mine={m.author?.id === me} grouped={!!grouped} color={colorIndex[m.author?.id ?? ""] ?? 0} />;
             })}
             {pending && (  // show my question right away while TravelSync works on it
@@ -135,7 +135,7 @@ function UserBubble({ m, mine, grouped, color }: { m: ChatMessage; mine: boolean
   );
 }
 
-function AgentBubble({ m }: { m: ChatMessage }) {
+function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const a = m.agent;
   const failed = a?.state === "FAILED";
   return (
@@ -153,25 +153,65 @@ function AgentBubble({ m }: { m: ChatMessage }) {
             {a.tool_calls.map((t, i) => <span key={i} className="tool">{t.name === "gemini_error" ? <AlertTriangle size={12} /> : <Check size={12} />} {t.summary || t.name}</span>)}
           </div>
         )}
-        {a?.proposal && <ProposalCard p={a.proposal} />}
+        {a?.proposal && <ProposalCard m={m} tripId={tripId} />}
         <div className="msg-time">{time(m.created_at)}</div>
       </div>
     </div>
   );
 }
 
-/** A suggested change to the plan. Applying it needs the group's approval, which arrives with the real agent. */
-function ProposalCard({ p }: { p: AgentProposal }) {
+const CLOSED: Record<Exclude<ProposalStatus, "PENDING">, string> = {
+  APPLYING: "Approved — updating the plan…",
+  APPLIED: "Approved — the plan was updated.",
+  REJECTED: "Rejected by the group — the plan stays the same.",
+  FAILED: "Approved, but it didn't fit into a valid plan. The plan is unchanged.",
+  STALE: "Out of date — the plan changed after this suggestion.",
+};
+
+/** A suggested change to the plan. It only changes the plan after a majority of the group approves (issue #19). */
+function ProposalCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
+  const a = m.agent!;
+  const p = a.proposal!;
+  const v = a.votes;
+  const status: ProposalStatus = a.proposal_status ?? "STALE";
+  const qc = useQueryClient();
+  const vote = useMutation({
+    mutationFn: (approve: boolean) => api.post(`/trips/${tripId}/chat/${m.id}/vote`, { approve }),
+    onSettled: () => {  // the deciding vote can rebuild the plan, so refresh both screens
+      qc.invalidateQueries({ queryKey: ["chat", tripId] });
+      qc.invalidateQueries({ queryKey: ["plans", tripId] });
+    },
+  });
+  const removed = a.removed ?? [];
   return (
-    <div className="proposal">
+    <div className={"proposal " + status.toLowerCase()}>
       <div className="eyebrow" style={{ color: "var(--purple)" }}>Suggested change · {p.date}</div>
-      {p.remove_item_ids.length > 0 && <div className="small muted">Remove {p.remove_item_ids.length} stop{p.remove_item_ids.length > 1 ? "s" : ""}</div>}
+      {removed.map((r) => <div key={r.poi_id} className="removed"><span className="num">{r.start}</span> <s>{r.name}</s></div>)}
+      {!removed.length && p.remove_item_ids.length > 0 &&
+        <div className="small muted">Remove {p.remove_item_ids.length} stop{p.remove_item_ids.length > 1 ? "s" : ""}</div>}
       {p.add.map((x) => <AddedStop key={x.poi_id + x.start} poiId={x.poi_id} start={x.start} />)}
-      <div className="proposal-actions">
-        <button className="btn sm" disabled>Approve</button>
-        <button className="btn ghost sm" disabled>Reject</button>
-      </div>
-      <div className="tiny muted">Group approval is coming with the real agent.</div>
+      {status === "PENDING" ? (
+        <>
+          <div className="proposal-actions">
+            <button className={"btn sm" + (v?.mine === true ? " green" : "")} disabled={vote.isPending}
+              aria-pressed={v?.mine === true} onClick={() => vote.mutate(true)}><Check size={15} /> Approve</button>
+            <button className={"btn ghost sm" + (v?.mine === false ? " picked" : "")} disabled={vote.isPending}
+              aria-pressed={v?.mine === false} onClick={() => vote.mutate(false)}><X size={15} /> Reject</button>
+          </div>
+          <div className="tiny muted">
+            {vote.isPending ? "Saving your vote… if it's the deciding one, the plan is rebuilt (up to a minute)."
+              : v ? `${v.approve} approve · ${v.reject} reject · ${v.needed} of ${v.members} approvals needed`
+              + (v.mine === null ? "" : ` · you ${v.mine ? "approved" : "rejected"}`) : ""}
+          </div>
+        </>
+      ) : (
+        <div className={"proposal-status " + status.toLowerCase()}>
+          {CLOSED[status]}
+          {status === "APPLIED" && <> <Link to={`/trips/${tripId}/plan`}>Open the plan</Link></>}
+          {v && status !== "STALE" && <span className="muted"> ({v.approve} approve · {v.reject} reject)</span>}
+        </div>
+      )}
+      {vote.error && <div className="tiny proposal-error">{message(vote.error)}</div>}
     </div>
   );
 }
