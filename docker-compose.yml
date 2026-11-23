@@ -75,13 +75,16 @@ services:
       db: {condition: service_healthy}
     volumes: ["./services/mocks:/code", "./src:/package/src:ro"]
 
-  agent:  # TravelSync AI agent (Gemini + read-only tools). Without GEMINI_API_KEY it answers with simple rules.
+  agent:  # TravelSync AI agent with selectable model provider and read-only tools.
     build: ./services/agent
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       AVAILABILITY_URL: http://mocks:8001
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-gemini}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
     ports: ["127.0.0.1:8005:8005"]
     depends_on:
       db: {condition: service_healthy}
