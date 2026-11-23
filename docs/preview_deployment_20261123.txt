@@ -35,3 +35,38 @@ would send the latest trip's private locations to Kakao. No live check was sent
 by that rejected action. User approval was requested separately. Therefore the
 latest trip is not claimed to work end-to-end yet. A reduced request count does
 not replenish an exhausted provider quota, and health checks do not prove a plan.
+
+Follow-up live check (user approved location disclosure):
+The guarded check reached its 80-request allowance. Successful responses were
+saved, increasing coverage for the same 16-place trip to 245 of 272 route edges.
+A cache-only replay then produced a one-day, nine-stop FEASIBLE plan and PASSED
+final validation. No published itinerary was modified. This exposed a defect:
+the initial guard aborted the whole snapshot despite sufficient saved evidence.
+
+The partial-cache fallback was implemented and deployed in planning-data/API.
+48 focused routing, evening, API checks passed and frontend type-check passed.
+The final deployed-code replay disables all provider requests in its isolated
+process to simulate an exhausted allowance. It uses the real imported operating
+facts, stored routes, candidate service and running optimizer. Its measured
+result is recorded below. This is a replay, not a claim of browser acceptance or
+fresh traffic accuracy; the saved itinerary remains unchanged.
+
+{
+  "candidate_count": 16,
+  "route_edges_needed": 272,
+  "saved_edges": 272,
+  "missing_edges": 0,
+  "replay": {
+    "solver_status": "FEASIBLE",
+    "validation_status": "PASSED",
+    "error_code": null,
+    "visits": 9,
+    "days": 1
+  },
+  "published": false,
+  "mode": "exhausted_budget_replay",
+  "routing_warnings": [],
+  "kakao_requests": 0
+}
+
+Final observation: the running application's latest generation is PASSED / FEASIBLE, uses 16 candidates and has a published nine-stop plan. The final read-only replay used all 272 saved edges with zero additional Kakao requests. The routing fallback is also retained on codex/routing-quota-guard as 87e7edf. Main remains unchanged.
