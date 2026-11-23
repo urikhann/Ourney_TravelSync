@@ -1,0 +1,37 @@
+Local preview deployment — 23 November 2026
+
+Branch: codex/preview-travelsync-fixes. Main is unchanged.
+Includes evening-bars 6280e9d, routing guard d95475d, agent trials 4cf9a49.
+
+The running local Docker services were rebuilt from this combined branch:
+API, recommender, optimizer, planning-data and agent. The existing web development
+server uses the checkout's source. Database and route-cache volumes were retained.
+
+Start/reapply preview from the repository directory:
+docker compose -f docker-compose.yml -f compose.preview.yml up -d --build
+
+The preview override fixes candidate depth at 16, routing concurrency at 2,
+snapshot request allowance at 80 and local daily request allowance at 200.
+It deliberately takes precedence over older .env settings. No credentials are
+stored in the override file. The normal .env.example now documents these defaults.
+
+Open http://localhost:5173 and refresh the Plan screen. Optional evening choices
+appear in the planning form. Rebuild uses the new routing settings and saved cache.
+Switching branches alone is insufficient: rebuilt Python images must be restarted.
+Do not merge into main solely because the services are healthy.
+
+Verification completed:
+  50 combined routing/evening/API checks passed before deployment.
+  Planning-data health reports routing_guard.enabled=true, concurrency=2,
+  max_requests_per_snapshot=80 and local_daily_request_limit=200.
+  The recommender's installed candidate code and environment both use the new limit.
+  All rebuilt core services started; existing database and saved routes remain.
+  Read-only replay of the latest attempted trip selected 16 places and required
+  272 directed route legs. Only 108 were cached; 164 were missing. The cache-only
+  solver replay returned INSUFFICIENT_CANDIDATES. No published itinerary changed.
+
+A live routing verification was blocked by automatic approval review because it
+would send the latest trip's private locations to Kakao. No live check was sent
+by that rejected action. User approval was requested separately. Therefore the
+latest trip is not claimed to work end-to-end yet. A reduced request count does
+not replenish an exhausted provider quota, and health checks do not prove a plan.

@@ -625,6 +625,11 @@ def health():
         "module": "planning-data",
         "schema_version": "planning-data-1.0",
         "kakao_configured": bool(KAKAO_REST_API_KEY),
+        "routing_guard": {
+            "enabled": True, "concurrency": KAKAO_ROUTE_CONCURRENCY,
+            "max_requests_per_snapshot": KAKAO_ROUTE_MAX_REQUESTS,
+            "local_daily_request_limit": KAKAO_ROUTE_DAILY_REQUEST_LIMIT,
+        },
         "route_cache": {"persistent": True, "expires": False, "mode": "demo_snapshot"},
     }
 
