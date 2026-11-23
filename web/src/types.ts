@@ -76,6 +76,7 @@ export type OptimizationInput = {
 export type Plan = {
   id: number; letter: string; variant: string; name: string; votes: number; stale: boolean;
   stats: { group_fit: number | null; total_cost: number; cost_unknown_count?: number; budget_enforced?: boolean;
+    routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
   days: { date: string; items: PlanItem[]; start: string; start_label: string; end_label: string;

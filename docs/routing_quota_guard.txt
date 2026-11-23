@@ -31,3 +31,14 @@ No fabricated route is inserted, and no quota reset, account upgrade or key
 rotation is performed. Exhausted upstream quota still requires provider recovery
 or sufficient existing cache coverage. This branch was tested with fake HTTP
 responses; it has not been deployed over the running stack.
+
+Follow-up: partial-cache fallback
+
+Reaching a provider quota or local request allowance no longer discards a
+partially completed matrix. Completed evidence is reloaded from the saved cache;
+unfetched legs remain UNKNOWN with no duration/fare invented. The normal E2,
+solver and independent E3 gates decide whether those known edges support a plan.
+With no known edges, the explicit quota/allowance error is retained. With an
+insufficient graph, planning still fails rather than guessing travel times.
+Successful plans retain routing_warnings and the UI says some alternatives could
+not be checked. The 80-request limit itself is unchanged.

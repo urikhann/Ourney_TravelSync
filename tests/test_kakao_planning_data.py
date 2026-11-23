@@ -149,6 +149,10 @@ def test_provider_failures_are_not_place_exclusions(adapter, status, code):
             return await adapter._routes_from_origin(client, asyncio.Semaphore(1), "s",
                 {"longitude": 129, "latitude": 35},
                 [("p", {"longitude": 129.1, "latitude": 35.1})], "2026-11-13")
+    if status == 429:
+        edges = asyncio.run(run())
+        assert edges[0]["status"] == "UNKNOWN"  # not a claim the place is unreachable
+        return
     with pytest.raises(HTTPException) as error:
         asyncio.run(run())
     assert error.value.detail == code
@@ -503,3 +507,35 @@ def test_seed_imports_saved_successful_edges_without_network(adapter,monkeypatch
     stored=adapter._cached_routes([adapter._cache_key(origin,dest)])
     assert len(stored)==1 and next(iter(stored.values()))["fetched_at"]==edge["fetched_at"]
     assert '"provider_requests": 0' in capsys.readouterr().out
+
+
+def test_limit_returns_partial_evidenced_graph_with_warning(adapter,monkeypatch):
+    import json
+    monkeypatch.setattr(adapter,"KAKAO_REST_API_KEY","test-only")
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",1)
+    real_client=httpx.AsyncClient
+    calls=[]
+    def respond(req):
+        calls.append(req)
+        payload=json.loads(req.content)
+        return httpx.Response(200,json={"routes":[dict(key=d["key"],result_code=0,
+            summary=dict(duration=60,distance=500)) for d in payload["destinations"]]})
+    monkeypatch.setattr(adapter.httpx,"AsyncClient",lambda **kw: real_client(transport=httpx.MockTransport(respond),**kw))
+    req=dict(pois=[dict(poi_id="p",latitude=35.12,longitude=129.12)],
+        points=dict(s=dict(latitude=35.1,longitude=129.1),e=dict(latitude=35.14,longitude=129.14)),
+        days=[dict(date="2026-11-23",start_point="s",end_point="e")])
+    edges=asyncio.run(adapter._build_drive_edges(req))
+    assert len(calls)==1
+    assert {e["status"] for e in edges}=={"KNOWN","UNKNOWN"}
+    assert edges.warnings==("routing_request_budget_exceeded",)
+    assert all(e["duration_minutes"] is None for e in edges if e["status"]=="UNKNOWN")
+
+
+def test_limit_with_no_saved_routes_keeps_explicit_failure(adapter,monkeypatch):
+    monkeypatch.setattr(adapter,"KAKAO_REST_API_KEY","test-only")
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",0)
+    req=dict(pois=[dict(poi_id="p",latitude=35.12,longitude=129.12)],
+        points=dict(s=dict(latitude=35.1,longitude=129.1),e=dict(latitude=35.14,longitude=129.14)),
+        days=[dict(date="2026-11-23",start_point="s",end_point="e")])
+    with pytest.raises(HTTPException,match="routing_request_budget_exceeded"):
+        asyncio.run(adapter._build_drive_edges(req))
