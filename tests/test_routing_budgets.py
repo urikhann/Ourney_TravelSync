@@ -5,8 +5,10 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
-import httpx
 import pytest
+
+httpx = pytest.importorskip("httpx")
+pytest.importorskip("fastapi")
 from fastapi import HTTPException
 
 from test_kakao_planning_data import adapter  # shared isolated cache/DB fixture
@@ -200,3 +202,23 @@ def test_connected_graph_does_not_expand_just_to_fill_unused_edges(adapter,monke
     edges=asyncio.run(adapter._build_drive_edges(req))
     assert len(calls)==1 and any(e["status"]=="UNKNOWN" for e in edges)
     assert not adapter._needs_route_expansion(req,edges)
+
+
+def test_selected_leg_falls_back_to_batch_without_resetting_plan_allowance(adapter, monkeypatch):
+    monkeypatch.setattr(adapter, "KAKAO_ROUTE_INITIAL_REQUESTS", 1)
+    monkeypatch.setattr(adapter, "KAKAO_ROUTE_MAX_REQUESTS", 2)
+    monkeypatch.setattr(adapter, "KAKAO_ROUTE_POINT_DAILY_QUOTA", 0)
+    calls = fake_batches(adapter, monkeypatch)
+    req = graph_request(2)
+    day = req["days"][0]["date"]
+    req["day_candidate_ids"] = {day: ["0", "1"]}
+    first = dict(date=day, origin="s", destination="0")
+    second = dict(date=day, origin="0", destination="1")
+    third = dict(date=day, origin="1", destination="e")
+    edges, spent = asyncio.run(adapter._build_selected_edges({**req, "route_legs": [first]}))
+    assert edges[0]["status"] == "KNOWN" and spent == {"batch": 1}
+    edges, spent = asyncio.run(adapter._build_selected_edges(
+        {**req, "route_legs": [first, second, third], "routing_attempts": spent, "expand_routing_budget": True}))
+    assert len(calls) == 2 and spent == {"batch": 2}
+    assert sum(edge["status"] == "KNOWN" for edge in edges) == 2
+    assert edges.warnings == ("routing_request_budget_exceeded",)

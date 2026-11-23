@@ -27,6 +27,13 @@ KAKAO_ROUTE_DAILY_REQUEST_LIMIT is obsolete and ignored. An existing
 KAKAO_ROUTE_MAX_REQUESTS=80 still explicitly overrides the hard plan cap: remove
 it or set 200 for default expansion. No real credential is stored in configuration.
 
+App driving generation uses selected legs from a Haversine draft. It carries the
+endpoint attempt counts across the initial lookup and up to two repair rounds.
+The first lookup gets the initial allowance. Repairs may use the remaining
+hard-cap allowance, including retries. An uncached selected leg normally takes
+one point request. The batch endpoint can serve a selected leg if point quota
+is unavailable and the leg is within the configured batch radius.
+
 Each planning snapshot starts with 80 combined HTTP attempts. If used up and
 UNKNOWN edges leave a candidate without a known round-trip connection to the
 day's endpoints, a second pass can expand to 200 TOTAL attempts. Both passes

@@ -59,10 +59,10 @@ async def build_plans(payload: dict) -> dict:
     return await _post(config.OPTIMIZER_URL, "/plans", payload, "optimizer", config.OPTIMIZER_TIMEOUT_SECONDS)
 
 
-async def planning_data(payload: dict) -> dict:
+async def planning_data(payload: dict, *, selected=False) -> dict:
     if not config.PLANNING_DATA_URL:
         raise HTTPException(503, "planning_data_not_configured")
-    return await _post(config.PLANNING_DATA_URL, "/snapshot", payload, "planning_data",
+    return await _post(config.PLANNING_DATA_URL, "/selected-snapshot" if selected else "/snapshot", payload, "planning_data",
                        config.PLANNING_DATA_TIMEOUT_SECONDS,
                        {"Authorization": f"Bearer {config.PLANNING_DATA_TOKEN}"} if config.PLANNING_DATA_TOKEN else None)
 

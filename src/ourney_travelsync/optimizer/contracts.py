@@ -142,9 +142,10 @@ class Edge(Contract):
     date: date
     origin: Annotated[str, Field(min_length=1)]
     destination: Annotated[str, Field(min_length=1)]
-    status: Literal["KNOWN", "UNKNOWN", "UNREACHABLE"]
+    status: Literal["KNOWN", "UNKNOWN", "UNREACHABLE", "ESTIMATED"]
     duration_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     distance_m: NonNegative | None = None
+    straight_line_m: NonNegative | None = None
     group_fare: NonNegative | None = None
     walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     provider: str | None = None
@@ -152,9 +153,15 @@ class Edge(Contract):
 
     @property
     def usable(self) -> bool:
-        return (self.status == "KNOWN" and bool(self.provider) and self.fetched_at is not None
+        return (self.status == "KNOWN" and bool(self.provider) and self.provider != "haversine-draft-v1" and self.fetched_at is not None
                 and all(v is not None for v in (self.duration_minutes, self.distance_m,
                                                self.group_fare, self.walk_minutes)))
+
+    @property
+    def draft_usable(self) -> bool:
+        return (self.status == "ESTIMATED" and self.provider == "haversine-draft-v1"
+                and self.duration_minutes is not None and self.distance_m is not None
+                and self.group_fare == 0 and self.walk_minutes == 0)
 
 
 class Lock(Contract):
@@ -184,6 +191,7 @@ class PlanRequest(Contract):
     enforce_opening_hours: bool = True
     allow_unknown_opening_hours: bool = False
     optimize_travel: bool = True
+    provisional: bool = False
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     locked_items: tuple[Lock, ...] = ()
@@ -218,6 +226,10 @@ class PlanRequest(Contract):
             raise ValueError("lock references unknown POI/date")
         if any(e.date not in dates for e in self.edges):
             raise ValueError("edge references unknown date")
+        if any(e.status == "ESTIMATED" and (not self.provisional or not e.draft_usable) for e in self.edges):
+            raise ValueError("estimated routes are restricted to provisional planning")
+        if self.provisional and (self.enforce_cost or self.transport_mode != "drive"):
+            raise ValueError("provisional planning requires driving with budget enforcement disabled")
         if self.daily_composition is not None:
             from .meals import validate_meal_overrides
             validate_meal_overrides(self.days, self.daily_composition)
@@ -256,7 +268,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "minimum_relevance", "travel_minutes", "meal_preference"]
+    objective: Literal["group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

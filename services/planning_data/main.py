@@ -54,6 +54,7 @@ KAKAO_DIRECTIONS_URL = "https://apis-navi.kakaomobility.com/v1/directions"
 logger = logging.getLogger(__name__)
 PROVIDER = "KAKAO_MOBILITY_MULTI_DESTINATION_V1_TOLL_FREE"
 ROUTING_VERSION = "kakao-drive-multidestination-with-point-fallback-v2"
+ROUTING_LIMITS = {"routing_quota_exceeded", "routing_daily_budget_exceeded", "routing_request_budget_exceeded"}
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 app = FastAPI(title="TravelSync planning data", version="1.0")
@@ -287,24 +288,23 @@ async def _retry_pause(seconds):
 
 async def _route_request(client, semaphore, method, url, **kwargs):
     endpoint = "point" if url == KAKAO_DIRECTIONS_URL else "batch"
+    if not hasattr(client, "_travelsync_reservation_lock"):
+        client._travelsync_reservation_lock = asyncio.Lock()
     for attempt in range(3):
         async with semaphore:
-            limit = min(getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
-            counts = getattr(client, "_travelsync_endpoint_requests", {})
-            share = max(1, _daily_limit(endpoint) * KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT // 100)
-            if (getattr(client, "_travelsync_route_requests", 0) >= limit
-                    or counts.get(endpoint, 0) >= share):
-                raise HTTPException(503, "routing_request_budget_exceeded")
-            client._travelsync_route_requests = getattr(client, "_travelsync_route_requests", 0) + 1
-            counts[endpoint] = counts.get(endpoint, 0) + 1
-            client._travelsync_endpoint_requests = counts
-            try:
+            # A rejected daily reservation must never occupy the last plan slot
+            # while another endpoint still has room to serve it.
+            async with client._travelsync_reservation_lock:
+                limit = min(getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
+                total = getattr(client, "_travelsync_route_requests", 0)
+                counts = getattr(client, "_travelsync_endpoint_requests", {})
+                share = max(1, _daily_limit(endpoint) * KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT // 100)
+                if total >= limit or counts.get(endpoint, 0) >= share:
+                    raise HTTPException(503, "routing_request_budget_exceeded")
                 await asyncio.to_thread(_reserve_request, endpoint)
-            except HTTPException:
-                # Refused reservations never become outbound HTTP attempts.
-                client._travelsync_route_requests -= 1
-                counts[endpoint] -= 1
-                raise
+                client._travelsync_route_requests = total + 1
+                counts[endpoint] = counts.get(endpoint, 0) + 1
+                client._travelsync_endpoint_requests = counts
             response = await client.request(method, url, **kwargs)
             if response.status_code == 429 or _provider_error_code(response) == -10:
                 await asyncio.to_thread(_block_requests, endpoint, response.headers.get("Retry-After"))
@@ -518,7 +518,7 @@ async def _routes_from_origin(client, semaphore, origin_id, origin, destinations
             try:
                 fresh = await _fetch_routes_from_origin(client, semaphore, origin_id, origin, misses, day)
             except HTTPException as exc:
-                if exc.detail not in ("routing_quota_exceeded", "routing_request_budget_exceeded", "routing_daily_budget_exceeded"):
+                if exc.detail not in ROUTING_LIMITS:
                     raise
                 client._travelsync_limit_reason = exc.detail
                 # Successful batches/fallbacks may have completed before the limit.
@@ -574,14 +574,26 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
             "priority": "TIME",
             "avoid": ["toll"],
         }
+        single_selected = getattr(client, "_travelsync_selected_legs", False) and len(batch) == 1
+        point_limit_reason = None
+        by_key = None
         try:
-            response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
-            body = response.json()
-            by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
+            if single_selected:
+                pid, point = batch[0]
+                try:
+                    by_key = {pid: await _point_route(client, semaphore, origin, point)}
+                except HTTPException as exc:
+                    if exc.detail not in ("routing_quota_exceeded", "routing_daily_budget_exceeded"):
+                        raise
+                    point_limit_reason = exc.detail
+            if by_key is None:
+                response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
+                body = response.json()
+                by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
         except HTTPException as exc:
             per_plan_total_spent = getattr(client, "_travelsync_route_requests", 0) >= min(
                 getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
-            if (exc.detail not in ("routing_quota_exceeded", "routing_daily_budget_exceeded", "routing_request_budget_exceeded")
+            if (single_selected or exc.detail not in ROUTING_LIMITS
                     or (exc.detail == "routing_request_budget_exceeded" and per_plan_total_spent)):
                 raise
             # Independent point quota can still serve this batch. This path is
@@ -598,11 +610,16 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
         for pid, point in batch:
             await _save_provider_route(origin, point, by_key.get(pid, {}))
         outside = [(pid, point) for pid, point in batch
-                   if by_key.get(pid, {}).get("result_code") == 304]
-        if outside:
+                   if by_key.get(pid, {}).get("result_code") == 304 and not by_key[pid].get("_point_route")]
+        if outside and not point_limit_reason:
             fallback = await _gather_routes((
                 _point_and_cache(client, semaphore, origin, point) for _, point in outside))
             by_key.update({pid: route for (pid, _), route in zip(outside, fallback)})
+        elif outside:
+            # Radius overflow with unavailable point routing is unknown.
+            client._travelsync_limit_reason = point_limit_reason
+            for pid, _ in outside:
+                by_key.pop(pid)
 
         fetched = _now().isoformat()
         for dest_id, _ in batch:
@@ -658,6 +675,54 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
 
 class RouteEdges(list):
     warnings = ()
+
+
+async def _build_selected_edges(request):
+    legs = request.get("route_legs")
+    spent = request.get("routing_attempts", {})
+    expand = request.get("expand_routing_budget", False)
+    if (not isinstance(legs, list) or len(legs) > 63 or not isinstance(spent, dict)
+            or set(spent) - {"batch", "point"} or type(expand) is not bool
+            or any(type(v) is not int or v < 0 for v in spent.values())):
+        raise HTTPException(422, "routing_invalid_selected_legs")
+    edges = RouteEdges()
+    if not legs:
+        return edges, spent
+    if not KAKAO_REST_API_KEY:
+        raise HTTPException(503, "kakao_rest_api_key_not_configured")
+    days = {day["date"]: day for day in request["days"]}
+    points = {p["poi_id"]: p for p in request["pois"]} | request["points"]
+    grouped = {}
+    seen = set()
+    for leg in legs:
+        if not isinstance(leg, dict) or any(not isinstance(leg.get(k), str) for k in ("date", "origin", "destination")):
+            raise HTTPException(422, "routing_invalid_selected_legs")
+        day, origin, destination = (leg[k] for k in ("date", "origin", "destination"))
+        key = (day, origin, destination)
+        if day not in days or origin == destination or key in seen:
+            raise HTTPException(422, "routing_invalid_selected_legs")
+        candidates = set(request["day_candidate_ids"].get(day, []))
+        start, end = days[day]["start_point"], days[day]["end_point"]
+        if (origin not in candidates | {start} or destination not in candidates | {end}
+                or origin not in points or destination not in points or (origin == start and destination == end)):
+            raise HTTPException(422, "routing_invalid_selected_legs")
+        seen.add(key)
+        grouped.setdefault((day, origin), []).append((destination, points[destination]))
+    semaphore = asyncio.Semaphore(KAKAO_ROUTE_CONCURRENCY)
+    async with httpx.AsyncClient(headers={"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"},
+                                 timeout=httpx.Timeout(15.0)) as client:
+        client._travelsync_selected_legs = True
+        client._travelsync_endpoint_requests = dict(spent)
+        client._travelsync_route_requests = sum(spent.values())
+        if expand:
+            client._travelsync_plan_limit = KAKAO_ROUTE_MAX_REQUESTS
+        batches = await _gather_routes(_routes_from_origin(client, semaphore, origin, points[origin], targets, day)
+                                       for (day, origin), targets in grouped.items())
+        edges.extend(edge for batch in batches for edge in batch)
+        limit = getattr(client, "_travelsync_limit_reason", None)
+        if limit and any(e["status"] == "UNKNOWN" for e in edges):
+            edges.warnings = (limit,)
+        return edges, client._travelsync_endpoint_requests
 
 
 def _assemble_edges(nested, layouts):
@@ -777,6 +842,15 @@ def health():
 
 @app.post("/snapshot")
 async def snapshot(request: dict, authorization: str | None = Header(default=None)):
+    return await _snapshot(request, authorization, selected=False)
+
+
+@app.post("/selected-snapshot")
+async def selected_snapshot(request: dict, authorization: str | None = Header(default=None)):
+    return await _snapshot(request, authorization, selected=True)
+
+
+async def _snapshot(request, authorization, *, selected):
     _auth(authorization)
     if request.get("schema_version") != "planning-data-1.0":
         raise HTTPException(422, "planning_data_schema_mismatch")
@@ -786,15 +860,18 @@ async def snapshot(request: dict, authorization: str | None = Header(default=Non
     poi_ids = [p["poi_id"] for p in request.get("pois", [])]
     day_values = [date.fromisoformat(d["date"]) for d in request.get("days", [])]
     operating = await asyncio.to_thread(_load_operating, request["dataset_version"], poi_ids, day_values)
-    edges = await _build_drive_edges(request)
-    for day in request.get("days", []):
+    if selected:
+        edges, spent = await _build_selected_edges(request)
+    else:
+        edges = await _build_drive_edges(request)
+    for day in (() if selected else request.get("days", [])):
         departure_edges = [e for e in edges if e["date"] == day["date"] and e["origin"] == day["start_point"]]
         return_edges = [e for e in edges if e["date"] == day["date"] and e["destination"] == day["end_point"]]
         if departure_edges and all(e["status"] == "UNREACHABLE" for e in departure_edges):
             raise HTTPException(422, "routing_start_point_unreachable")
         if return_edges and all(e["status"] == "UNREACHABLE" for e in return_edges):
             raise HTTPException(422, "routing_end_point_unreachable")
-    if edges and not any(edge["status"] == "KNOWN" for edge in edges):
+    if not selected and edges and not any(edge["status"] == "KNOWN" for edge in edges):
         code = ("routing_no_routes" if all(edge["status"] == "UNREACHABLE" for edge in edges)
                 else "routing_invalid_response")
         raise HTTPException(502, code)
@@ -812,6 +889,7 @@ async def snapshot(request: dict, authorization: str | None = Header(default=Non
         "transport_mode": "drive",
         "operating_snapshot_id": "travel-db-" + _hash(snapshot_basis)[:16],
         "routing_version": ROUTING_VERSION,
+        **({"routing_attempts": spent} if selected else {}),
         "routing_warnings": list(getattr(edges, "warnings", ())),
         "pois": [operating[pid] for pid in poi_ids if pid in operating],
         "edges": edges,

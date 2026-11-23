@@ -29,6 +29,8 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
                      for d in days)
     except (ValidationError, TypeError, AttributeError):
         return ValidationResult(("INVALID_VALIDATION_INPUT",))
+    if req.provisional:
+        return ValidationResult(("PROVISIONAL_ROUTE_EVIDENCE",))
     errors = []
     expected = {d.date: d for d in req.days}
     if len(days) != len(expected) or {d.date for d in days} != set(expected):
@@ -62,8 +64,7 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
         def leg(destination):
             nonlocal cost, travel, walk
             e = edges.get((day.date, prev, destination))
-            if e is None or e.status != "KNOWN" or not e.provider or e.fetched_at is None or any(
-                    v is None for v in (e.duration_minutes, e.group_fare, e.walk_minutes, e.distance_m)):
+            if e is None or not e.usable:
                 problem("ROUTE_UNVERIFIED", day.date, destination)
                 return None
             if req.max_leg_minutes is not None and e.duration_minutes > req.max_leg_minutes:

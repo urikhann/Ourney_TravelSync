@@ -34,6 +34,8 @@ def optimize(request: PlanRequest | dict) -> PlanResponse:
                           if m.required) if result.status == "INFEASIBLE" else ()
         return PlanResponse(**base, error_code=codes.get(result.status, "SOLVER_FAILED"),
                             validation_errors=conflicts)
+    if req.provisional:
+        return PlanResponse(**base, days=result.days)
     validation = validate_final(req, result.days)
     if not validation.passed:
         return PlanResponse(**base, validation_status="FAILED", error_code="FINAL_VALIDATION_FAILED",

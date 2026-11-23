@@ -27,7 +27,8 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     eligible = {e.poi_id: e for e in eligibility}
     pois = {p.poi_id: p for p in sorted(req.candidates, key=lambda p: p.poi_id)
             if p.poi_id in eligible and eligible[p.poi_id].schedule_eligible}
-    edges = {(e.date, e.origin, e.destination): e for e in req.edges if e.usable}
+    edges = {(e.date, e.origin, e.destination): e for e in req.edges
+             if e.usable or (req.provisional and e.draft_usable)}
     visits, times, day_arcs = {}, {}, {}
     total_cost = []
     meal_preferences = []
@@ -150,6 +151,11 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         # Reuse the full search allowance without adding a route preference.
         total_fraction = sum(o[3] for o in objectives)
         objectives = [(n, e, m, f / total_fraction) for n, e, m, f in objectives]
+    if req.provisional:
+        distance = sum(a * (e.straight_line_m if e.straight_line_m is not None else e.distance_m)
+                       for _, arcs in day_arcs.values() for a, e in arcs.values())
+        objectives = [(n, e, m, f * .8) for n, e, m, f in objectives]
+        objectives.insert(2, ("haversine_distance_m", distance, False, .2))
     for name, expression, maximize, fraction in objectives:
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:
