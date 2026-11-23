@@ -18,7 +18,19 @@ TravelSync의 기존 `planning-data-1.0` 경계에 자동차 경로를 연결한
 선택:
 - `PLANNING_DATA_TOKEN`
 - `KAKAO_ROUTE_RADIUS` (default 5000, max 10000)
-- `KAKAO_ROUTE_CONCURRENCY` (default 8)
+- `KAKAO_ROUTE_CONCURRENCY` (default 2)
+- `KAKAO_ROUTE_BATCH_DAILY_QUOTA` / `KAKAO_ROUTE_POINT_DAILY_QUOTA` (1000 / 10000)
+- `KAKAO_ROUTE_QUOTA_RESERVE_PERCENT` (10: usable daily budgets 900 / 9000)
+- `KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT` (10 per planning snapshot)
+- `KAKAO_ROUTE_INITIAL_REQUESTS` / `KAKAO_ROUTE_MAX_REQUESTS` (80 / 200 total)
+
+Endpoint counters and cooldowns are independent and persistent. Batch quota
+exhaustion may use point routing within its own allowance. Cache hits are free
+of local accounting; retries count. A second pass expands the initial allowance
+only for missing round-trip graph connectivity, reusing cached results and one
+combined hard cap. `/diagnostics` reports local per-endpoint usage; it cannot
+observe other applications' Kakao calls. The old global 200/day cap is removed.
+See `docs/routing_quota_guard.txt` for configuration, upgrade and fallback details.
 
 ## Repository setup
 

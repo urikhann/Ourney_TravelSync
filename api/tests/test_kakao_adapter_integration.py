@@ -67,7 +67,8 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
         audit = audits(tid)[0]
         assert audit.optimizer_request["routing_version"] == adapter.ROUTING_VERSION
         assert all(e["duration_minutes"] == 11 and e["group_fare"] == e["walk_minutes"] == 0
-                   for e in audit.optimizer_request["edges"])
+                   for e in audit.optimizer_request["edges"] if e["status"] == "KNOWN")
+        assert all(e["duration_minutes"] is None for e in audit.optimizer_request["edges"] if e["status"] == "UNKNOWN")
         assert "synthetic-key" not in str(audit.optimizer_request)
     finally:
         adapter.engine.dispose()

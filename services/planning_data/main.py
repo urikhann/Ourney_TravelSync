@@ -20,6 +20,7 @@ import weakref
 from pathlib import Path
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -38,8 +39,12 @@ KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 PLANNING_DATA_TOKEN = os.getenv("PLANNING_DATA_TOKEN", "")
 KAKAO_ROUTE_RADIUS = min(10000, max(1, int(os.getenv("KAKAO_ROUTE_RADIUS", "5000"))))
 KAKAO_ROUTE_CONCURRENCY = max(1, int(os.getenv("KAKAO_ROUTE_CONCURRENCY", "2")))
-KAKAO_ROUTE_MAX_REQUESTS = max(1, int(os.getenv("KAKAO_ROUTE_MAX_REQUESTS", "80")))
-KAKAO_ROUTE_DAILY_REQUEST_LIMIT = max(1, int(os.getenv("KAKAO_ROUTE_DAILY_REQUEST_LIMIT", "200")))
+KAKAO_ROUTE_INITIAL_REQUESTS = max(1, int(os.getenv("KAKAO_ROUTE_INITIAL_REQUESTS", "80")))
+KAKAO_ROUTE_MAX_REQUESTS = max(1, int(os.getenv("KAKAO_ROUTE_MAX_REQUESTS", "200")))
+KAKAO_ROUTE_BATCH_DAILY_QUOTA = max(0, int(os.getenv("KAKAO_ROUTE_BATCH_DAILY_QUOTA", "1000")))
+KAKAO_ROUTE_POINT_DAILY_QUOTA = max(0, int(os.getenv("KAKAO_ROUTE_POINT_DAILY_QUOTA", "10000")))
+KAKAO_ROUTE_QUOTA_RESERVE_PERCENT = min(100, max(0, int(os.getenv("KAKAO_ROUTE_QUOTA_RESERVE_PERCENT", "10"))))
+KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT = min(100, max(1, int(os.getenv("KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT", "10"))))
 
 ROUTE_CACHE_PATH = os.getenv("ROUTE_CACHE_PATH", "/cache/routes.sqlite3")
 _origin_locks = weakref.WeakKeyDictionary()
@@ -281,15 +286,28 @@ async def _retry_pause(seconds):
 
 
 async def _route_request(client, semaphore, method, url, **kwargs):
+    endpoint = "point" if url == KAKAO_DIRECTIONS_URL else "batch"
     for attempt in range(3):
         async with semaphore:
-            if getattr(client, "_travelsync_route_requests", 0) >= KAKAO_ROUTE_MAX_REQUESTS:
+            limit = min(getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
+            counts = getattr(client, "_travelsync_endpoint_requests", {})
+            share = max(1, _daily_limit(endpoint) * KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT // 100)
+            if (getattr(client, "_travelsync_route_requests", 0) >= limit
+                    or counts.get(endpoint, 0) >= share):
                 raise HTTPException(503, "routing_request_budget_exceeded")
             client._travelsync_route_requests = getattr(client, "_travelsync_route_requests", 0) + 1
-            await asyncio.to_thread(_reserve_request)
+            counts[endpoint] = counts.get(endpoint, 0) + 1
+            client._travelsync_endpoint_requests = counts
+            try:
+                await asyncio.to_thread(_reserve_request, endpoint)
+            except HTTPException:
+                # Refused reservations never become outbound HTTP attempts.
+                client._travelsync_route_requests -= 1
+                counts[endpoint] -= 1
+                raise
             response = await client.request(method, url, **kwargs)
             if response.status_code == 429 or _provider_error_code(response) == -10:
-                await asyncio.to_thread(_block_requests, response.headers.get("Retry-After"))
+                await asyncio.to_thread(_block_requests, endpoint, response.headers.get("Retry-After"))
                 _check_response(response)
         transient = response.status_code in (500, 502, 503, 504)
         if transient and attempt < 2:
@@ -352,39 +370,89 @@ def _cache_connection():
         connection.close()
 
 
-def _reserve_request():
-    """Atomic local HTTP-attempt allowance, shared by workers and restarts.
+def _daily_limit(endpoint):
+    quota = KAKAO_ROUTE_POINT_DAILY_QUOTA if endpoint == "point" else KAKAO_ROUTE_BATCH_DAILY_QUOTA
+    return quota * (100 - KAKAO_ROUTE_QUOTA_RESERVE_PERCENT) // 100
 
-    This is an application limit, not a claim about provider billing units.
-    Cache hits never spend the allowance. Credentials are never persisted.
+
+def _quota_table(connection):
+    connection.execute("""CREATE TABLE IF NOT EXISTS endpoint_request_budget (
+        scope TEXT NOT NULL, endpoint TEXT NOT NULL, day TEXT NOT NULL,
+        used INTEGER NOT NULL, blocked_until REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY(scope,endpoint))""")
+
+
+def _budget_row(connection, scope, endpoint, day):
+    row = connection.execute("SELECT day,used,blocked_until FROM endpoint_request_budget WHERE scope=? AND endpoint=?", (scope,endpoint)).fetchone()
+    if row:
+        return row
+    # Old releases tracked a combined count. Its endpoint split is unknowable:
+    # conservatively carry it to each bucket for the current KST date only.
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='request_budget'").fetchone():
+        old = connection.execute("SELECT day,used,blocked_until FROM request_budget WHERE scope=?", (scope,)).fetchone()
+        if old:
+            return (day, old[1] if old[0] == day else 0, old[2])
+    return (day, 0, 0)
+
+
+def _reserve_request(endpoint):
+    """Atomic per-endpoint HTTP-attempt accounting, shared across workers.
+
+    One batch HTTP attempt counts once regardless of destination count. Retries
+    and point fallbacks use their own endpoint's allowance. Cache hits cost zero.
     """
     scope = hashlib.sha256(KAKAO_REST_API_KEY.encode()).hexdigest()
     now = _now()
     day = now.astimezone(ZoneInfo("Asia/Seoul")).date().isoformat()
     try:
         with _cache_connection() as connection:
-            connection.execute("CREATE TABLE IF NOT EXISTS request_budget (scope TEXT PRIMARY KEY, day TEXT, used INTEGER, blocked_until REAL)")
+            _quota_table(connection)
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute("SELECT day,used,blocked_until FROM request_budget WHERE scope=?", (scope,)).fetchone()
-            if row and row[2] > now.timestamp():
+            row = _budget_row(connection, scope, endpoint, day)
+            if row[2] > now.timestamp():
                 raise HTTPException(503, "routing_quota_exceeded")
-            used = row[1] if row and row[0] == day else 0
-            if used >= KAKAO_ROUTE_DAILY_REQUEST_LIMIT:
+            used = row[1] if row[0] == day else 0
+            if used >= _daily_limit(endpoint):
                 raise HTTPException(503, "routing_daily_budget_exceeded")
-            connection.execute("INSERT INTO request_budget VALUES (?,?,?,0) ON CONFLICT(scope) DO UPDATE SET day=excluded.day,used=excluded.used", (scope,day,used+1))
+            connection.execute("INSERT INTO endpoint_request_budget VALUES (?,?,?,?,0) ON CONFLICT(scope,endpoint) DO UPDATE SET day=excluded.day,used=excluded.used",
+                               (scope,endpoint,day,used+1))
     except (OSError, sqlite3.Error):
         raise HTTPException(503, "routing_cache_unavailable") from None
 
 
-def _block_requests(retry_after):
+def _block_requests(endpoint, retry_after):
     try:
-        delay = max(1, min(86400, int(retry_after)))
+        delay = float(retry_after)
     except (ValueError, TypeError):
-        delay = 3600  # Unknown provider reset: cool down, do not guess quota renewal.
+        try:
+            delay = (parsedate_to_datetime(retry_after) - _now()).total_seconds()
+        except (ValueError, TypeError, OverflowError):
+            delay = 3600  # Unknown provider reset: do not guess quota renewal.
+    delay = max(1, min(86400, delay))
     scope = hashlib.sha256(KAKAO_REST_API_KEY.encode()).hexdigest()
     try:
         with _cache_connection() as connection:
-            connection.execute("UPDATE request_budget SET blocked_until=max(blocked_until,?) WHERE scope=?", (_now().timestamp()+delay,scope))
+            _quota_table(connection)
+            connection.execute("UPDATE endpoint_request_budget SET blocked_until=max(blocked_until,?) WHERE scope=? AND endpoint=?", (_now().timestamp()+delay,scope,endpoint))
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, "routing_cache_unavailable") from None
+
+
+def _budget_status():
+    now = _now()
+    day = now.astimezone(ZoneInfo("Asia/Seoul")).date().isoformat()
+    scope = hashlib.sha256(KAKAO_REST_API_KEY.encode()).hexdigest()
+    try:
+        with _cache_connection() as connection:
+            _quota_table(connection)
+            result = {}
+            for endpoint,quota in (("batch",KAKAO_ROUTE_BATCH_DAILY_QUOTA),("point",KAKAO_ROUTE_POINT_DAILY_QUOTA)):
+                row = _budget_row(connection, scope, endpoint, day)
+                used = row[1] if row[0] == day else 0
+                result[endpoint] = dict(configured_quota=quota,usable_limit=_daily_limit(endpoint),
+                    local_attempts=used,remaining=max(0,_daily_limit(endpoint)-used),
+                    cooldown_seconds=max(0,math.ceil(row[2]-now.timestamp())))
+            return dict(day_kst=day, reserve_percent=KAKAO_ROUTE_QUOTA_RESERVE_PERCENT, endpoints=result)
     except (OSError, sqlite3.Error):
         raise HTTPException(503, "routing_cache_unavailable") from None
 
@@ -510,6 +578,16 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
             response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
             body = response.json()
             by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
+        except HTTPException as exc:
+            per_plan_total_spent = getattr(client, "_travelsync_route_requests", 0) >= min(
+                getattr(client, "_travelsync_plan_limit", KAKAO_ROUTE_INITIAL_REQUESTS), KAKAO_ROUTE_MAX_REQUESTS)
+            if (exc.detail not in ("routing_quota_exceeded", "routing_daily_budget_exceeded", "routing_request_budget_exceeded")
+                    or (exc.detail == "routing_request_budget_exceeded" and per_plan_total_spent)):
+                raise
+            # Independent point quota can still serve this batch. This path is
+            # bounded by the same per-plan total/share limits as normal fallback.
+            client._travelsync_limit_reason = exc.detail
+            by_key = {pid: {"result_code": 304} for pid,_ in batch}
         except httpx.HTTPError:
             raise HTTPException(503, "routing_provider_unavailable") from None
         except (ValueError, AttributeError, TypeError):
@@ -582,6 +660,45 @@ class RouteEdges(list):
     warnings = ()
 
 
+def _assemble_edges(nested, layouts):
+    edges = RouteEdges()
+    for batch, (first, days) in zip(nested, layouts):
+        for d in days:
+            rename = {first["start_point"]: d["start_point"], first["end_point"]: d["end_point"]}
+            edges.extend({**e, "date": d["date"],
+                          "origin": rename.get(e["origin"], e["origin"]),
+                          "destination": rename.get(e["destination"], e["destination"])} for e in batch)
+    return edges
+
+
+def _needs_route_expansion(request, edges):
+    """Missing round-trip connections justify a second retrieval pass.
+
+    This is only a graph check. Time windows, meals and full feasibility still
+    belong to the optimizer/E3. Known-unreachable legs are not blindly retried.
+    """
+    for d in request.get("days", []):
+        today = [e for e in edges if e["date"] == d["date"]]
+        if not any(e["status"] == "UNKNOWN" for e in today):
+            continue
+        def reachable(start, reverse=False):
+            found, todo = {start}, [start]
+            while todo:
+                at = todo.pop()
+                for e in today:
+                    if e["status"] != "KNOWN":
+                        continue
+                    a,b = (e["destination"],e["origin"]) if reverse else (e["origin"],e["destination"])
+                    if a == at and b not in found:
+                        found.add(b); todo.append(b)
+            return found
+        usable = reachable(d["start_point"]) & reachable(d["end_point"], True)
+        ids = request.get("day_candidate_ids", {}).get(d["date"], [p["poi_id"] for p in request.get("pois", [])])
+        if any(pid not in usable for pid in ids):
+            return True
+    return False
+
+
 async def _build_drive_edges(request: dict) -> list[dict]:
     if not KAKAO_REST_API_KEY:
         raise HTTPException(503, "kakao_rest_api_key_not_configured")
@@ -617,26 +734,29 @@ async def _build_drive_edges(request: dict) -> list[dict]:
             for origin_id, origin in origins:
                 targets = [(dest_id, point) for dest_id, point in day_points.items()
                            if dest_id != origin_id]
-                targets.append((end_id, end))
+                # Secure return legs before optional inter-POI alternatives.
+                targets.insert(0, (end_id, end))
                 if origin_id == start_id:
                     targets = [x for x in targets if x[0] != end_id]
-                tasks.append(_routes_from_origin(
-                    client, semaphore, origin_id, origin, targets, day
-                ))
+                tasks.append((origin_id, origin, targets, day))
                 layouts.append((d, days))
-        nested = await _gather_routes(tasks)
+        async def fetch_pass():
+            nested = await _gather_routes(_routes_from_origin(client, semaphore, *args) for args in tasks)
+            return _assemble_edges(nested, layouts)
+        edges = await fetch_pass()
+        initial = min(KAKAO_ROUTE_INITIAL_REQUESTS, KAKAO_ROUTE_MAX_REQUESTS)
+        if (getattr(client, "_travelsync_route_requests", 0) >= initial
+                and initial < KAKAO_ROUTE_MAX_REQUESTS and _needs_route_expansion(request, edges)):
+            # Reuse this client's counters and the persistent cache: two passes
+            # share one hard cap, and completed legs are not fetched twice.
+            client._travelsync_plan_limit = KAKAO_ROUTE_MAX_REQUESTS
+            client._travelsync_limit_reason = None
+            edges = await fetch_pass()
         limit_reason = getattr(client, "_travelsync_limit_reason", None)
-    edges = RouteEdges()
-    for batch, (first, days) in zip(nested, layouts):
-        for d in days:
-            rename = {first["start_point"]: d["start_point"], first["end_point"]: d["end_point"]}
-            edges.extend({**e, "date": d["date"],
-                          "origin": rename.get(e["origin"], e["origin"]),
-                          "destination": rename.get(e["destination"], e["destination"])} for e in batch)
     if limit_reason:
         if not any(e["status"] == "KNOWN" for e in edges):
             raise HTTPException(503, limit_reason)
-        edges.warnings = (limit_reason,)
+        edges.warnings = (limit_reason,) if any(e["status"] == "UNKNOWN" for e in edges) else ()
     return edges
 
 
@@ -647,6 +767,10 @@ def health():
         "module": "planning-data",
         "schema_version": "planning-data-1.0",
         "kakao_configured": bool(KAKAO_REST_API_KEY),
+        "routing_guard": {"enabled": True, "concurrency": KAKAO_ROUTE_CONCURRENCY,
+                          "initial_requests_per_plan": KAKAO_ROUTE_INITIAL_REQUESTS,
+                          "max_requests_per_plan": KAKAO_ROUTE_MAX_REQUESTS,
+                          "endpoint_share_percent": KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT},
         "route_cache": {"persistent": True, "expires": False, "mode": "demo_snapshot"},
     }
 
@@ -698,4 +822,4 @@ async def snapshot(request: dict, authorization: str | None = Header(default=Non
 def diagnostics(authorization: str | None = Header(default=None)):
     _auth(authorization)
     with engine.connect() as c:
-        return dataset_diagnostics(c)
+        return {**dataset_diagnostics(c), "routing_budget": _budget_status()}

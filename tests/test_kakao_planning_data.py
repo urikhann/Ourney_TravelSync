@@ -305,7 +305,9 @@ def test_quota_cooldown_survives_new_client(adapter):
 
 def test_persistent_daily_and_snapshot_request_allowances(adapter,monkeypatch):
     monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",1)
-    monkeypatch.setattr(adapter,"KAKAO_ROUTE_DAILY_REQUEST_LIMIT",2)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_POINT_DAILY_QUOTA",2)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_QUOTA_RESERVE_PERCENT",0)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT",100)
     calls=[]
     def respond(request):
         calls.append(request)
