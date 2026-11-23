@@ -10,7 +10,7 @@ import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
 
-const mealLabel = (it: PlanItem) => it.place?.kind === "food" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
+const mealLabel = (it: PlanItem) => it.visit_category === "evening" ? "Evening · " : it.visit_category === "meal" ? (it.start >= "17:00" ? "Dinner · " : "Lunch · ") : "";
 
 export default function Plan() {
   const { id = "" } = useParams();
@@ -35,7 +35,7 @@ export default function Plan() {
   const exclusions = excluded.length > 0 && <details className="card pad" style={{ marginTop: 12 }}><summary>Excluded from automatic planning ({excluded.length})</summary>
     {excluded.map(p => <p className="small" key={p.poi_id}><b>{v.setup.points.find(x => x.id === p.poi_id)?.name ?? p.poi_id}</b><br />{p.reasons.map(r => {
       const code = r.split(":").pop() ?? r;
-      const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", ROUTE_UNAVAILABLE: "No usable route within travel limits", DAY_CANDIDATE_NOT_SELECTED: "Not shortlisted for this day", NO_FULL_STAY_WINDOW: "Visit does not fit the available time", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
+      const names: Record<string, string> = { COST_UNKNOWN: "Cost not verified", DURATION_UNKNOWN: "Visit duration not verified", OPERATING_INFO_UNKNOWN: "Opening or closure information not verified", OPENING_HOURS_UNVERIFIED: "Opening hours need confirmation", ROUTE_UNAVAILABLE: "No usable route within travel limits", DAY_CANDIDATE_NOT_SELECTED: "Not shortlisted for this day", NO_FULL_STAY_WINDOW: "Visit does not fit the available time", CLOSED: "Closed", EVENT_UNVERIFIED_OR_INACTIVE: "Event date not verified", EXPLICIT_EXCLUSION: "A group exclusion applies", ACCESS_UNVERIFIED_OR_UNSATISFIED: "Required access not verified", CONSTRAINT_CONFLICT: "Group times do not overlap" };
       return `${r.includes(":") ? r.slice(0, r.lastIndexOf(":")) + ": " : ""}${names[code] ?? "Required information or conditions are not satisfied"}`;
     }).join(" · ")}</p>)}</details>;
   if (v.plans.length === 0) {
@@ -71,6 +71,7 @@ export default function Plan() {
       <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
+        {!!selected.stats.routing_warnings?.length && <div className="banner amber" role="status">The routing allowance or provider quota was reached. This plan uses available saved routes; some alternatives could not be checked.</div>}
         <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Weather and accessibility are not checked.</div>
         {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
         <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>

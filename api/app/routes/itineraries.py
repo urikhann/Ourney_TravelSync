@@ -9,15 +9,17 @@ from sqlalchemy.orm import Session
 from .. import config, services
 from ..db import get_db
 from ..deps import member_trip
+from ..drive_planning import plan_drive, solve_checked
 from ..models import Itinerary, OptimizationRun, Poi, PublicHoliday, RecommendationRun, Trip, User, Vote
 from ..optimization import GenerateInput, catalogue_request, data_request, fingerprint, prepare, solver_request, state
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
-from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride, PlanResponse
+from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
 from ourney_travelsync.visit_durations import default_duration
+from ourney_travelsync.planning_categories import is_evening_venue
 
 router = APIRouter(tags=["itineraries"])
 
@@ -107,6 +109,33 @@ def planning_places(q: str = Query(default="", max_length=120), trip: Trip = Dep
             for p in db.scalars(query.order_by(Poi.name, Poi.id).limit(50))]
 
 
+@router.get("/trips/{trip_id}/evening-choices")
+def evening_choices(q: str = Query(default="", max_length=120), trip: Trip = Depends(member_trip),
+                    db: Session = Depends(get_db)):
+    """Optional catalogue choices only; no route calls or plan changes."""
+    run = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
+                    .order_by(RecommendationRun.id.desc()))
+    if run is None:
+        raise HTTPException(409, "no_recommendations_yet")
+    banned = {pid for m in trip.members for pid in (m.exclusions or {}).get("poi_ids", [])}
+    tags = {tag for m in trip.members for tag in (m.exclusions or {}).get("tags", [])}
+    if "alcohol" in tags:
+        return []
+    query = select(Poi).where(Poi.dataset_version == run.dataset_version).order_by(Poi.name, Poi.id)
+    if q.strip():
+        query = query.where(Poi.name.icontains(q.strip(), autoescape=True))
+    choices = []
+    for p in db.scalars(query):
+        if p.id in banned or tags.intersection(p.tags or ()) or not is_evening_venue(
+                {"category_name": p.category, "tags": p.tags}):
+            continue
+        choices.append(dict(id=p.id, name=p.name, category=p.category, duration_min=60,
+                            hours_verified=(p.field_status or {}).get("hours") == "KNOWN"))
+        if len(choices) >= 20:
+            break
+    return choices
+
+
 def visit_availability(candidate, day, visit, enforce=True):
     op = candidate.operations.get(day)
     if not enforce or op is None or not op.openings.known or not op.closed.known:
@@ -187,22 +216,19 @@ async def _generate(body, trip, user, db, *, preview=False):
                                retrieved["planning_candidate_selection"])
         audit.planning_data = {"request": context}
         db.commit()
-        operational = await services.planning_data(context)
-        audit.planning_data = {"request": context, "response": operational}
-        try:
-            req = solver_request(run, audit_id, body, prepared, context, operational)
-        except (ValidationError, ValueError, TypeError, KeyError):
-            raise HTTPException(502, "planning_data_invalid_response") from None
-        audit.optimizer_request = req.model_dump(mode="json")
-        db.commit()
-        response = await services.build_plans(req.model_dump(mode="json"))
+        if body.transport_mode == "drive":
+            req, response, result, operational = await plan_drive(run, body, prepared, context, audit, db)
+        else:
+            operational = await services.planning_data(context)
+            audit.planning_data = {"request": context, "response": operational}
+            try:
+                req = solver_request(run, audit_id, body, prepared, context, operational)
+            except (ValidationError, ValueError, TypeError, KeyError):
+                raise HTTPException(502, "planning_data_invalid_response") from None
+            audit.optimizer_request = req.model_dump(mode="json")
+            db.commit()
+            response, result = await solve_checked(req)
         audit.response = response
-        try:
-            result = PlanResponse.model_validate(response)
-        except ValidationError:
-            raise HTTPException(502, "optimizer_invalid_response") from None
-        if result.input_snapshot != req or result.run_id != req.run_id:
-            raise HTTPException(502, "optimizer_snapshot_mismatch")
         if result.validation_status != "PASSED" or result.solver_status not in ("OPTIMAL", "FEASIBLE") or result.error_code:
             code = "optimizer_" + (result.error_code or "invalid_result").lower()
             if preview:
@@ -257,6 +283,7 @@ async def _generate(body, trip, user, db, *, preview=False):
                          stats={"group_fit": (None if run.response.get("score_scale") == "relative_relevance_0_1"
                                               else checked.metrics["mean_personal_fit"]),
                                 "total_cost": checked.metrics["total_cost"],
+                                "routing_warnings": operational.get("routing_warnings", []),
                                 "budget_enforced": req.enforce_cost,
                                 "opening_hours_enforced": req.enforce_opening_hours,
                                 "cost_unknown_count": sum(not usable_cost(candidate_by_id[v.poi_id].cost_per_person)

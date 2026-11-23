@@ -41,7 +41,8 @@ def test_full_catalogue_precedes_shortlist_and_day_geography():
     assert len(displayed["group"]) == 1
     assert selection["catalogue_count"] == 110
     assert selection["eligible_catalogue_count"] == 108
-    assert selection["selected_count"] == 60
+    assert selection["selected_count"] == 32
+    assert selection["per_day_limit"] == 16
     days = selection["day_candidate_ids"]
     assert all(pid.startswith("south-") for pid in days["2026-11-13"])
     assert all(pid.startswith("north-") for pid in days["2026-11-14"])

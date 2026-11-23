@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from .contracts import DayPlan, PlanRequest
-from .meals import effective_meals, meals_can_be_assigned
+from .meals import effective_meals, meals_can_be_assigned, meal_visit_matches
+from ..planning_categories import EVENING_START_MIN
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
                      for d in days)
     except (ValidationError, TypeError, AttributeError):
         return ValidationResult(("INVALID_VALIDATION_INPUT",))
+    if req.provisional:
+        return ValidationResult(("PROVISIONAL_ROUTE_EVIDENCE",))
     errors = []
     expected = {d.date: d for d in req.days}
     if len(days) != len(expected) or {d.date for d in days} != set(expected):
@@ -62,8 +65,7 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
         def leg(destination):
             nonlocal cost, travel, walk
             e = edges.get((day.date, prev, destination))
-            if e is None or e.status != "KNOWN" or not e.provider or e.fetched_at is None or any(
-                    v is None for v in (e.duration_minutes, e.group_fare, e.walk_minutes, e.distance_m)):
+            if e is None or not e.usable:
                 problem("ROUTE_UNVERIFIED", day.date, destination)
                 return None
             if req.max_leg_minutes is not None and e.duration_minutes > req.max_leg_minutes:
@@ -82,6 +84,9 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if p is None:
                 problem("UNKNOWN_POI", day.date, v.poi_id)
                 continue
+            if p.visit_category == "evening" and (v.start_min < EVENING_START_MIN or not any(
+                    l.poi_id == p.poi_id and l.date == day.date for l in req.locked_items)):
+                problem("EVENING_CHOICE_OR_TIME", day.date, v.poi_id)
             if p.allowed_dates is not None and day.date not in p.allowed_dates:
                 problem("DAY_CANDIDATE_NOT_SELECTED", day.date, v.poi_id)
             e = leg(v.poi_id)
@@ -133,12 +138,12 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if len({p.activity_category for p in activities}) < composition.min_activity_categories:
                 problem("ACTIVITY_CATEGORY_COUNT", day.date)
             effective = effective_meals(day, composition)
-            if not meals_can_be_assigned(effective, meals):
+            if not meals_can_be_assigned(effective, meals + cafes, pois, day.date, composition.max_meals):
                 problem("REQUIRED_MEAL_MISSING_OR_CONFLICT", day.date)
             # All selected meal visits must fit an effective slot; matching of
             # required meals above uses distinct visits even if overrides overlap.
             for visit in meals:
-                if not any(w.matches(visit.start_min, visit.departure_min) for w in effective):
+                if not any(meal_visit_matches(w, visit, pois[visit.poi_id], day.date) for w in effective):
                     problem("MEAL_WINDOW", day.date, visit.poi_id)
             if composition.separate_food_drink and any(
                     p.visit_category in ("meal", "cafe") and next_p.visit_category in ("meal", "cafe")

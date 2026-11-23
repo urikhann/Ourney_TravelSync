@@ -20,13 +20,13 @@ def configuration(days=("2026-11-06",)):
                 budget_total=10000, transport_mode="walk")
 
 
-def ready(*, individual_method=None, ratings=None):
+def ready(*, individual_method=None, ratings=None, days=("2026-11-06",)):
     h = signup("Opt" + uuid4().hex[:10])
-    trip = c.post("/trips", headers=h, json=dict(name="Optimizer integration", start_date="2026-11-06",
-                                                end_date="2026-11-06")).json()
+    trip = c.post("/trips", headers=h, json=dict(name="Optimizer integration", start_date=days[0],
+                                                end_date=days[-1])).json()
     tid = trip["id"]
     c.put(f"/trips/{tid}/preferences/me", headers=h, json={"ratings": ratings or dict.fromkeys(FEATURES, 3)})
-    c.put(f"/trips/{tid}/availability", headers=h, json={"dates": ["2026-11-06"]})
+    c.put(f"/trips/{tid}/availability", headers=h, json={"dates": list(days)})
     options = {"group_k": 3}
     if individual_method is not None:
         options["individual_method"] = individual_method

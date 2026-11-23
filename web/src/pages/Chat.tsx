@@ -150,7 +150,7 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
         </div>
         {!!a?.tool_calls.length && (
           <div className="tools">
-            {a.tool_calls.map((t, i) => <span key={i} className="tool">{t.name === "gemini_error" ? <AlertTriangle size={12} /> : <Check size={12} />} {t.summary || t.name}</span>)}
+            {a.tool_calls.map((t, i) => <span key={i} className="tool">{["gemini_error", "provider_error"].includes(t.name) ? <AlertTriangle size={12} /> : <Check size={12} />} {t.summary || t.name}</span>)}
           </div>
         )}
         {a?.proposal && <ProposalCard m={m} tripId={tripId} />}

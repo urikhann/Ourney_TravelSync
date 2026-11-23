@@ -17,7 +17,8 @@ PLANNING_DATA_TIMEOUT_SECONDS=20
 OPTIMIZER_TIMEOUT_SECONDS=45
 ```
 
-Use your actual trusted base URL. The API calls `POST {PLANNING_DATA_URL}/snapshot`.
+Use your actual trusted base URL. The API uses `POST /selected-snapshot` for driving.
+The existing `POST /snapshot` contract is still available to direct callers.
 If supplied, the token is sent in an Authorization Bearer header; it is never
 included in stored planning or optimizer snapshots. Do not commit real tokens.
 Compose passes these values to the API. Local uvicorn processes read exported
@@ -27,8 +28,8 @@ Update any old local `OPTIMIZER_URL=http://localhost:8001` setting to port 8003.
 With no adapter configured, generation returns HTTP 503 /
 `planning_data_not_configured`, records the failure and leaves any saved plan
 and votes untouched. The web app explains the missing configuration and keeps
-recommendations available. There is no synthetic, straight-line, zero-cost or
-always-open production fallback. Compose includes the Kakao driving adapter at `http://planning-data:8004`.
+recommendations available. Provisional estimates never qualify as verified
+routing evidence. Compose includes the Kakao driving adapter at `http://planning-data:8004`.
 See [adapter configuration](../services/planning_data/README.md).
 
 Request shape (`planning-data-1.0`):
@@ -42,6 +43,20 @@ Request shape (`planning-data-1.0`):
 | `points` | Endpoint ID → explicit label, latitude, longitude |
 | `pois` | Day-specific catalogue candidates: ID, coordinates, raw metadata and field-status hints |
 | `required_access` | Group's explicitly requested accessibility properties |
+| `route_legs` | Selected-snapshot only. Dated, directed legs including start and return. An empty list loads operating facts without provider calls. |
+| `routing_attempts`, `expand_routing_budget` | Selected-snapshot only. Cumulative per-endpoint attempt counts and permission to use the hard plan cap for a repair round. |
+
+Driving generation first loads operating facts and solves a provisional plan.
+It uses Haversine distance as the third objective after group utility and
+least-served-member relevance. Draft travel minutes use a 1.3 road factor and
+25 km/h speed. The optimizer returns drafts with validation status `NOT_RUN`.
+The adapter returns only the requested legs and cumulative routing attempts.
+The solver then reschedules against verified legs, keeping existing planning
+conditions. If a verified plan cannot be built, up to two repair rounds reuse
+verified legs, avoid failed edges and query only new legs. All six possible solver
+passes share the configured search allowance. The existing endpoint daily quotas
+and combined plan hard cap apply across rounds. Final validation uses only the
+provider route graph. See [routing quota settings](routing_quota_guard.txt).
 
 Metadata hints are not verified scheduling facts. The adapter must resolve
 operating hours, closures, holidays, breaks, overnight intervals, events, fees,

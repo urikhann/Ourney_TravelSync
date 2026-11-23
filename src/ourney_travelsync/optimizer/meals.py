@@ -5,7 +5,7 @@ No operational facts, scores or persisted itinerary are modified here.
 """
 from dataclasses import dataclass
 
-from .contracts import DailyComposition, MealOverride, PlanRequest
+from .contracts import BREAKFAST_WINDOW, DailyComposition, MealOverride, PlanRequest, Window
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,10 @@ class EffectiveMeal:
 def effective_meals(day, policy: DailyComposition) -> tuple[EffectiveMeal, ...]:
     overrides = {o.name: o for o in policy.meal_overrides if o.date == day.date}
     result = []
-    for base in policy.meal_windows:
+    bases = policy.meal_windows
+    if policy.breakfast_enabled and not any(w.name == "breakfast" for w in bases):
+        bases = (BREAKFAST_WINDOW, *bases)
+    for base in bases:
         override = overrides.get(base.name)
         start, end = base.start_min, base.end_min
         preferred = fixed = None
@@ -42,7 +45,8 @@ def effective_meals(day, policy: DailyComposition) -> tuple[EffectiveMeal, ...]:
             explicit = override.required or target is not None
         overlap = max(0, min(day.end_min, end) - max(day.start_min, start))
         result.append(EffectiveMeal(base.name, start, end,
-                                    explicit or overlap >= policy.meal_overlap_min,
+                                    explicit or overlap >= policy.meal_overlap_min
+                                    or (base.name == "breakfast" and policy.breakfast_enabled and overlap > 0),
                                     preferred, fixed))
     return tuple(result)
 
@@ -81,17 +85,49 @@ def update_meal_constraints(req: PlanRequest, change: MealOverride, *, constrain
     return PlanRequest.model_validate(raw)
 
 
-def meals_can_be_assigned(meals, visits):
+def breakfast_windows(candidate, day):
+    """Full stay must fit both evidenced opening and breakfast-serving intervals.
+
+    This strict breakfast rule is independent of the general unknown-hours flag.
+    Empty or unverified serving intervals never mean all-day breakfast.
+    """
+    offering = candidate.breakfast_offering
+    serving = candidate.breakfast_hours.get(day)
+    op = candidate.operations.get(day)
+    if (candidate.visit_category not in ("meal", "cafe")
+            or not offering.known or offering.value is not True
+            or serving is None or not serving.known or op is None
+            or not op.openings.known or not op.closed.known or op.closed.value is not False):
+        return ()
+    return tuple(Window(start_min=max(a.start_min, b.start_min), end_min=min(a.end_min, b.end_min))
+                 for a in serving.value for b in op.openings.value
+                 if max(a.start_min, b.start_min) < min(a.end_min, b.end_min))
+
+
+def meal_visit_matches(meal, visit, candidate, day):
+    if not meal.matches(visit.start_min, visit.departure_min):
+        return False
+    if meal.name == "breakfast":
+        return any(w.start_min <= visit.start_min and visit.departure_min <= w.end_min
+                   for w in breakfast_windows(candidate, day))
+    return candidate.visit_category == "meal"
+
+
+def meals_can_be_assigned(meals, visits, candidates=None, day=None, max_meals=3):
     """Independent bipartite matching: a scheduled visit can cover one meal only."""
-    if len(visits) > len(meals):
+    if candidates is None and len(visits) > len(meals):
         return False
     required = {i for i, m in enumerate(meals) if m.required}
     options = [tuple(i for i, m in enumerate(meals)
-                     if m.matches(v.start_min, v.departure_min)) for v in visits]
+                     if (m.matches(v.start_min, v.departure_min) if candidates is None
+                         else meal_visit_matches(m, v, candidates[v.poi_id], day))) for v in visits]
 
     def assign(index, used):
         if index == len(options):
-            return required.issubset(used)
-        return any(assign(index + 1, used | {i}) for i in options[index] if i not in used)
+            return required.issubset(used) and len(used) <= max_meals
+        # Cafes can remain ordinary cafe visits without covering a meal.
+        optional = candidates is not None and candidates[visits[index].poi_id].visit_category == "cafe"
+        return ((optional and assign(index + 1, used)) or
+                any(assign(index + 1, used | {i}) for i in options[index] if i not in used))
 
     return assign(0, set())

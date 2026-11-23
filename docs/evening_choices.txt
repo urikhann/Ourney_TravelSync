@@ -1,0 +1,26 @@
+Optional evening bars and pubs
+
+Branch: feature/evening-bars-pubs
+
+The planning form now offers optional evening choices from the recommendation
+run's pinned dataset. The authenticated endpoint checks group membership and
+current place/tag exclusions; an alcohol exclusion returns no choices. Searching
+and browsing make no route calls and change no saved plan.
+
+Including a choice adds a day-specific must-visit to the form. Rebuilding runs
+the normal candidate, operational-data, route, solver and final-validation flow.
+Bars/pub categories and alcohol tags define a separate evening role, before
+food/cafe classification. They do not count as dinner, cafe or activity variety.
+Unselected evening venues are not shortlisted automatically. Selected venues
+must fit after 18:00, return travel, known closures and group exclusions. E3
+independently checks explicit selection and evening timing. A 60-minute stay is
+an estimate; existing duration overrides remain available.
+
+The packaged V4 catalogue currently contains 20 source-category matches. This
+does not add new places or prove their operating hours. The existing app policy
+allows unknown hours with warnings; known closures remain enforced. The feature
+uses the same policy and never claims that a listed choice is already feasible.
+
+The UI does not publish a change until the user rebuilds. Existing must-visit
+controls let the user remove an included evening choice. This branch has not
+been deployed over the running stack.

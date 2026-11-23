@@ -149,6 +149,10 @@ def test_provider_failures_are_not_place_exclusions(adapter, status, code):
             return await adapter._routes_from_origin(client, asyncio.Semaphore(1), "s",
                 {"longitude": 129, "latitude": 35},
                 [("p", {"longitude": 129.1, "latitude": 35.1})], "2026-11-13")
+    if status == 429:
+        edges = asyncio.run(run())
+        assert edges[0]["status"] == "UNKNOWN"  # not a claim the place is unreachable
+        return
     with pytest.raises(HTTPException) as error:
         asyncio.run(run())
     assert error.value.detail == code
@@ -247,7 +251,7 @@ def test_route_matrices_only_include_each_days_candidates(adapter, monkeypatch):
                      ("2026-11-14", "s2", ["b"]), ("2026-11-14", "b", ["e2"])]
 
 
-@pytest.mark.parametrize("status,body", [(500, {"code": -1}), (429, {}), (400, {"code": -10})])
+@pytest.mark.parametrize("status,body", [(500, {"code": -1}), (503, {})])
 def test_transient_provider_failures_retry_with_bounded_backoff(adapter, monkeypatch, status, body):
     calls, pauses = [], []
     async def pause(seconds):
@@ -280,9 +284,78 @@ def test_http_400_quota_is_not_reported_as_bad_parameters(adapter, monkeypatch, 
                 adapter.KAKAO_DIRECTIONS_URL, params={"origin": "private-coordinates"})
     with pytest.raises(HTTPException, match="routing_quota_exceeded"):
         asyncio.run(run())
-    assert len(calls) == 3
+    assert len(calls) == 1
     assert "code=-10" in caplog.text and "endpoint=point" in caplog.text
     assert "private" not in caplog.text
+
+
+def test_quota_cooldown_survives_new_client(adapter):
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(429, headers={"Retry-After": "60"}, json={})
+    async def run():
+        for _ in range(2):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+                with pytest.raises(HTTPException, match="routing_quota_exceeded"):
+                    await adapter._route_request(client,asyncio.Semaphore(1),"GET",adapter.KAKAO_DIRECTIONS_URL)
+    asyncio.run(run())
+    assert len(calls) == 1
+
+
+def test_persistent_daily_and_snapshot_request_allowances(adapter,monkeypatch):
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",1)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_POINT_DAILY_QUOTA",2)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_QUOTA_RESERVE_PERCENT",0)
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT",100)
+    calls=[]
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200,json={})
+    async def send(client):
+        return await adapter._route_request(client,asyncio.Semaphore(1),"GET",adapter.KAKAO_DIRECTIONS_URL)
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            await send(client)
+            with pytest.raises(HTTPException,match="routing_request_budget_exceeded"): await send(client)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client: await send(client)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            with pytest.raises(HTTPException,match="routing_daily_budget_exceeded"): await send(client)
+    asyncio.run(run())
+    assert len(calls)==2
+
+
+def test_snapshot_allowance_cannot_race_with_parallel_requests(adapter,monkeypatch):
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",1)
+    calls=[]
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200,json={})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            semaphore=asyncio.Semaphore(2)
+            return await asyncio.gather(*(adapter._route_request(client,semaphore,"GET",adapter.KAKAO_DIRECTIONS_URL)
+                                          for _ in range(2)),return_exceptions=True)
+    results=asyncio.run(run())
+    assert len(calls)==1
+    assert sum(isinstance(r,HTTPException) for r in results)==1
+
+
+def test_successful_batch_route_cached_before_fallback_quota_failure(adapter):
+    origin=dict(longitude=129.1,latitude=35.1)
+    target=dict(longitude=129.2,latitude=35.2)
+    def respond(request):
+        if request.method=="GET": return httpx.Response(429,json={})
+        return httpx.Response(200,json={"routes":[
+            dict(key="a",result_code=0,summary=dict(duration=120,distance=1000)),
+            dict(key="b",result_code=304)]})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            with pytest.raises(HTTPException,match="routing_quota_exceeded"):
+                await adapter._fetch_routes_from_origin(client,asyncio.Semaphore(1),"s",origin,
+                    [("a",target),("b",dict(longitude=129.3,latitude=35.3))],"2026-11-22")
+    asyncio.run(run())
+    assert adapter._cache_key(origin,target) in adapter._cached_routes([adapter._cache_key(origin,target)])
 
 
 def test_invalid_parameters_are_not_retried(adapter):
@@ -436,3 +509,35 @@ def test_seed_imports_saved_successful_edges_without_network(adapter,monkeypatch
     stored=adapter._cached_routes([adapter._cache_key(origin,dest)])
     assert len(stored)==1 and next(iter(stored.values()))["fetched_at"]==edge["fetched_at"]
     assert '"provider_requests": 0' in capsys.readouterr().out
+
+
+def test_limit_returns_partial_evidenced_graph_with_warning(adapter,monkeypatch):
+    import json
+    monkeypatch.setattr(adapter,"KAKAO_REST_API_KEY","test-only")
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",1)
+    real_client=httpx.AsyncClient
+    calls=[]
+    def respond(req):
+        calls.append(req)
+        payload=json.loads(req.content)
+        return httpx.Response(200,json={"routes":[dict(key=d["key"],result_code=0,
+            summary=dict(duration=60,distance=500)) for d in payload["destinations"]]})
+    monkeypatch.setattr(adapter.httpx,"AsyncClient",lambda **kw: real_client(transport=httpx.MockTransport(respond),**kw))
+    req=dict(pois=[dict(poi_id="p",latitude=35.12,longitude=129.12)],
+        points=dict(s=dict(latitude=35.1,longitude=129.1),e=dict(latitude=35.14,longitude=129.14)),
+        days=[dict(date="2026-11-23",start_point="s",end_point="e")])
+    edges=asyncio.run(adapter._build_drive_edges(req))
+    assert len(calls)==1
+    assert {e["status"] for e in edges}=={"KNOWN","UNKNOWN"}
+    assert edges.warnings==("routing_request_budget_exceeded",)
+    assert all(e["duration_minutes"] is None for e in edges if e["status"]=="UNKNOWN")
+
+
+def test_limit_with_no_saved_routes_keeps_explicit_failure(adapter,monkeypatch):
+    monkeypatch.setattr(adapter,"KAKAO_REST_API_KEY","test-only")
+    monkeypatch.setattr(adapter,"KAKAO_ROUTE_MAX_REQUESTS",0)
+    req=dict(pois=[dict(poi_id="p",latitude=35.12,longitude=129.12)],
+        points=dict(s=dict(latitude=35.1,longitude=129.1),e=dict(latitude=35.14,longitude=129.14)),
+        days=[dict(date="2026-11-23",start_point="s",end_point="e")])
+    with pytest.raises(HTTPException,match="routing_request_budget_exceeded"):
+        asyncio.run(adapter._build_drive_edges(req))
