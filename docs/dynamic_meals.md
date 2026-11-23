@@ -16,7 +16,8 @@ For each requested day and each effective meal window:
 ```
 overlap = max(0, min(day.end_min, meal.end_min)
                  - max(day.start_min, meal.start_min))
-required = explicit_requirement or overlap >= meal_overlap_min
+required = (explicit_requirement or overlap >= meal_overlap_min
+            or (breakfast_enabled and meal.name == "breakfast" and overlap > 0))
 ```
 
 Requirements use the user's requested day bounds, not a shortened restaurant or
@@ -34,7 +35,13 @@ Omitting `PlanRequest.daily_composition` materializes the default policy in
 the input snapshot. Explicit `null` retains the legacy no-composition mode for
 standalone callers. The authenticated app always supplies a composition policy.
 The old `min_meals` field is accepted but deprecated and ignored: it cannot force
-two meals on a morning-only day. `max_meals` remains enforced. Breakfast is supported in custom base configurations but is not a default slot.
+two meals on a morning-only day. `max_meals` remains enforced. Setting
+`breakfast_enabled: true` adds breakfast 07:00–10:00 (420–600); the default
+remains false for compatibility with saved lunch/dinner configurations.
+An explicitly configured breakfast window also enables that slot. Opting in
+requires breakfast on days with any overlap with its effective window; a short
+overlap may be infeasible for a full stay. Custom windows without the opt-in flag
+retain the legacy overlap-threshold rule. Overrides cannot relax evidence checks.
 
 ## CP-SAT and E3
 
@@ -43,10 +50,67 @@ date and effective slot. The sum across slots equals the visit Boolean, so one
 scheduled visit occupies exactly one slot. Each slot holds at most one visit;
 required slots hold exactly one. Start and full duration must fit the slot;
 dated E2 opening/member windows and route propagation also constrain the same
-start variable. Day bounds and return-leg constraints remain unchanged. Cafés
-cannot satisfy meals: the existing `planning_categories.visit_role` classifier
-gives café precedence, then classifies the imported food feature as a meal.
-No new restaurant suitability metadata is inferred.
+start variable. Day bounds and return-leg constraints remain unchanged. Ordinary
+cafés cannot satisfy meals. A breakfast-appropriate café can cover breakfast
+only, while retaining its café role and café cap. It also consumes one meal slot
+and counts toward `max_meals`; it can still be selected as an ordinary café at
+other times. Lunch and dinner continue to require restaurant meal roles.
+
+## Breakfast evidence and data gaps
+
+Versioned `Poi.enriched_metadata` can contain `breakfast_offering`, a standard
+`Fact[bool]` confirming a breakfast menu, or `breakfast_category`, a `Fact[str]`
+with value `breakfast_restaurant`, `breakfast_cafe` or `brunch_cafe`. Both require
+`status: KNOWN`, a source and verification timestamp. Explicit imported
+`representative_menu` or `detailed_category` text mentioning breakfast/brunch
+is also accepted only when its source URL and checked timestamp match the
+field's entry in `field_provenance_json`. Names, descriptions, generic food/café
+tags and individual foods such as toast are insufficient. An explicit negative
+breakfast fact takes precedence over older imported text.
+
+`breakfast_hours` maps ISO calendar dates to `Fact[tuple[Window, ...]]` serving
+intervals, in local minutes. These must be KNOWN with source and verification
+timestamp; an empty list means no breakfast that day. Serving hours are never
+derived from opening hours. The complete stay must fit a single serving
+interval, a known opening interval, the effective breakfast slot and travel
+bounds, with known `closed: false`. The general unknown-opening-hours option
+does not relax breakfast evidence. All evidence is captured in the optimizer
+input snapshot and independently checked by E3; no live menu lookup is needed
+to replay a run.
+
+Synthetic metadata example (not a real venue fact):
+
+```json
+{
+  "breakfast_offering": {
+    "value": true, "status": "KNOWN", "source": "synthetic fixture",
+    "verified_at": "2026-11-01T00:00:00Z"
+  },
+  "breakfast_hours": {
+    "2026-11-06": {
+      "value": [{"start_min": 480, "end_min": 600}],
+      "status": "KNOWN", "source": "synthetic fixture",
+      "verified_at": "2026-11-01T00:00:00Z"
+    }
+  }
+}
+```
+
+The pinned V4 catalogue has 3,570 records and some sourced brunch-menu text,
+but no structured breakfast-serving-hours fields. This implementation does not
+populate those hours or certify the current real-world validity of imported
+menus. Until serving intervals are independently verified and imported in a
+versioned metadata record, breakfast may correctly return infeasibility. It
+never substitutes an ordinary café or silently drops a required meal.
+
+Day retrieval reserves up to three breakfast alternatives with verified menu/
+category and serving-window evidence before the existing role quotas. Opening
+hours and directed-route feasibility remain adapter/E2/solver checks. The
+bounded candidate pool is not an exhaustive search of the catalogue; feasibility
+is guaranteed only within the supplied candidates and hard constraints. E1
+exclusions, GFAR score/ranking calculations, objectives, deterministic seed and
+single-worker search remain unchanged. Opting in changes which candidates
+are retrieved, so the resulting recommendation set can change.
 
 Optional meal visits can be selected if they improve the existing objectives;
 there is no extra meal reward. The existing cross-day no-repeat rule means two

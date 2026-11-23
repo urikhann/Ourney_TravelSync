@@ -9,9 +9,29 @@ import { locale, t } from "../i18n";
 const SOURCE: Record<string, string> = {
   KAKAO_MAP: "Kakao Map", PUBLIC_TOURISM: "Public tourism data (TourAPI)", OFFICIAL_SITE: "Official website",
   LOCAL_GOV: "Local government", OTHER_RELIABLE: "Other checked source",
+  OFFICIAL_API_SOURCE_MATCHED: "Matched public tourism data",
 };
 
 const has = (v: string | null | undefined): v is string => !!v && v.trim() !== "";
+
+/** Catalogue provenance can include several URLs and raw government API endpoints. */
+function publicSourceUrls(value?: string | null): string[] {
+  const links = new Set<string>();
+  for (const part of value?.split("|") ?? []) {
+    try {
+      const url = new URL(part.trim());
+      if (
+        (url.protocol !== "https:" && url.protocol !== "http:") ||
+        url.username || url.password ||
+        url.hostname === "apis.data.go.kr"
+      ) continue;
+      links.add(url.href);
+    } catch {
+      // Blank values and malformed provenance are not links.
+    }
+  }
+  return [...links];
+}
 
 /** Sub-category, description, food type, menu, activity. Renders nothing if there is nothing to show. */
 export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
@@ -23,6 +43,7 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
   if (!has(m.detailed_category) && !has(m.description_summary) && facts.length === 0) return null;
 
   const source = has(m.description_source_type) ? t(SOURCE[m.description_source_type] ?? m.description_source_type) : null;
+  const sourceLinks = publicSourceUrls(m.description_source_url);
   const fromMenu = m.description_basis === "STRUCTURED_MENU_FACTS" || m.description_basis === "OFFICIAL_MENU_FACTS";
   return (
     <>
@@ -35,10 +56,16 @@ export default function PlaceAbout({ meta }: { meta?: EnrichedMeta }) {
             {m.description_summary}
             {source && (
               <div className="muted tiny" style={{ marginTop: 6 }}>
-                {fromMenu ? t("Summary from menu info") + " · " : ""}{t("Source: {src}", { src: source })}
-                {has(m.description_source_url) && (
-                  <> · <a href={m.description_source_url} target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>{t("open")} <ExternalLink size={11} style={{ display: "inline", verticalAlign: "-1px" }} /></a></>
-                )}
+                {fromMenu ? "Summary from menu info · " : ""}Source: {source}
+                {sourceLinks.map((url, index) => (
+                  <span key={url} style={{ whiteSpace: "nowrap" }}>
+                    {" · "}
+                    <a href={url} target="_blank" rel="noreferrer">
+                      {sourceLinks.length === 1 ? "Open source" : `Open source ${index + 1}`}
+                      {" "}<ExternalLink size={11} style={{ display: "inline", verticalAlign: "-1px" }} />
+                    </a>
+                  </span>
+                ))}
               </div>
             )}
           </div>

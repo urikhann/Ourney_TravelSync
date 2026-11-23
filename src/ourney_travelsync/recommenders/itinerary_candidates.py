@@ -1,19 +1,15 @@
 """Deterministic day-specific retrieval; geographic screening is not route evidence."""
 from collections import Counter
 from datetime import date
+import os
 import math
 import numpy as np
 from ..common import GroupInput
 from ..features import FEATURE_NAMES
+from ..geography import haversine_km as km
 from ..planning_categories import visit_role
 
 POLICY = "catalogue-day-clusters-v1"
-
-
-def km(a, b):
-    lat1, lon1, lat2, lon2 = map(math.radians, (*a, *b))
-    h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2
-    return 6371 * 2 * math.asin(min(1, math.sqrt(h)))
 
 
 def select_days(data, records, days, locks=(), composition=None):
@@ -48,7 +44,9 @@ def select_days(data, records, days, locks=(), composition=None):
     preferred = [i for i in range(len(FEATURE_NAMES)) if np.any(data.user_features[:, i] >= 4)]
     if not preferred:
         preferred = list(range(len(FEATURE_NAMES)))
-    limit = min(40, 60 // len(days))
+    # A full directed matrix grows quadratically; retain role alternatives in a
+    # bounded first pass rather than spending routing quota on forty stops/day.
+    limit = min(max(12, min(40, int(os.getenv("PLANNING_DAY_CANDIDATE_LIMIT", "16")))), 60 // len(days))
     previous, selected, by_day, diagnostics = set(), set(), {}, {}
     roles = [visit_role(records[pid]) for pid in data.poi_ids]
     coordinates = [(records[pid]["latitude"], records[pid]["longitude"]) for pid in data.poi_ids]
@@ -60,6 +58,9 @@ def select_days(data, records, days, locks=(), composition=None):
         pool, detour = [], {}
         for j, pid in enumerate(data.poi_ids):
             r = records[pid]
+            # Nightlife is opt-in for a particular day, never an automatic meal.
+            if roles[j][0] == "evening" and not any(l["poi_id"] == pid and l["date"] == d["date"] for l in locks):
+                continue
             duration = r.get("duration_min")
             status = (r.get("field_status") or {}).get("duration")
             # Unverified dwell values are not used as exclusion evidence.
@@ -79,6 +80,37 @@ def select_days(data, records, days, locks=(), composition=None):
             cluster_penalty = min(km(coordinates[j], coordinates[anchor]) / 15, 2) if anchor is not None else 0
             return base(j) - .12 * cluster_penalty
         if composition is not None:
+            breakfast_enabled = composition.get("breakfast_enabled", False) or any(
+                w["name"] == "breakfast" for w in composition.get("meal_windows", ()))
+            if breakfast_enabled:
+                from ..breakfast_metadata import breakfast_metadata
+                from ..optimizer.contracts import DailyComposition
+                from ..optimizer.meals import effective_meals
+                from types import SimpleNamespace
+                meal = next(m for m in effective_meals(
+                    SimpleNamespace(date=date.fromisoformat(d["date"]), **{k: d[k] for k in ("start_min", "end_min")}),
+                    DailyComposition.model_validate(composition)) if m.name == "breakfast")
+                options = []
+                for j in pool:
+                    if roles[j][0] not in ("meal", "cafe"):
+                        continue
+                    offering, hours = breakfast_metadata(records[data.poi_ids[j]])
+                    serving = hours.get(date.fromisoformat(d["date"]))
+                    duration = records[data.poi_ids[j]].get("duration_min")
+                    dwell = duration if type(duration) is int and duration > 0 else 0
+                    if (offering.known and offering.value is True and serving is not None and serving.known
+                            and any(min(w.end_min, meal.end_min, d["end_min"]) -
+                                    max(w.start_min, meal.start_min, d["start_min"]) >= max(1, dwell)
+                                    and (meal.fixed_start_min is None or
+                                         max(w.start_min, d["start_min"]) <= meal.fixed_start_min
+                                         and meal.fixed_start_min + dwell <= min(w.end_min, d["end_min"]))
+                                    for w in serving.value)):
+                        options.append(j)
+                # Reserve up to three alternatives before ordinary role quotas.
+                # GFAR scores and ranking still run normally on the retained pool.
+                for j in sorted(options, key=lambda j: (value(j), -j), reverse=True)[:3]:
+                    if j not in chosen and len(chosen) < limit:
+                        chosen.append(j)
             # Reserve alternatives before preferences can fill the pool with cafes.
             # These are retrieval opportunities; only CP-SAT enforces visit counts.
             targets = (("meal", max(6, composition["max_meals"] * 2)),

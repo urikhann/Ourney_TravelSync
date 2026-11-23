@@ -31,7 +31,7 @@ jobs:
       - run: uv pip install -r services/recommender/requirements.txt
       - run: uv pip check
       - run: cd services/recommender && uv run --no-sync python -m pytest -q
-  agent:  # services/agent: Gemini agent; tests use a fake Gemini, so no key or network is needed
+  agent:  # services/agent: fake Gemini/Groq transports, no key or network needed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

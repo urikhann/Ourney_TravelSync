@@ -1,0 +1,10 @@
+# Local preview overrides: avoid stale .env values hiding the routing fix.
+services:
+  recommender:
+    environment:
+      PLANNING_DAY_CANDIDATE_LIMIT: "16"
+  planning-data:
+    environment:
+      KAKAO_ROUTE_CONCURRENCY: "2"
+      KAKAO_ROUTE_INITIAL_REQUESTS: "80"
+      KAKAO_ROUTE_MAX_REQUESTS: "200"

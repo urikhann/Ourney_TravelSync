@@ -7,6 +7,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import pytest
 from pathlib import Path
 
 DB = Path(tempfile.gettempdir()) / "travelsync_agent_test.db"
@@ -40,6 +41,12 @@ con.close()
 import brain  # noqa: E402
 import tools  # noqa: E402
 from google.genai import types  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def legacy_provider_environment(monkeypatch):
+    monkeypatch.setenv("AGENT_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
 
 HOURS = {}
 tools.TripData.check_hours = lambda self, poi_id, day, start, duration_min=90: {

@@ -1,18 +1,22 @@
-"""The agent's "brain": Gemini with function calling, plus a rules fallback.
+"""The agent's "brain": replaceable Gemini/Groq adapters and a rules fallback.
 
 One turn:
-  1. Gemini reads the request and the recent chat, and calls tools (get_plan, find_places, check_hours)
+  1. The selected model reads recent chat and calls tools (get_plan, find_places, check_hours)
   2. it finishes by calling `answer` with a short reply and, optionally, one suggested change
   3. our code checks the suggestion (real stop, real place, not closed) before the group ever sees it
 
-If there is no GEMINI_API_KEY, or Gemini fails / runs out of quota, the rules fallback answers instead,
+If the selected provider has no key or fails, the rules fallback answers instead,
 so chat remains available without the model service.
 """
 import json
+from copy import deepcopy
 import logging
 import os
 import time
 
+from jsonschema import Draft202012Validator
+
+from providers import GeminiProvider, GroqProvider, GROQ_MODELS, ModelProvider, ProviderError
 from tools import TripData
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
@@ -67,6 +71,31 @@ TOOLS = [
 SUMMARY = {"get_plan": "Read the plan", "find_places": "Searched places", "check_hours": "Checked opening hours"}
 
 
+def strict_tools() -> list[dict]:
+    """Close argument objects and require a complete single-swap proposal."""
+    definitions = deepcopy(TOOLS)
+
+    def close_objects(schema):
+        if isinstance(schema, dict):
+            if schema.get("type") == "object":
+                schema["additionalProperties"] = False
+            for value in list(schema.values()):
+                close_objects(value)
+        elif isinstance(schema, list):
+            for value in schema:
+                close_objects(value)
+
+    close_objects(definitions)
+    proposal = definitions[-1]["parameters_json_schema"]["properties"]["proposal"]
+    proposal["type"] = ["object", "null"]
+    proposal["description"] = "Omit or use null when no change is suggested; otherwise provide one complete swap."
+    proposal["required"] = ["date", "remove_item_ids", "add"]
+    for field in ("remove_item_ids", "add"):
+        proposal["properties"][field].update(minItems=1, maxItems=1, uniqueItems=True)
+    proposal["properties"]["add"]["items"]["required"] = ["poi_id", "start"]
+    return definitions
+
+
 def run_tool(data: TripData, name: str, args: dict) -> dict:
     if name == "get_plan":
         return data.get_plan()
@@ -96,47 +125,86 @@ def context_text(req: dict) -> str:
     return ("Recent chat:\n" + "\n".join(lines[-8:]) + "\n\n" if lines else "") + f"{asker} asks: {req['message']['text']}"
 
 
-# ---------------------------------------------------------------- Gemini
-def gemini_turn(req: dict, data: TripData, client=None, model: str = GEMINI_MODEL, started: float | None = None,
-                think: bool = True) -> dict:
-    from google.genai import types
+# ---------------------------------------------------------------- shared model orchestration
+def model_turn(req: dict, data: TripData, provider: ModelProvider, started: float | None = None,
+               metrics: dict | None = None, strict: bool = True) -> dict:
+    """Shared orchestration. Adapters only exchange model messages; tools stay here.
 
-    if client is None:
-        from google import genai
-        client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                              http_options=types.HttpOptions(timeout=20_000,  # ms per Gemini call
-                                                             retry_options=types.HttpRetryOptions(attempts=1)))  # we switch models instead
-    # Little "thinking": these are short tool-picking steps, and thinking adds seconds to every call.
-    thinking = (types.ThinkingConfig(thinking_budget=0) if model.startswith("gemini-2.5")
-                else types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW))
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM, temperature=0.2, thinking_config=thinking if think else None,
-        tools=[types.Tool(function_declarations=[types.FunctionDeclaration(**t) for t in TOOLS])],
-        tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="ANY")),
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
-    plan = data.get_plan()  # given up front: saves one Gemini round trip on most questions
+    Trials call this directly, so a failed model cannot be disguised by rules.
+    Legacy Gemini permits plain-text completion as before; new providers require answer.
+    """
+    plan = data.get_plan()  # given up front: saves a model round trip on most questions
     prompt = context_text(req) + "\n\nCurrent plan (JSON):\n" + json.dumps(plan, ensure_ascii=False, separators=(",", ":"))
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+    definitions = strict_tools() if strict else TOOLS
+    provider.start(SYSTEM, prompt, definitions)
     calls = []
-    started = started or time.monotonic()
+    started = time.monotonic() if started is None else started
+    metrics = metrics if metrics is not None else {}
+    metrics.update({"model_requests": 0, "usage": {}, "completed_answer": False,
+                    "proposal_submitted": False, "proposal_rejected": False})
     for _ in range(MAX_STEPS):
-        if time.monotonic() - started > DEADLINE_SECONDS:
-            raise TimeoutError("Gemini took too long")
-        resp = client.models.generate_content(model=model, contents=contents, config=config)
-        fcs = resp.function_calls or []
+        remaining = DEADLINE_SECONDS - (time.monotonic() - started)
+        if remaining <= 0:
+            raise TimeoutError("Model took too long")
+        metrics["model_requests"] += 1
+        resp = provider.complete(remaining)
+        if time.monotonic() - started >= DEADLINE_SECONDS:
+            raise TimeoutError("Model took too long")
+        for key, value in (resp.usage or {}).items():
+            metrics["usage"][key] = metrics["usage"].get(key, 0) + value
+        fcs = resp.calls
         if not fcs:  # plain text instead of a tool call
+            if strict:
+                raise ProviderError()
             return finish(data, resp.text or "Sorry, I couldn't work that out.", None, calls)
-        contents.append(resp.candidates[0].content)
-        parts = []
+        if strict:
+            # Validate the entire batch before executing any of its calls.
+            schemas = {t["name"]: t["parameters_json_schema"] for t in definitions}
+            if len(fcs) > 8 or (any(fc.name == "answer" for fc in fcs) and len(fcs) != 1):
+                raise ProviderError()
+            for fc in fcs:
+                if fc.name not in schemas or not Draft202012Validator(schemas[fc.name]).is_valid(fc.args):
+                    raise ProviderError()
+        results = []
         for fc in fcs:
-            args = dict(fc.args or {})
+            if time.monotonic() - started >= DEADLINE_SECONDS:
+                raise TimeoutError("Model took too long")
+            args = fc.args
             if fc.name == "answer":
-                return finish(data, args.get("reply", ""), args.get("proposal"), calls, bool(args.get("needs_clarification")))
+                if strict and not args.get("reply", "").strip():
+                    raise ProviderError()
+                if strict and args.get("proposal"):
+                    proposal = args["proposal"]
+                    # The product supports replacing one stop at the same time.
+                    replacement = proposal["add"][0]
+                    if proposal["remove_item_ids"] != [f"{proposal['date']}@{replacement['start']}"]:
+                        raise ProviderError()
+                out = finish(data, args.get("reply", ""), args.get("proposal"), calls, bool(args.get("needs_clarification")))
+                metrics.update(completed_answer=True, proposal_submitted=bool(args.get("proposal")),
+                               proposal_rejected=bool(args.get("proposal")) and out["proposal"] is None)
+                return out
             out = run_tool(data, fc.name, args)
             calls.append({"name": fc.name, "summary": SUMMARY.get(fc.name, fc.name)})
-            parts.append(types.Part.from_function_response(name=fc.name, response={"result": out}))
-        contents.append(types.Content(role="user", parts=parts))
+            results.append((fc, out))
+        provider.add_results(results)
+    if strict:
+        raise ProviderError()
     return finish(data, "Sorry, that took too many steps. Could you ask in a simpler way?", None, calls, True)
+
+
+def gemini_turn(req: dict, data: TripData, client=None, model: str = GEMINI_MODEL, started: float | None = None,
+                think: bool = True) -> dict:
+    return model_turn(req, data, GeminiProvider(model, client, think), started=started, strict=False)
+
+
+def provider_settings() -> dict:
+    """Explicit selection. Existing deployments keep Gemini/rules behavior."""
+    provider = os.getenv("AGENT_PROVIDER", "gemini").strip().lower()
+    model = (os.getenv("GROQ_MODEL", GROQ_MODELS[0]) if provider == "groq"
+             else GEMINI_MODEL if provider == "gemini" else None)
+    configured = provider in ("gemini", "groq", "rules")
+    enabled = configured and provider != "rules" and bool(os.getenv(f"{provider.upper()}_API_KEY"))
+    return {"provider": provider, "model": model, "enabled": enabled, "configured": configured}
 
 
 # ---------------------------------------------------------------- rules fallback (no LLM)
@@ -231,13 +299,19 @@ def provider_failure_summary(error: Exception) -> str:
 
 def turn(req: dict, client=None) -> dict:
     data = TripData(req.get("itinerary_id"))
-    if client is not None or os.getenv("GEMINI_API_KEY"):
+    settings = provider_settings()
+    provider = settings["provider"]
+    if provider != "rules" and (client is not None or settings["enabled"] or not settings["configured"]):
         try:
-            return gemini_with_fallback(req, data, client)
+            if not settings["configured"]:
+                raise ProviderError()
+            if provider == "gemini":
+                return gemini_with_fallback(req, data, client)
+            return model_turn(req, data, GroqProvider(settings["model"], client=client))
         except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
             summary = provider_failure_summary(e)
             log.warning("agent fallback to rules: %s", summary)
-            out["tool_calls"].insert(0, {"name": "gemini_error", "summary": summary})
+            out["tool_calls"].insert(0, {"name": "gemini_error" if provider == "gemini" else "provider_error", "summary": summary})
             return out
     return rules_turn(req, data)

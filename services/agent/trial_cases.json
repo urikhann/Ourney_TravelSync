@@ -1,0 +1,25 @@
+{
+  "version": "synthetic-agent-trials-v1",
+  "description": "Synthetic tool-use checks, not real Busan operating facts or preference labels.",
+  "days": [{"date": "2026-11-21", "items": [
+    {"poi_id": "park", "start": "10:00", "end": "11:30", "locked": false},
+    {"poi_id": "market", "start": "14:00", "end": "15:00", "locked": true}
+  ]}],
+  "places": [
+    {"poi_id": "park", "name": "Test Park", "area": "Test area", "kind": "activity", "category": "park", "indoor_guess": false, "walking_level": 0.8, "duration_min": 90},
+    {"poi_id": "market", "name": "Test Market", "area": "Test area", "kind": "activity", "category": "market", "indoor_guess": false, "walking_level": 0.9, "duration_min": 60},
+    {"poi_id": "museum", "name": "Test Museum", "area": "Test area", "kind": "activity", "category": "museum", "indoor_guess": true, "walking_level": 0.2, "duration_min": 90},
+    {"poi_id": "gallery", "name": "Test Gallery", "area": "Test area", "kind": "activity", "category": "gallery", "indoor_guess": true, "walking_level": 0.3, "duration_min": 90}
+  ],
+  "hours": {"museum": true, "gallery": true},
+  "cases": [
+    {"id": "greeting", "expect_proposal": false, "en": "Hello!", "ko": "안녕하세요!"},
+    {"id": "rain", "expect_proposal": true, "en": "It's raining. Replace the 10:00 park visit with an indoor activity.", "ko": "비가 와요. 10시 공원 방문을 실내 활동으로 바꿔 주세요."},
+    {"id": "walking", "expect_proposal": true, "en": "We are tired. Replace the 10:00 park visit with an activity requiring less walking.", "ko": "피곤해요. 10시 공원 방문을 덜 걷는 활동으로 바꿔 주세요."},
+    {"id": "locked", "expect_proposal": false, "en": "Replace the locked 14:00 market stop with an indoor activity.", "ko": "잠긴 14시 시장 일정을 실내 활동으로 바꿔 주세요."},
+    {"id": "unknown_hours", "expect_proposal": true, "hours": {"museum": null, "gallery": false}, "en": "Replace the 10:00 park visit with the museum and tell us whether its opening hours are confirmed.", "ko": "10시 공원 방문을 박물관으로 바꾸고 운영 시간이 확인되었는지 알려 주세요."},
+    {"id": "closed", "expect_proposal": false, "hours": {"museum": false, "gallery": false}, "en": "Replace the 10:00 park visit with an indoor activity only if it is open for the visit.", "ko": "방문 시간 동안 문을 연 실내 활동이 있을 때만 10시 공원 방문을 바꿔 주세요."},
+    {"id": "ambiguous", "expect_proposal": false, "expect_clarification": true, "en": "Change it.", "ko": "그거 바꿔 주세요."},
+    {"id": "no_plan", "no_plan": true, "expect_proposal": false, "en": "It's raining. Suggest an indoor replacement in our plan.", "ko": "비가 와요. 일정에서 실내 장소로 바꿀 곳을 추천해 주세요."}
+  ]
+}

@@ -1,5 +1,6 @@
 """E2 after lazy enrichment. Never changes scores, GFAR ranks or utilities."""
 from .contracts import Eligibility, Fact, PlanRequest, Window
+from ..planning_categories import EVENING_START_MIN
 
 
 def evidenced(f: Fact) -> bool:
@@ -49,6 +50,8 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
     windows, reasons = {}, {}
     for p in req.candidates:
         why = []
+        if p.visit_category == "evening" and not any(l.poi_id == p.poi_id for l in req.locked_items):
+            why.append("EVENING_CHOICE_NOT_SELECTED")
         if p.poi_id in banned or tags.intersection(p.tags):
             why.append("EXPLICIT_EXCLUSION")
         if not usable_duration(p.duration_min):
@@ -58,13 +61,18 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
         per_date = {}
         if not why:
             for day in req.days:
+                bound = bounds.get(day.date)
+                if p.visit_category == "evening" and bound is not None:
+                    if bound.end_min <= EVENING_START_MIN:
+                        why.append(f"{day.date}:NO_EVENING_WINDOW")
+                        continue
+                    bound = Window(start_min=max(bound.start_min, EVENING_START_MIN), end_min=bound.end_min)
                 op = p.operations.get(day.date)
                 if p.allowed_dates is not None and day.date not in p.allowed_dates:
                     why.append(f"{day.date}:DAY_CANDIDATE_NOT_SELECTED")
                 elif day.date not in bounds:
                     why.append(f"{day.date}:CONSTRAINT_CONFLICT")
                 elif not req.enforce_opening_hours:
-                    bound = bounds[day.date]
                     if p.is_festival and (op is None or not op.event_active.known or op.event_active.value is not True):
                         why.append(f"{day.date}:EVENT_UNVERIFIED_OR_INACTIVE")
                     elif bound.end_min - bound.start_min >= p.duration_min.value:
@@ -78,7 +86,6 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
                 elif (op is None or not op.openings.known or not op.closed.known) and not req.allow_unknown_opening_hours:
                     why.append(f"{day.date}:OPERATING_INFO_UNKNOWN")
                 else:
-                    bound = bounds[day.date]
                     intervals = op.openings.value if op is not None and op.openings.known else (bound,)
                     if op is None or not op.openings.known or not op.closed.known:
                         why.append(f"{day.date}:OPENING_HOURS_UNVERIFIED")
@@ -97,7 +104,7 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
     for day in req.days:
         nodes = {pid for pid, w in windows.items() if day.date in w}
         nodes.update((day.start_point, day.end_point))
-        valid = [e for e in req.edges if e.date == day.date and e.usable
+        valid = [e for e in req.edges if e.date == day.date and (e.usable or (req.provisional and e.draft_usable))
                  and e.origin in nodes and e.destination in nodes
                  and (req.max_leg_minutes is None or e.duration_minutes <= req.max_leg_minutes)]
 

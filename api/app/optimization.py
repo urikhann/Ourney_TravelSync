@@ -18,6 +18,7 @@ from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyCom
                                                   NonNegative, Operation, PlanRequest, Window)
 
 from ourney_travelsync.planning_categories import visit_role
+from ourney_travelsync.breakfast_metadata import breakfast_metadata
 from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
 
 from . import config
@@ -76,6 +77,8 @@ class PlanningSnapshot(Contract):
     transport_mode: str
     operating_snapshot_id: Annotated[str, Field(min_length=1)]
     routing_version: Annotated[str, Field(min_length=1)]
+    routing_warnings: tuple[Literal["routing_quota_exceeded", "routing_request_budget_exceeded", "routing_daily_budget_exceeded"], ...] = ()
+    routing_attempts: dict[Literal["batch", "point"], NonNegative] | None = None
     pois: Annotated[tuple[OperatingInput, ...], Field(max_length=60)]
     edges: Annotated[tuple[Edge, ...], Field(max_length=12000)]
 
@@ -166,13 +169,15 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         # Normalize the captured values without clamping invalid data into range.
         scores = {u: (v - 1) / 4 if scale == "1-5" else v for u, v in raw_scores.items()}
         p = rows[row["poi_id"]]
-        role, category = visit_role(p.features)
+        role, category = visit_role({**p.features, "category_name": p.category, "tags": p.tags})
+        breakfast, breakfast_hours = breakfast_metadata({"enriched_metadata": p.enriched_metadata})
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
                                     personal_scores=scores, relevance=relevance, tags=tuple(p.tags),
                                     is_festival=bool(p.features.get("festival")),
                                     allowed_dates=row.get("candidate_dates"),
+                                    breakfast_offering=breakfast, breakfast_hours=breakfast_hours,
                                     visit_category=role, activity_category=category))
     daily = [dict(date=d.date.isoformat(), start_min=d.start_min, end_min=d.end_min,
                   start_point=f"start:{d.date}", end_point=f"end:{d.date}") for d in sorted(body.days, key=lambda d: d.date)]
@@ -193,7 +198,7 @@ def catalogue_request(run, body, db):
                                             **{pid: "group_removed" for pid in body.excluded_poi_ids}}}
     return {**request,
         "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
-            category_name=p.category, latitude=p.lat, longitude=p.lng,
+            category_name=p.category, tags=p.tags, latitude=p.lat, longitude=p.lng,
             enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features)),
             field_status={**(p.field_status or {}), "duration": "ESTIMATED"}, **p.features) for p in rows],
         "planning_days": [d.model_dump(mode="json") for d in body.days],

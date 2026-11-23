@@ -1,0 +1,85 @@
+Routing quota policy
+
+Branch: codex/routing-quota-guard
+
+Separate configurable account quotas replace the combined 200/day cap:
+  Endpoint                      Configured quota    Reserve    Usable daily
+  Multi-destination (batch)      1,000               10%        900
+  Driving directions (point)    10,000              10%        9,000
+
+Set these defaults to the actual account limits. One outgoing HTTP attempt is
+charged to its endpoint, including retries and point fallbacks. A batch with up
+to 30 destinations counts once; route legs are not requests. Cache hits use no
+allowance. Calls outside this service are not observable: remaining values are
+local estimates, not authoritative provider quota/billing telemetry.
+
+Compose configuration:
+  KAKAO_ROUTE_BATCH_DAILY_QUOTA=1000
+  KAKAO_ROUTE_POINT_DAILY_QUOTA=10000
+  KAKAO_ROUTE_QUOTA_RESERVE_PERCENT=10
+  KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT=10
+  KAKAO_ROUTE_INITIAL_REQUESTS=80
+  KAKAO_ROUTE_MAX_REQUESTS=200
+  KAKAO_ROUTE_CONCURRENCY=2
+  PLANNING_DAY_CANDIDATE_LIMIT=16
+
+KAKAO_ROUTE_DAILY_REQUEST_LIMIT is obsolete and ignored. An existing
+KAKAO_ROUTE_MAX_REQUESTS=80 still explicitly overrides the hard plan cap: remove
+it or set 200 for default expansion. No real credential is stored in configuration.
+
+App driving generation uses selected legs from a Haversine draft. It carries the
+endpoint attempt counts across the initial lookup and up to two repair rounds.
+The first lookup gets the initial allowance. Repairs may use the remaining
+hard-cap allowance, including retries. An uncached selected leg normally takes
+one point request. The batch endpoint can serve a selected leg if point quota
+is unavailable and the leg is within the configured batch radius.
+
+Each planning snapshot starts with 80 combined HTTP attempts. If used up and
+UNKNOWN edges leave a candidate without a known round-trip connection to the
+day's endpoints, a second pass can expand to 200 TOTAL attempts. Both passes
+reuse one client counter and the saved cache. This is not 80 plus 200.
+A per-endpoint share also caps one snapshot at 10% of its usable daily allowance:
+90 batch / 900 point with the defaults; the combined 200 hard cap still applies.
+Repeated snapshots remain bounded by the shared atomic daily counters.
+
+Expansion uses missing graph connectivity, not a claim of solver feasibility.
+It does not fill unused arcs in an already connected graph or blindly retry
+known-unreachable edges. Time, meals and full itinerary feasibility still
+belong to the optimizer/E3. Return legs are requested before optional inter-POI
+alternatives so cold-cache fallback does not spend its allowance on unusable paths.
+
+When batch quota or its per-plan share is exhausted, point routing may serve
+the missing legs within its separate quota, share and the combined plan cap.
+Cooldowns are endpoint-specific. HTTP 429 / code -10 are not immediately retried.
+Numeric or HTTP-date Retry-After is honored within 1..86400 seconds; otherwise
+cooldown is one hour. HTTP 5xx retains bounded retries; each attempt is counted.
+
+Counters persist atomically in the route-cache SQLite volume, keyed by a one-way
+credential hash and endpoint. Usage resets on the Asia/Seoul calendar day;
+cooldowns keep their own expiry. Concurrent workers cannot exceed the local
+daily allowance. Canceled/in-flight reservations can be conservatively counted
+even if no response arrives; these are not billed-usage measurements.
+
+Upgrade: old cache routes and combined counter rows remain intact. Because old
+usage has no endpoint split, the current-day combined count is conservatively
+carried into EACH endpoint once. New attempts then count independently. Old-day
+counts do not carry into a new KST date; existing cooldowns retain their expiry.
+Do not run old/new accounting versions concurrently against the same cache.
+
+On a quota/cap, successful legs are already saved. Missing legs stay UNKNOWN:
+no travel time or fare is invented. E2, the solver and independent E3 decide
+whether available evidence supports a plan. No known edges retains an explicit
+limit error. A partial valid graph retains routing_warnings for the UI. A fully
+completed graph does not falsely warn that alternatives could not be checked.
+
+GET /health reports concurrency, initial/hard plan caps and endpoint share.
+GET /diagnostics (existing service-token authorization) adds routing_budget:
+KST date, configured quotas, usable limits, local attempts, remaining allowances
+and cooldown seconds per endpoint. It reports no credential hash or locations.
+
+Offline verification:
+python -m pytest -q tests/test_routing_budgets.py tests/test_kakao_planning_data.py api/tests/test_kakao_adapter_integration.py api/tests/test_routing_fallback.py
+
+Provider references:
+https://developers.kakaomobility.com/price/
+https://developers.kakaomobility.com/guide/navi-api/destinations

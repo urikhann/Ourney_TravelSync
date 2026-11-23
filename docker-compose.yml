@@ -29,6 +29,7 @@ services:
       TRAVELSYNC_E5_CACHE: /e5-cache
       TRAVELSYNC_E5_MODEL_CACHE: /e5-models
       TRAVELSYNC_E5_REGENERATE: "0"
+      PLANNING_DAY_CANDIDATE_LIMIT: ${PLANNING_DAY_CANDIDATE_LIMIT:-16}
     ports: ["8002:8002"]
     volumes: ["./src/ourney_travelsync/data:/data:ro", "./output/e5-cache:/e5-cache", "./output/e5-models:/e5-models"]
     healthcheck:
@@ -50,7 +51,13 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
       KAKAO_ROUTE_RADIUS: ${KAKAO_ROUTE_RADIUS:-5000}
-      KAKAO_ROUTE_CONCURRENCY: ${KAKAO_ROUTE_CONCURRENCY:-8}
+      KAKAO_ROUTE_CONCURRENCY: ${KAKAO_ROUTE_CONCURRENCY:-2}
+      KAKAO_ROUTE_INITIAL_REQUESTS: ${KAKAO_ROUTE_INITIAL_REQUESTS:-80}
+      KAKAO_ROUTE_MAX_REQUESTS: ${KAKAO_ROUTE_MAX_REQUESTS:-200}
+      KAKAO_ROUTE_BATCH_DAILY_QUOTA: ${KAKAO_ROUTE_BATCH_DAILY_QUOTA:-1000}
+      KAKAO_ROUTE_POINT_DAILY_QUOTA: ${KAKAO_ROUTE_POINT_DAILY_QUOTA:-10000}
+      KAKAO_ROUTE_QUOTA_RESERVE_PERCENT: ${KAKAO_ROUTE_QUOTA_RESERVE_PERCENT:-10}
+      KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT: ${KAKAO_ROUTE_PLAN_QUOTA_SHARE_PERCENT:-10}
       ROUTE_CACHE_PATH: /cache/routes.sqlite3
       PLANNING_DATA_TOKEN: ${PLANNING_DATA_TOKEN:-}
     volumes: ["route_cache:/cache"]
@@ -72,13 +79,16 @@ services:
       db: {condition: service_healthy}
     volumes: ["./services/mocks:/code", "./src:/package/src:ro"]
 
-  agent:  # TravelSync AI agent (Gemini + read-only tools). Without GEMINI_API_KEY it answers with simple rules.
+  agent:  # TravelSync AI agent with selectable model provider and read-only tools.
     build: ./services/agent
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       AVAILABILITY_URL: http://mocks:8001
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-gemini}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
     ports: ["127.0.0.1:8005:8005"]
     depends_on:
       db: {condition: service_healthy}

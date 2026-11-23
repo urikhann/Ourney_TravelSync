@@ -6,7 +6,7 @@ from ortools.sat.python import cp_model
 
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
 from .eligibility import common_bounds, usable_cost
-from .meals import effective_meals
+from .meals import effective_meals, breakfast_windows
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,8 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     eligible = {e.poi_id: e for e in eligibility}
     pois = {p.poi_id: p for p in sorted(req.candidates, key=lambda p: p.poi_id)
             if p.poi_id in eligible and eligible[p.poi_id].schedule_eligible}
-    edges = {(e.date, e.origin, e.destination): e for e in req.edges if e.usable}
+    edges = {(e.date, e.origin, e.destination): e for e in req.edges
+             if e.usable or (req.provisional and e.draft_usable)}
     visits, times, day_arcs = {}, {}, {}
     total_cost = []
     meal_preferences = []
@@ -73,10 +74,25 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             model.add(sum(covered) >= composition.min_activity_categories)
             meals = effective_meals(day, composition)
             assigned = {k: [] for k in range(len(meals))}
-            for pid in meal_ids:
+            cafe_meals = []
+            breakfast_cafes = cafe_ids if any(w.name == "breakfast" for w in meals) else []
+            for pid in [*meal_ids, *breakfast_cafes]:
                 choices = []
                 for k,w in enumerate(meals):
+                    if pois[pid].visit_category == "cafe" and w.name != "breakfast":
+                        continue
+                    windows = breakfast_windows(pois[pid], day.date) if w.name == "breakfast" else None
+                    if windows == ():
+                        continue
                     z = model.new_bool_var(f"meal_{day.date}_{pid}_{w.name}")
+                    if windows is not None:
+                        serving_choices = []
+                        for n, interval in enumerate(windows):
+                            serving = model.new_bool_var(f"breakfast_hours_{day.date}_{pid}_{n}")
+                            model.add(times[day.date,pid] >= interval.start_min).only_enforce_if(serving)
+                            model.add(times[day.date,pid] + pois[pid].duration_min.value <= interval.end_min).only_enforce_if(serving)
+                            serving_choices.append(serving)
+                        model.add(sum(serving_choices) == z)
                     model.add(times[day.date,pid] >= w.start_min).only_enforce_if(z)
                     model.add(times[day.date,pid] + pois[pid].duration_min.value <= w.end_min).only_enforce_if(z)
                     if w.fixed_start_min is not None:
@@ -90,7 +106,13 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                         meal_preferences.append(deviation)
                     choices.append(z)
                     assigned[k].append(z)
-                model.add(sum(choices) == visits[day.date,pid])
+                if pois[pid].visit_category == "cafe":
+                    model.add(sum(choices) <= visits[day.date,pid])
+                    cafe_meals.extend(choices)
+                else:
+                    model.add(sum(choices) == visits[day.date,pid])
+            if cafe_meals:
+                model.add(meal_count + sum(cafe_meals) <= composition.max_meals)
             for k, choices in assigned.items():
                 model.add(sum(choices) <= 1)
                 if meals[k].required:
@@ -150,6 +172,11 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         # Reuse the full search allowance without adding a route preference.
         total_fraction = sum(o[3] for o in objectives)
         objectives = [(n, e, m, f / total_fraction) for n, e, m, f in objectives]
+    if req.provisional:
+        distance = sum(a * (e.straight_line_m if e.straight_line_m is not None else e.distance_m)
+                       for _, arcs in day_arcs.values() for a, e in arcs.values())
+        objectives = [(n, e, m, f * .8) for n, e, m, f in objectives]
+        objectives.insert(2, ("haversine_distance_m", distance, False, .2))
     for name, expression, maximize, fraction in objectives:
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:
