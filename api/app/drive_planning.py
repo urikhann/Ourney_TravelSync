@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from ourney_travelsync.geography import haversine_km
 from ourney_travelsync.optimizer.contracts import Edge, PlanResponse
+from ourney_travelsync.optimizer.meals import breakfast_windows, effective_meals
 
 from . import services
 from .optimization import PlanningSnapshot, fingerprint, solver_request
@@ -76,6 +77,28 @@ async def solve_checked(req):
     return response, result
 
 
+def missing_required_breakfast(req, result):
+    policy = req.daily_composition
+    if policy is None:
+        return False
+    eligible = {place.poi_id: place for place in result.eligibility}
+    for day in req.days:
+        required = next((meal for meal in effective_meals(day, policy)
+                         if meal.name == "breakfast" and meal.required), None)
+        if required is None:
+            continue
+        if not any(
+            candidate.visit_category in ("meal", "cafe")
+            and day.date in eligible[candidate.poi_id].feasible_dates
+            and any(min(window.end_min, required.end_min, day.end_min)
+                    - max(window.start_min, required.start_min, day.start_min) >= candidate.duration_min.value
+                    for window in breakfast_windows(candidate, day.date))
+            for candidate in req.candidates if candidate.poi_id in eligible
+        ):
+            return True
+    return False
+
+
 async def plan_drive(run, body, prepared, context, audit, db):
     # The operating snapshot is read once for optimization. Individual routing
     # rounds only contribute route evidence and keep its provenance.
@@ -107,6 +130,8 @@ async def plan_drive(run, body, prepared, context, audit, db):
         if not draft.days:
             if last_result:
                 break
+            if draft.error_code in ("NO_FEASIBLE_ITINERARY", "INSUFFICIENT_CANDIDATES") and missing_required_breakfast(draft_req, draft):
+                raise HTTPException(409, "optimizer_breakfast_unavailable")
             raise HTTPException(409, "optimizer_" + (draft.error_code or "invalid_result").lower())
         legs = [key for key in chosen_edges(draft.days) if key not in evidence]
         if not legs:

@@ -10,8 +10,9 @@ from app import config, services
 from .test_optimizer_integration import ready, generate, configuration, audits
 
 
-@pytest.mark.parametrize("repair_needed", [False, True])
-def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_path, repair_needed):
+@pytest.mark.parametrize(("repair_needed", "day_count", "breakfast"),
+                         [(False, 1, False), (True, 1, False), (False, 2, False), (False, 2, True)])
+def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_path, repair_needed, day_count, breakfast):
     monkeypatch.setenv("ROUTE_CACHE_PATH", str(tmp_path / "routes.sqlite3"))
     path = Path(__file__).resolve().parents[2] / "services/planning_data/main.py"
     spec = importlib.util.spec_from_file_location("kakao_integration", path)
@@ -63,10 +64,20 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
     monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 20)
     monkeypatch.setitem(services.TEST_TRANSPORTS, config.PLANNING_DATA_URL, httpx.ASGITransport(app=adapter.app))
     try:
-        headers, tid, _ = ready(individual_method="feature_mean")
-        body = configuration()
+        dates = ("2026-11-06", "2026-11-07")[:day_count]
+        headers, tid, _ = ready(individual_method="feature_mean", days=dates)
+        body = configuration(dates)
+        if day_count == 2:
+            body["days"][1]["start_point"] = dict(label="Second day start", latitude=35.16, longitude=129.11)
         body["transport_mode"] = "drive"
+        if breakfast:
+            body["daily_composition"] = {"breakfast_enabled": True}
         result = generate(headers, tid, body)
+        if breakfast:
+            assert result.status_code == 409, result.text
+            assert result.json()["detail"] == "optimizer_breakfast_unavailable"
+            assert calls == []
+            return
         assert result.status_code == 200, result.text
         assert result.json()["plans"][0]["stats"]["validation_status"] == "PASSED"
         audit = audits(tid)[0]
@@ -75,9 +86,14 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
         assert rounds[-1]["routing_attempts"] == {"point": len(calls)}
         assert len(calls) == sum(len(r["requested_legs"]) for r in rounds)
         if not repair_needed:
-            day = result.json()["plans"][0]["days"][0]
-            assert len(calls) == len(day["items"]) + 1
-            assert day["return_travel_minutes"] == 1
+            days = result.json()["plans"][0]["days"]
+            assert [day["date"] for day in days] == list(dates)
+            assert len(calls) == sum(len(day["items"]) + 1 for day in days)
+            for day in days:
+                assert day["return_travel_minutes"] == 1
+                requested = rounds[0]["requested_legs"]
+                assert any(leg["origin"] == day["start_point"] for leg in requested)
+                assert any(leg["destination"] == day["end_point"] for leg in requested)
         assert audit.optimizer_request["routing_version"] == adapter.ROUTING_VERSION
         assert not audit.optimizer_request["provisional"]
         assert all(e["status"] == "KNOWN" and e["straight_line_m"] is None
