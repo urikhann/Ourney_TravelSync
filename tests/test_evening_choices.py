@@ -1,5 +1,10 @@
 from copy import deepcopy
 
+import pytest
+
+pytest.importorskip("pydantic")
+pytest.importorskip("ortools")
+
 from optimizer_fixtures import request_data
 from ourney_travelsync.optimizer.api import optimize
 from ourney_travelsync.optimizer.contracts import PlanRequest
