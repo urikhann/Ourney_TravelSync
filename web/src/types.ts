@@ -6,6 +6,8 @@ export type TripSummary = { id: string; name: string; city: string; start_date: 
 export type Member = { user_id: string; name: string; role: string; is_me: boolean; preferences_done: boolean; free_dates: string[] };
 export type Trip = TripSummary & {
   invite_code: string; invite_url: string; members: Member[];
+  invite?: { status: "active" | "expired" | "revoked"; expires_at: string };  // issue #18
+  is_owner?: boolean;
   setup: { members: number; preferences_done: number; waiting_for: string[] };
 };
 
@@ -18,7 +20,12 @@ export type Preferences = {
   ratings: Record<Category, number>; // every feature → whole number 1..5 (raw score; the recommender makes weights)
   version: number;                   // 0 = never saved; every save adds 1
   submitted?: boolean;
+  source?: "saved" | "custom" | "none";   // issue #21: same as my saved preferences, customized for this trip, or not answered
+  saved_version?: number;                  // 0 = I have no saved preferences yet
 };
+// My saved preferences, reused for every trip (GET/PUT /me/preferences, issue #21)
+export type SavedPreferences = { ratings: Record<Category, number>; version: number; saved: boolean; history: { version: number; saved_at: string }[] };
+
 export type Exclusions = { tags: string[]; poi_ids: string[] }; // personal "never take me there" rules
 
 export type FieldStatus = Record<string, string>; // e.g. { hours: "UNKNOWN", cost: "UNKNOWN", duration: "ESTIMATED" }
@@ -119,7 +126,9 @@ export type AgentInfo = {
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
   removed?: { poi_id: string; start: string; name: string }[];
-  result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild" };
+  result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild";
+    approve?: number; members?: number; date?: string; added?: string[] };
+  event?: string;
 };
 export type ChatMessage = {
   id: number; kind: "user" | "agent"; text: string; reply_to: number | null; created_at: string;
@@ -127,3 +136,6 @@ export type ChatMessage = {
   agent: AgentInfo | null;
 };
 export type ChatPage = { agent_name: string; messages: ChatMessage[] };
+
+// Start / end location search on the Plan screen (GET /trips/{id}/locations?q=)
+export type LocationHit = { id: string; name: string; sub: string; lat: number; lng: number; source: "popular" | "kakao" | "place" | "mine" | "recent" };

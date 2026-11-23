@@ -3,6 +3,7 @@
 // into one route (= "different tastes, one itinerary"), big title, form.
 // Props are the same as before, so Login.tsx and Signup.tsx keep working.
 import type { ReactNode } from "react";
+import { LangSwitch } from "../i18n";
 
 type Props = {
   title?: ReactNode;
@@ -59,6 +60,7 @@ export default function AuthShell({ title, sub, subtitle, footer, children }: Pr
         <div className="ts-brand">
           <BrandMark /> TravelSync
         </div>
+        <div className="ts-auth-lang"><LangSwitch compact /></div>
 
         <MergeArt />
 

@@ -220,6 +220,20 @@ def logout_all(user: User = Depends(current_user), db: Session = Depends(get_db)
 me_router = APIRouter(tags=["auth"])
 
 
+class DeleteMeIn(BaseModel):
+    password: str
+
+
 @me_router.get("/me", response_model=UserOut)
 def me(user: User = Depends(current_user)):
     return _user_out(user)
+
+
+@me_router.post("/me/delete", status_code=204)
+def delete_me(body: DeleteMeIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Delete the account (issue #18). Needs the password again. The user leaves every trip first:
+    trips they own pass to the next member, or are deleted when nobody else is in them."""
+    from ..membership import delete_account
+    if not verify_password(user.password_hash, body.password):
+        raise HTTPException(403, "wrong_password")
+    delete_account(db, user)

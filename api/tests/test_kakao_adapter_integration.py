@@ -90,3 +90,44 @@ def test_routing_failure_reaches_user_without_provider_details(monkeypatch, plan
     audit = audits(tid)[0]
     assert audit.error_code == "routing_credentials_rejected"
     assert not audit.optimizer_request
+
+
+def test_multi_destination_quota_falls_back_to_single_routes(monkeypatch, tmp_path):
+    """Kakao allows 1,000 multi-destination calls a day but 10,000 single-route calls.
+    When the first quota runs out, the same legs are fetched one by one instead of failing the plan."""
+    import asyncio
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("ROUTE_CACHE_PATH", str(tmp_path / "routes.sqlite3"))
+    path = Path(__file__).resolve().parents[2] / "services/planning_data/main.py"
+    spec = importlib.util.spec_from_file_location("kakao_quota", path)
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    calls = {"POST": 0, "GET": 0}
+
+    def respond(req):
+        calls[req.method] += 1
+        if req.method == "POST":  # Kakao: HTTP 400, code -10 = daily quota used up
+            return httpx.Response(400, json={"code": -10, "msg": "quota"})
+        return httpx.Response(200, json={"routes": [dict(result_code=0,
+            summary=dict(duration=900, distance=4000, fare=dict(toll=0)))]})
+
+    async def no_wait(_):
+        return None
+    monkeypatch.setattr(adapter, "_retry_pause", no_wait)
+    origin = {"latitude": 35.1151, "longitude": 129.0414}
+    dests = [(f"p{i}", {"latitude": 35.10 + i / 100, "longitude": 129.05}) for i in range(3)]
+
+    async def fetch():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond), headers={"Authorization": "KakaoAK k"}) as client:
+            return await adapter._fetch_routes_from_origin(client, asyncio.Semaphore(4), "start", origin, dests, "2026-11-06")
+
+    edges = asyncio.run(fetch())
+    assert [e["status"] for e in edges] == ["KNOWN"] * 3 and all(e["duration_minutes"] == 15 for e in edges)
+    assert calls == {"POST": 3, "GET": 3}  # 1 call + 2 retries, then one single-route call per leg
+    health = TestClient(adapter.app).get("/health").json()["kakao_calls_today"]
+    assert health["multi_destination_paused"] is True and health["directions"] == 3
+
+    calls.update(POST=0, GET=0)
+    asyncio.run(fetch())
+    assert calls == {"POST": 0, "GET": 3}  # paused until midnight: no more wasted multi-destination calls
+    adapter.engine.dispose()

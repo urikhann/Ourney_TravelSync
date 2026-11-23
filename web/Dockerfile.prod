@@ -1,0 +1,13 @@
+# Production web app: build the static files, then serve them with Caddy (HTTPS + /api proxy).
+FROM node:22 AS build
+WORKDIR /web
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+# The browser calls the API on the same address under /api (Caddy forwards it to the api service).
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+FROM caddy:2.10
+COPY --from=build /web/dist /srv

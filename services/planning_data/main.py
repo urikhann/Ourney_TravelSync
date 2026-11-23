@@ -19,7 +19,7 @@ import sqlite3
 import weakref
 from pathlib import Path
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
@@ -46,6 +46,37 @@ KAKAO_DIRECTIONS_URL = "https://apis-navi.kakaomobility.com/v1/directions"
 logger = logging.getLogger(__name__)
 PROVIDER = "KAKAO_MOBILITY_MULTI_DESTINATION_V1_TOLL_FREE"
 ROUTING_VERSION = "kakao-drive-multidestination-with-point-fallback-v2"
+
+# Kakao's free daily quotas (developers.kakao.com quota page): multi-destination 1,000 calls/day,
+# single-route directions 10,000 calls/day, reset at midnight Korea time. When the multi-destination
+# quota runs out, the rest of the day uses single-route calls for the same legs (same route data,
+# more calls, but a 10x larger quota). Calls are counted per Korea day and shown in GET /health.
+KST = timezone(timedelta(hours=9))
+_usage: dict = {"day": None, "multi_destination": 0, "directions": 0}
+_multi_paused_until: datetime | None = None
+
+
+def _kst_day() -> str:
+    return datetime.now(KST).date().isoformat()
+
+
+def _count(endpoint: str) -> None:
+    if _usage["day"] != _kst_day():
+        _usage.update(day=_kst_day(), multi_destination=0, directions=0)
+    _usage[endpoint] += 1
+
+
+def _multi_paused() -> bool:
+    return _multi_paused_until is not None and datetime.now(KST) < _multi_paused_until
+
+
+def _pause_multi_until_midnight() -> None:
+    global _multi_paused_until
+    tomorrow = datetime.now(KST).date() + timedelta(days=1)
+    _multi_paused_until = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=KST)
+    logger.warning("Kakao multi-destination quota used up; using single-route calls until %s KST",
+                   _multi_paused_until.isoformat())
+
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 app = FastAPI(title="TravelSync planning data", version="1.0")
@@ -280,6 +311,7 @@ async def _retry_pause(seconds):
 async def _route_request(client, semaphore, method, url, **kwargs):
     for attempt in range(3):
         async with semaphore:
+            _count("directions" if url == KAKAO_DIRECTIONS_URL else "multi_destination")
             response = await client.request(method, url, **kwargs)
         transient = (response.status_code in (429, 500, 502, 503, 504)
                      or (response.status_code == 400 and _provider_error_code(response) == -10))
@@ -423,9 +455,18 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
             "avoid": ["toll"],
         }
         try:
+            if _multi_paused():
+                raise HTTPException(503, "routing_quota_exceeded")
             response = await _route_request(client, semaphore, "POST", KAKAO_MULTI_DESTINATION_URL, json=payload)
             body = response.json()
             by_key = {r.get("key"): r for r in body.get("routes", []) if isinstance(r, dict)}
+        except HTTPException as e:
+            if e.detail != "routing_quota_exceeded":
+                raise
+            # Multi-destination quota is gone for today: ask for each leg on its own instead.
+            if not _multi_paused():
+                _pause_multi_until_midnight()
+            by_key = {pid: {"key": pid, "result_code": 304} for pid, _ in batch}
         except httpx.HTTPError:
             raise HTTPException(503, "routing_provider_unavailable") from None
         except (ValueError, AttributeError, TypeError):
@@ -553,6 +594,10 @@ def health():
         "schema_version": "planning-data-1.0",
         "kakao_configured": bool(KAKAO_REST_API_KEY),
         "route_cache": {"persistent": True, "expires": False, "mode": "demo_snapshot"},
+        "kakao_calls_today": {"day": _usage["day"] or _kst_day(),
+                              "multi_destination": _usage["multi_destination"] if _usage["day"] == _kst_day() else 0,
+                              "directions": _usage["directions"] if _usage["day"] == _kst_day() else 0,
+                              "multi_destination_paused": _multi_paused()},
     }
 
 

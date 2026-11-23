@@ -55,5 +55,11 @@ REC_GROUP_K = int(_env("REC_GROUP_K", "30"))
 MAX_GROUP_MEMBERS = int(_env("MAX_GROUP_MEMBERS", "10"))
 MAX_TRIP_DAYS = int(_env("MAX_TRIP_DAYS", "3"))
 
+# Invite links stop working after this many days (the owner can make a new link any time).
+INVITE_TTL_DAYS = int(_env("INVITE_TTL_DAYS", "7"))
+
+# Kakao Local keyword search for start/end locations on the Plan screen (optional; same key as planning-data).
+KAKAO_REST_API_KEY = _env("KAKAO_REST_API_KEY")
+
 # Controls availability-check endpoints and holiday display. Optimizer hours policy is separate.
 FEATURE_AVAILABILITY = _env("FEATURE_AVAILABILITY", "false").lower() in ("1", "true", "yes")

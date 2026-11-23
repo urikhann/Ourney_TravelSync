@@ -1,4 +1,12 @@
-"""Trips, members, invite links and availability."""
+"""Trips, members, invite links and availability.
+
+Issue #18 (see app/membership.py):
+    POST   /trips/{id}/leave                 leave the trip
+    DELETE /trips/{id}                       owner: delete the trip
+    DELETE /trips/{id}/members/{user_id}     owner: remove a member
+    POST   /trips/{id}/invite {"days": 7}    owner: new invite link (old links stop working)
+    DELETE /trips/{id}/invite                owner: turn the invite link off
+"""
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,12 +14,13 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from .. import config
+from .. import config, membership
 from ..db import get_db
 from ..deps import member_trip
 from ..emailer import send_email
 from ..models import MemberAvailability, Preference, Trip, TripMember, User
 from .auth import current_user
+from .preferences import apply_saved
 from .tastes import default_exclusions
 
 router = APIRouter(tags=["trips"])
@@ -36,6 +45,10 @@ class AvailabilityIn(BaseModel):
     dates: list[date]
 
 
+class InviteIn(BaseModel):
+    days: int = Field(default=config.INVITE_TTL_DAYS, ge=1, le=30)
+
+
 def trip_summary(trip: Trip, db: Session) -> dict:
     return {"id": trip.id, "name": trip.name, "city": trip.city, "start_date": trip.start_date.isoformat(),
             "end_date": trip.end_date.isoformat(), "member_count": len(trip.members)}
@@ -49,8 +62,13 @@ def trip_detail(trip: Trip, me: User, db: Session) -> dict:
     members = [{"user_id": m.user_id, "name": m.user.name, "role": m.role, "is_me": m.user_id == me.id,
                 "preferences_done": m.user_id in prefs, "free_dates": sorted(free.get(m.user_id, []))}
                for m in sorted(trip.members, key=lambda m: m.id or 0)]
+    link = membership.invite(db, trip)
+    status = membership.invite_status(db, trip)
+    db.commit()
     return {**trip_summary(trip, db),
             "invite_code": trip.invite_code, "invite_url": f"{config.WEB_URL}/join/{trip.invite_code}",
+            "invite": {"status": status, "expires_at": membership._utc(link.expires_at).isoformat()},
+            "is_owner": trip.created_by == me.id,
             "members": members,
             "setup": {"members": len(members), "preferences_done": sum(m["preferences_done"] for m in members),
                       "waiting_for": [m["name"] for m in members if not m["preferences_done"]]}}
@@ -61,6 +79,8 @@ def create_trip(body: TripIn, user: User = Depends(current_user), db: Session = 
     trip = Trip(**body.model_dump(), created_by=user.id)
     trip.members.append(TripMember(user_id=user.id, role="owner", exclusions=default_exclusions(db, user.id)))
     db.add(trip)
+    db.flush()
+    apply_saved(db, trip.id, user.id)  # issue #21: returning users skip the survey
     db.commit()
     db.refresh(trip)
     return trip_detail(trip, user, db)
@@ -83,7 +103,10 @@ def preview_invite(code: str, user: User = Depends(current_user), db: Session = 
     trip = db.scalar(select(Trip).where(Trip.invite_code == code.upper()))
     if not trip:
         raise HTTPException(404, "invite_not_found")
-    return {**trip_summary(trip, db), "already_member": any(m.user_id == user.id for m in trip.members)}
+    already = any(m.user_id == user.id for m in trip.members)
+    if not already:
+        membership.check_invite(db, trip)
+    return {**trip_summary(trip, db), "already_member": already}
 
 
 @router.post("/trips/join/{code}")
@@ -92,9 +115,12 @@ def join_trip(code: str, user: User = Depends(current_user), db: Session = Depen
     if not trip:
         raise HTTPException(404, "invite_not_found")
     if not any(m.user_id == user.id for m in trip.members):
+        membership.check_invite(db, trip)
         if len(trip.members) >= config.MAX_GROUP_MEMBERS:
             raise HTTPException(409, "trip_full")
         trip.members.append(TripMember(user_id=user.id, exclusions=default_exclusions(db, user.id)))
+        db.flush()
+        apply_saved(db, trip.id, user.id)  # issue #21
         db.commit()
     return trip_detail(trip, user, db)
 
@@ -119,3 +145,41 @@ def nudge(trip: Trip = Depends(member_trip), user: User = Depends(current_user),
                    f"Hi {m.user.name},\n\n{user.name} asked you to fill in your preferences for "
                    f"\"{trip.name}\" so TravelSync can plan the trip.\n\n{config.WEB_URL}/trips/{trip.id}/preferences")
     return {"nudged": [m.user.name for m in pending]}
+
+
+# ---------------------------------------------------------------- issue #18
+@router.post("/trips/{trip_id}/leave")
+def leave_trip(trip: Trip = Depends(member_trip), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    deleted = membership.remove_member(db, trip, user.id)
+    return {"left": True, "trip_deleted": deleted}
+
+
+@router.delete("/trips/{trip_id}", status_code=204)
+def delete_trip(trip: Trip = Depends(member_trip), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    membership.require_owner(trip, user)
+    membership.delete_trip(db, trip)
+
+
+@router.delete("/trips/{trip_id}/members/{user_id}")
+def remove_member(user_id: str, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
+                  db: Session = Depends(get_db)):
+    membership.require_owner(trip, user)
+    if user_id == user.id:
+        raise HTTPException(409, "use_leave_instead")
+    membership.remove_member(db, trip, user_id)
+    return trip_detail(trip, user, db)
+
+
+@router.post("/trips/{trip_id}/invite")
+def renew_invite(body: InviteIn | None = None, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    membership.require_owner(trip, user)
+    membership.renew_invite(db, trip, (body or InviteIn()).days)
+    return trip_detail(trip, user, db)
+
+
+@router.delete("/trips/{trip_id}/invite")
+def revoke_invite(trip: Trip = Depends(member_trip), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    membership.require_owner(trip, user)
+    membership.revoke_invite(db, trip)
+    return trip_detail(trip, user, db)

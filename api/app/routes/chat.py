@@ -5,7 +5,8 @@
     POST /trips/{trip_id}/chat/{message_id}/vote     {"approve": true | false}  vote on a TravelSync suggestion
 
 Ordinary messages are only shared with the group; they are never sent to the AI.
-The agent is asked only when a message starts with "@TravelSync" (MENTION) or comes from a quick-action button.
+The agent is asked only when a message starts with "@TravelSync" (or the short "@ai" / "@ts") (MENTION)
+or comes from a quick-action button. Short mentions are saved as "@TravelSync" so the history reads the same.
 The agent is the Gemini service on port 8005 (contracts/agent.*.json).
 A suggested change only reaches the plan after the group approves it (issue #19, see app/proposals.py).
 """
@@ -27,7 +28,7 @@ from .auth import current_user
 router = APIRouter(tags=["chat"])
 
 AGENT_NAME = "TravelSync"
-MENTION = re.compile(r"^\s*@travelsync(?=\s|$)", re.IGNORECASE)
+MENTION = re.compile(r"^\s*@(travelsync|ai|ts)(?=\s|$)", re.IGNORECASE)
 PAGE = 200
 CONTEXT = 10  # recent messages the agent may see (contract: recent_messages)
 
@@ -42,7 +43,7 @@ class ChatIn(BaseModel):
     def not_blank(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("message must not be blank")
-        return v.strip()
+        return MENTION.sub("@" + AGENT_NAME, v.strip(), count=1)  # "@ai hi" -> "@TravelSync hi"
 
 
 def message_dict(m: ChatMessage, names: dict[str, str], views: dict[int, dict] | None = None) -> dict:
@@ -161,6 +162,11 @@ async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(m
         text = proposals.result_text(db, msg, result, approve, members)
         note = ChatMessage(trip_id=trip.id, author_id=None, kind="agent", text=text, reply_to=msg.id,
                            agent={"state": "SUCCEEDED", "reply": text, "proposal": None, "event": "proposal_result",
+                                  # lets the web app show this note in the reader's language
+                                  "result": {**result, "approve": approve, "members": members,
+                                             "date": msg.agent["proposal"].get("date"),
+                                             "added": [proposals._name(db, a["poi_id"])
+                                                       for a in msg.agent["proposal"].get("add") or []]},
                                   "tool_calls": [{"name": "group_vote",
                                                   "summary": f"Group vote: {approve} approve, {reject} reject"}]},
                            created_at=datetime.now(timezone.utc))

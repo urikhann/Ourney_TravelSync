@@ -1,4 +1,5 @@
 // One place for every call to the backend. Screens never call fetch() directly.
+import { t } from "./i18n";
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const KEY = "ts_token";
 
@@ -28,10 +29,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const next = encodeURIComponent(location.pathname);
     location.assign(`/login?next=${next}`);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = (data as { detail?: unknown }).detail;
-    throw new ApiError(res.status, typeof d === "string" ? d : Array.isArray(d) ? "invalid_input" : "request_failed");
+    const code = typeof d === "string" ? d : Array.isArray(d) ? "invalid_input"
+      : d && typeof d === "object" && typeof (d as { code?: unknown }).code === "string" ? (d as { code: string }).code : "request_failed";
+    throw new ApiError(res.status, code);
   }
   return data as T;
 }
@@ -40,6 +43,7 @@ export const api = {
   get: <T>(p: string) => request<T>("GET", p),
   post: <T>(p: string, b?: unknown) => request<T>("POST", p, b),
   put: <T>(p: string, b?: unknown) => request<T>("PUT", p, b),
+  del: <T>(p: string) => request<T>("DELETE", p),
 };
 
 const MESSAGES: Record<string, string> = {
@@ -52,6 +56,14 @@ const MESSAGES: Record<string, string> = {
   too_many_attempts: "Too many tries. Send a new code.",
   invalid_input: "Please check the fields and try again.",
   invite_not_found: "This invite link doesn't work any more.",
+  invite_expired: "This invite link has expired. Ask the trip owner for a new one.",
+  invite_revoked: "The trip owner turned this invite link off. Ask them for a new one.",
+  trip_full: "This trip is full.",
+  owner_only: "Only the trip owner can do this.",
+  wrong_password: "That password isn't right.",
+  member_not_found: "That person is no longer in the trip.",
+  proposal_closed: "Voting on this suggestion has closed.",
+  no_saved_preferences: "You haven't saved preferences yet. Fill them in on your profile first.",
   trip_not_found: "Trip not found.",
   no_recommendations_yet: "No recommendations yet.",
   planning_data_not_configured: "Verified operating and route data are not configured yet. Your recommendations and any saved plan are kept.",
@@ -91,8 +103,8 @@ const MESSAGES: Record<string, string> = {
 
 export function message(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.code.startsWith("waiting_for_preferences")) return "Still waiting for: " + e.code.split(": ")[1];
-    return MESSAGES[e.code] ?? `Something went wrong (${e.code}).`;
+    if (e.code.startsWith("waiting_for_preferences")) return t("Still waiting for: {names}", { names: e.code.split(": ")[1] });
+    return MESSAGES[e.code] ? t(MESSAGES[e.code]) : t("Something went wrong ({code}).", { code: e.code });
   }
-  return "Something went wrong.";
+  return t("Something went wrong.");
 }

@@ -8,6 +8,7 @@ import type { TokenOut } from "../types";
 import { ErrorBox } from "../ui";
 import AuthShell from "../components/AuthShell";
 import PasswordInput from "../components/PasswordInput";
+import { t } from "../i18n";
 
 export default function Login() {
   const nav = useNavigate();
@@ -38,13 +39,13 @@ export default function Login() {
   }
 
   return (
-    <AuthShell title="Welcome back" sub="Different tastes, one itinerary.">
+    <AuthShell title={t("Welcome back")} sub={t("Different tastes, one itinerary.")}>
       {invited && (
-        <div className="auth-note"><Ticket size={16} /> Log in to see the trip you were invited to.</div>
+        <div className="auth-note"><Ticket size={16} /> {t("Log in to see the trip you were invited to.")}</div>
       )}
       <form className="auth-form" onSubmit={submit}>
         <label className="auth-field">
-          <span>Email</span>
+          <span>{t("Email")}</span>
           <div className="inp">
             <Mail size={17} className="inp-ico" aria-hidden="true" />
             <input id="login-email" type="email" autoComplete="email" placeholder="you@example.com" required
@@ -52,15 +53,15 @@ export default function Login() {
           </div>
         </label>
         <label className="auth-field">
-          <span className="auth-label-row">Password <Link to="/forgot" className="auth-link">Forgot password?</Link></span>
+          <span className="auth-label-row">{t("Password")} <Link to="/forgot" className="auth-link">{t("Forgot password?")}</Link></span>
           <PasswordInput id="login-password" autoComplete="current-password" required
             value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <ErrorBox error={error} />
-        <button className="btn blue" disabled={busy}>{busy ? "Logging in…" : "Log in"}</button>
+        <button className="btn blue" disabled={busy}>{busy ? t("Logging in…") : t("Log in")}</button>
       </form>
       <p className="auth-foot">
-        New to TravelSync? <Link to={`/signup?next=${encodeURIComponent(next)}`}>Create an account</Link>
+        {t("New to TravelSync?")} <Link to={`/signup?next=${encodeURIComponent(next)}`}>{t("Create an account")}</Link>
       </p>
     </AuthShell>
   );

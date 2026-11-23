@@ -86,3 +86,50 @@ def test_only_members_and_valid_messages():
     assert c.post(f"/trips/{tid}/chat", headers=a, json={"text": "   "}).status_code == 422
     assert c.post(f"/trips/{tid}/chat", headers=a, json={"text": "x" * 2001}).status_code == 422
     assert c.get(f"/trips/{tid}/chat").status_code == 401
+
+
+def test_short_mentions_ask_the_agent_too():
+    a, b = signup("Gus"), signup("Hana")
+    tid = trip_with(a, b)
+    for text in ("@ai is it raining?", "@AI indoor ideas", "@ts less walking"):
+        r = c.post(f"/trips/{tid}/chat", headers=a, json={"text": text})
+        mine, reply = r.json()["messages"]
+        assert reply["kind"] == "agent"
+        assert mine["text"].startswith("@TravelSync ")  # saved in the long form, so history reads the same
+    r = c.post(f"/trips/{tid}/chat", headers=b, json={"text": "@aisle seats please"})
+    assert len(r.json()["messages"]) == 1  # only the exact word counts
+
+
+def test_location_search_finds_popular_points_and_places():
+    a, b = signup("Lia"), signup("Moe")
+    tid = trip_with(a, b)
+    r = c.get(f"/trips/{tid}/locations", headers=a, params={"q": "station"}).json()
+    assert {"부산역", "해운대역"} <= {x["name"] for x in r} and all(x["source"] == "popular" for x in r)
+    assert len(c.get(f"/trips/{tid}/locations", headers=a).json()) >= 9  # empty search: the popular list
+    hit = c.get(f"/trips/{tid}/locations", headers=a, params={"q": "부산역"}).json()[0]
+    assert hit["name"] == "부산역" and 35 < hit["lat"] < 36 and 128 < hit["lng"] < 130
+    outsider = signup("Nell")
+    assert c.get(f"/trips/{tid}/locations", headers=outsider, params={"q": "역"}).status_code == 404
+
+
+def test_location_search_uses_kakao_when_a_key_is_set(monkeypatch):
+    import httpx
+    from app.routes import locations
+    calls = []
+
+    def kakao(request):
+        calls.append(request)
+        return httpx.Response(200, json={"documents": [{"id": "123", "place_name": "신라스테이 해운대",
+            "road_address_name": "부산 해운대구 해운대로570번길 46", "x": "129.1601", "y": "35.1610"}]})
+    real = httpx.AsyncClient
+    monkeypatch.setattr(locations.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(kakao), **kw))
+    monkeypatch.setattr(config, "KAKAO_REST_API_KEY", "test-key")
+    locations._cache.clear()
+    a, b = signup("Otto"), signup("Pia")
+    tid = trip_with(a, b)
+    for _ in range(2):
+        r = c.get(f"/trips/{tid}/locations", headers=a, params={"q": "신라스테이"}).json()
+        assert r[0] == {"id": "kakao:123", "name": "신라스테이 해운대", "sub": "부산 해운대구 해운대로570번길 46",
+                        "lat": 35.161, "lng": 129.1601, "source": "kakao"}
+    assert len(calls) == 1  # the second search came from the cache
+    assert calls[0].headers["Authorization"] == "KakaoAK test-key"

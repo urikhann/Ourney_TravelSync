@@ -1,31 +1,20 @@
-// The preference survey: ten taste features + personal "never take me there" rules.
+// This trip's preferences (the trip's "Me" tab), issue #21:
+//   - "Use my saved preferences": the same 10 ratings as my profile (copied when I joined or created the trip)
+//   - "Customize for this trip": change the ratings here only; my saved preferences stay the same,
+//     unless I tick "Also save as my preferences for future trips".
+// First time ever (nothing saved yet): just the survey; the answers also become my saved preferences.
+// Personal "never take me there" rules are always per trip.
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Plus, Sparkles, X } from "lucide-react";
 import { api, message } from "../api";
-import { CATEGORIES, type Category, type Exclusions, type Preferences as Prefs } from "../types";
+import type { Category, Exclusions, Preferences as Prefs } from "../types";
 import { ErrorBox, Loading } from "../ui";
-import RatingRow from "../components/RatingRow";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
-import TastesCard from "../components/TastesCard";
-import { CableCar, Clapperboard, Coffee, Landmark, Palette, PartyPopper, Plus, ShoppingBag, Trees, Utensils, Waves, X,
-  type LucideIcon } from "lucide-react";
-
-// ---- 1. Static content: what to show for each feature --------------------------------
-// Record<Category, ...> forces us to describe ALL 10 features. Forget one → TypeScript error.
-const CATEGORY_INFO: Record<Category, { Icon: LucideIcon; label: string; ko: string; hint: string }> = {
-  food:          { Icon: Utensils,     label: "Food & local eats",        ko: "맛집과 음식",         hint: "Restaurants, local dishes, street food" },
-  cafe:          { Icon: Coffee,       label: "Cafés & desserts",         ko: "카페와 디저트",       hint: "Coffee shops, bakeries, dessert cafés" },
-  nature:        { Icon: Waves,        label: "Nature & views",           ko: "자연과 경관",         hint: "Beaches, parks, mountains, viewpoints" },
-  history:       { Icon: Landmark,     label: "History & tradition",      ko: "역사와 전통",         hint: "Temples, heritage sites, old villages" },
-  art:           { Icon: Palette,      label: "Art, exhibitions & shows", ko: "예술과 전시 및 공연", hint: "Museums, galleries, theatres" },
-  shopping:      { Icon: ShoppingBag,  label: "Shopping",                 ko: "쇼핑",               hint: "Markets, malls, shopping streets" },
-  activity:      { Icon: CableCar,     label: "Activities & experiences", ko: "체험과 액티비티",     hint: "Hands-on classes, sports, walking courses" },
-  entertainment: { Icon: Clapperboard, label: "Fun & entertainment",      ko: "놀이와 엔터테인먼트", hint: "Theme parks, VR, games, cinemas" },
-  relax:         { Icon: Trees,        label: "Rest & walks",             ko: "휴식과 산책",         hint: "Quiet parks, promenades, spas" },
-  festival:      { Icon: PartyPopper,  label: "Festivals & events",       ko: "축제와 이벤트",       hint: "Events on your travel dates" },
-};
+import RatingsList, { loved } from "../components/RatingsList";
+import { t as tr } from "../i18n";
 
 // Personal hard rules. Different from a low rating: a "1" only lowers a score, these remove places completely.
 const EXCLUSIONS: { value: string; label: string }[] = [
@@ -35,26 +24,29 @@ const EXCLUSIONS: { value: string; label: string }[] = [
 ];
 
 export default function Preferences() {
-  // ---- 2. Inputs: which trip? (from the URL /trips/:id/preferences) ------------------
   const { id = "" } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
 
-  // ---- 3. Load my saved answers from the backend -------------------------------------
   const saved = useQuery({ queryKey: ["prefs", id], queryFn: () => api.get<Prefs>(`/trips/${id}/preferences/me`) });
   const savedEx = useQuery({ queryKey: ["exclusions", id], queryFn: () => api.get<Exclusions>(`/trips/${id}/exclusions/me`) });
 
-  // ---- 4. Local state: the answers while the user is editing --------------------------
   const [form, setForm] = useState<Prefs | null>(null);
   const [ex, setEx] = useState<Exclusions | null>(null);
-  useEffect(() => { if (saved.data && !form) setForm(saved.data); }, [saved.data, form]);
+  const [mode, setMode] = useState<"saved" | "custom">("saved");
+  const [asDefault, setAsDefault] = useState(false);
+  useEffect(() => {
+    if (saved.data && !form) { setForm(saved.data); setMode(saved.data.source === "custom" ? "custom" : "saved"); }
+  }, [saved.data, form]);
   useEffect(() => { if (savedEx.data && !ex) setEx(savedEx.data); }, [savedEx.data, ex]);
 
-  // ---- 5. Saving: two separate inputs (taste scores and personal exclusions) -----
+  const hasSaved = (form?.saved_version ?? 0) > 0;
   const save = useMutation({
     mutationFn: async ({ p, e }: { p: Prefs; e: Exclusions }) => {
       // expected_version: if I saved on another device in between, the server answers 409 instead of overwriting
-      const result = await api.put<Prefs>(`/trips/${id}/preferences/me`, { ratings: p.ratings, expected_version: p.version });
+      const result = hasSaved && mode === "saved"
+        ? (p.source === "saved" ? p : await api.post<Prefs>(`/trips/${id}/preferences/me/use-saved`))
+        : await api.put<Prefs>(`/trips/${id}/preferences/me`, { ratings: p.ratings, expected_version: p.version, save_as_default: asDefault });
       await api.put<Exclusions>(`/trips/${id}/exclusions/me`, e);
       return result;
     },
@@ -62,67 +54,81 @@ export default function Preferences() {
       qc.setQueryData(["prefs", id], result);
       qc.invalidateQueries({ queryKey: ["exclusions", id] });
       qc.invalidateQueries({ queryKey: ["trip", id] });  // the trip room must refetch ("Preferences ✓")
+      qc.invalidateQueries({ queryKey: ["my-prefs"] });
       nav(`/trips/${id}`);
     },
   });
 
-  if (saved.isError || savedEx.isError) return <><TopBar title="My preferences" back={`/trips/${id}`} /><main className="content"><ErrorBox error={message(saved.error ?? savedEx.error)} /></main></>;
-  if (!form || !ex) return <><TopBar title="My preferences" back={`/trips/${id}`} /><Loading /></>;
+  if (saved.isError || savedEx.isError) return <><TopBar title={tr("My preferences")} back={`/trips/${id}`} /><main className="content"><ErrorBox error={message(saved.error ?? savedEx.error)} /></main></>;
+  if (!form || !ex) return <><TopBar title={tr("My preferences")} back={`/trips/${id}`} /><Loading /></>;
 
-  // ---- 6. Small helpers that create a NEW object (never change state in place) -------
-  const setRating = (c: Category, v: number) => setForm({ ...form, ratings: { ...form.ratings, [c]: v } });
-  const toggle = (tag: string) =>
-    setEx({ ...ex, tags: ex.tags.includes(tag) ? ex.tags.filter((t) => t !== tag) : [...ex.tags, tag] });
+  const setRating = (c: Category, v: number) => { setForm({ ...form, ratings: { ...form.ratings, [c]: v } }); setMode("custom"); };
+  const toggle = (tag: string) => setEx({ ...ex, tags: ex.tags.includes(tag) ? ex.tags.filter((t) => t !== tag) : [...ex.tags, tag] });
+  const likes = loved(form.ratings);
 
-  const loved = CATEGORIES.filter((c) => form.ratings[c] >= 4).map((c) => CATEGORY_INFO[c].label);
-
-  // ---- 7. What to draw ----------------------------------------------------------------
   return (
     <>
-      <TopBar title="My preferences" back={`/trips/${id}`} />
+      <TopBar title={tr("My preferences")} back={`/trips/${id}`} />
       <main className="content">
-        <h2 className="title">What do you enjoy on a trip?</h2>
-        <p className="muted small">1 = not for me · 5 = must do. All 10 are needed.</p>
+        <h2 className="title">{tr("What do you enjoy on a trip?")}</h2>
 
-        <div className="card list">
-          {CATEGORIES.map((c) => (
-            <RatingRow
-              key={c}
-              icon={(() => { const I = CATEGORY_INFO[c].Icon; return <I size={16} />; })()}
-              label={CATEGORY_INFO[c].label}
-              hint={`${CATEGORY_INFO[c].ko} · ${CATEGORY_INFO[c].hint}`}
-              value={form.ratings[c]}
-              onChange={(v) => setRating(c, v)}
-            />
-          ))}
-        </div>
+        {hasSaved ? (
+          <>
+            <div className="seg" style={{ gridTemplateColumns: "1fr 1fr", margin: "12px 0" }}>
+              <button type="button" className={mode === "saved" ? "on" : ""} onClick={() => setMode("saved")}>{tr("Use my saved preferences")}</button>
+              <button type="button" className={mode === "custom" ? "on" : ""} onClick={() => setMode("custom")}>{tr("Customize for this trip")}</button>
+            </div>
+            {mode === "saved" ? (
+              <div className="card pad saved-box">
+                <div className="row" style={{ gap: 10 }}>
+                  <span className="ico-sq green"><Sparkles size={17} /></span>
+                  <div className="grow">
+                    <div className="b">{tr("Same as your profile")}</div>
+                    <div className="muted tiny">{tr("No survey needed. Changes to this trip never change your profile.")}</div>
+                  </div>
+                </div>
+                {likes.length > 0 && <div className="chips" style={{ marginTop: 12 }}>{likes.map((l) => <span key={l} className="chip blue">{l}</span>)}</div>}
+                <Link className="saved-edit small" to="/me"><Pencil size={13} /> {tr("Edit my saved preferences")}</Link>
+              </div>
+            ) : (
+              <>
+                <p className="muted small">{tr("1 = not for me · 5 = must do. Only this trip changes.")}</p>
+                <RatingsList ratings={form.ratings} onChange={setRating} />
+                <label className="pf-switch" style={{ margin: "12px 4px" }}>
+                  <input type="checkbox" checked={asDefault} onChange={(e) => setAsDefault(e.target.checked)} />
+                  <span className="track" aria-hidden="true" /> {tr("Also save as my preferences for future trips")}
+                </label>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="muted small">{tr("1 = not for me · 5 = must do. All 10 are needed.")}</p>
+            <div className="banner blue" style={{ marginBottom: 10 }}>{tr("Answer once: these become your saved preferences and fill in your next trips automatically.")}</div>
+            <RatingsList ratings={form.ratings} onChange={setRating} />
+          </>
+        )}
 
-        <div className="h2">Never take me to <small>removes places completely</small></div>
+        <div className="h2">{tr("Never take me to")} <small>{tr("removes places completely")}</small></div>
         <div className="chips">
           {EXCLUSIONS.map((k) => {
             const on = ex.tags.includes(k.value);
             return (
               <button key={k.value} type="button" aria-pressed={on} onClick={() => toggle(k.value)}
                 className={"chip " + (on ? "rose" : "dashed")} style={{ padding: "8px 12px" }}>
-                {on ? <X size={13} /> : <Plus size={13} />} {k.label}
+                {on ? <X size={13} /> : <Plus size={13} />} {tr(k.label)}
               </button>
             );
           })}
         </div>
-        <p className="muted tiny" style={{ marginTop: 6 }}>Dates are set for the whole group in the trip room.</p>
-
-        <TastesCard compact />
-
-        {loved.length > 0 && (
-          <div className="banner blue" style={{ marginTop: 16 }}>You love: {loved.join(", ")}</div>
-        )}
+        <p className="muted tiny" style={{ marginTop: 6 }}>{tr("Dates are set for the whole group in the trip room.")}</p>
 
         <div style={{ height: 12 }} />
         <ErrorBox error={save.error ? message(save.error) : null} />
         <button className="btn" style={{ marginTop: 8 }} disabled={save.isPending} onClick={() => save.mutate({ p: form, e: ex })}>
-          {save.isPending ? "Saving…" : "Save preferences"}
+          {save.isPending ? tr("Saving…") : hasSaved && mode === "saved" ? tr("Use for this trip") : tr("Save preferences")}
         </button>
-        {form.version > 0 && <p className="muted tiny center" style={{ marginTop: 8 }}>Saved version {form.version}</p>}
+        {form.version > 0 && <p className="muted tiny center" style={{ marginTop: 8 }}>{tr("Saved version {n}", { n: form.version })}</p>}
       </main>
       <TabBar tripId={id} />
     </>
