@@ -104,7 +104,7 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
     for day in req.days:
         nodes = {pid for pid, w in windows.items() if day.date in w}
         nodes.update((day.start_point, day.end_point))
-        valid = [e for e in req.edges if e.date == day.date and e.usable
+        valid = [e for e in req.edges if e.date == day.date and (e.usable or (req.provisional and e.draft_usable))
                  and e.origin in nodes and e.destination in nodes
                  and (req.max_leg_minutes is None or e.duration_minutes <= req.max_leg_minutes)]
 

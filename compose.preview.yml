@@ -6,5 +6,5 @@ services:
   planning-data:
     environment:
       KAKAO_ROUTE_CONCURRENCY: "2"
-      KAKAO_ROUTE_MAX_REQUESTS: "80"
-      KAKAO_ROUTE_DAILY_REQUEST_LIMIT: "200"
+      KAKAO_ROUTE_INITIAL_REQUESTS: "80"
+      KAKAO_ROUTE_MAX_REQUESTS: "200"

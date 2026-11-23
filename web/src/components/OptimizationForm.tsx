@@ -92,7 +92,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     <p className="small">When enabled, breakfast is required on days overlapping its window. It needs verified breakfast or brunch offerings, opening hours and breakfast-serving hours. Missing data or conflicting conditions may prevent a plan.</p>
     <p className="small">Known opening intervals and closures are respected. Unknown hours are allowed with a warning. Automatic weather handling and accessibility support are not included in this version.</p>
     <p className="small">Estimated visit times: cafés 45 min, meals 60 min, history/art/entertainment/festival 90 min, other activities 60 min. Place-specific overrides are available below.</p>
-    <p className="muted small">Times are local. Every member must confirm every trip date. Missing route data stops planning; distance estimates are not substituted.</p>
+    <p className="muted small">Times are local. Every member must confirm every trip date. We use geographic distance to draft a compact route, then check driving times before saving the itinerary.</p>
     {!!prior?.locked_items?.length && <p className="small">{prior.locked_items.length} locked visits will be retained.</p>}
     {!!prior?.required_access?.length && <p className="small">Required access retained: {prior.required_access.join(", ")}</p>}
     {!view.setup.planning_data_configured && <div className="banner amber" role="status">Verified operating and route data are not configured. Recommendations stay available; an itinerary cannot be verified yet.</div>}

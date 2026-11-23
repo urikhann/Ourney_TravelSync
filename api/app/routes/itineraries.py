@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 from .. import config, services
 from ..db import get_db
 from ..deps import member_trip
+from ..drive_planning import plan_drive, solve_checked
 from ..models import Itinerary, OptimizationRun, Poi, PublicHoliday, RecommendationRun, Trip, User, Vote
 from ..optimization import GenerateInput, catalogue_request, data_request, fingerprint, prepare, solver_request, state
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
-from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride, PlanResponse
+from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
 from ourney_travelsync.visit_durations import default_duration
@@ -215,22 +216,19 @@ async def _generate(body, trip, user, db, *, preview=False):
                                retrieved["planning_candidate_selection"])
         audit.planning_data = {"request": context}
         db.commit()
-        operational = await services.planning_data(context)
-        audit.planning_data = {"request": context, "response": operational}
-        try:
-            req = solver_request(run, audit_id, body, prepared, context, operational)
-        except (ValidationError, ValueError, TypeError, KeyError):
-            raise HTTPException(502, "planning_data_invalid_response") from None
-        audit.optimizer_request = req.model_dump(mode="json")
-        db.commit()
-        response = await services.build_plans(req.model_dump(mode="json"))
+        if body.transport_mode == "drive":
+            req, response, result, operational = await plan_drive(run, body, prepared, context, audit, db)
+        else:
+            operational = await services.planning_data(context)
+            audit.planning_data = {"request": context, "response": operational}
+            try:
+                req = solver_request(run, audit_id, body, prepared, context, operational)
+            except (ValidationError, ValueError, TypeError, KeyError):
+                raise HTTPException(502, "planning_data_invalid_response") from None
+            audit.optimizer_request = req.model_dump(mode="json")
+            db.commit()
+            response, result = await solve_checked(req)
         audit.response = response
-        try:
-            result = PlanResponse.model_validate(response)
-        except ValidationError:
-            raise HTTPException(502, "optimizer_invalid_response") from None
-        if result.input_snapshot != req or result.run_id != req.run_id:
-            raise HTTPException(502, "optimizer_snapshot_mismatch")
         if result.validation_status != "PASSED" or result.solver_status not in ("OPTIMAL", "FEASIBLE") or result.error_code:
             code = "optimizer_" + (result.error_code or "invalid_result").lower()
             if preview:

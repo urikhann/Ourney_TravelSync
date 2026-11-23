@@ -6,15 +6,10 @@ import math
 import numpy as np
 from ..common import GroupInput
 from ..features import FEATURE_NAMES
+from ..geography import haversine_km as km
 from ..planning_categories import visit_role
 
 POLICY = "catalogue-day-clusters-v1"
-
-
-def km(a, b):
-    lat1, lon1, lat2, lon2 = map(math.radians, (*a, *b))
-    h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2
-    return 6371 * 2 * math.asin(min(1, math.sqrt(h)))
 
 
 def select_days(data, records, days, locks=(), composition=None):

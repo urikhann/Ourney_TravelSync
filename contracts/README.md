@@ -26,7 +26,7 @@ processing a request. Typed optimizer contracts define scheduling facts and rout
 |---|---|---|
 | Recommender | `POST /recommend` | `recommend.*.json` |
 | Optimizer | `POST /plans`, `POST /runs` | `optimizer.synthetic.*.json`, [typed models](../src/ourney_travelsync/optimizer/contracts.py) |
-| Planning data | `POST /snapshot` | [PlanningSnapshot](../docs/optimizer_app_integration.md) |
+| Planning data | `POST /selected-snapshot`, `POST /snapshot` | [PlanningSnapshot](../docs/optimizer_app_integration.md) |
 | Availability | `POST /availability/check` | `availability.*.json` |
 | Agent | `POST /agent/turn` | `agent.*.json` |
 | Mock planner | Mock `POST /plans` | `plans.*.json`; incompatible with optimizer requests |

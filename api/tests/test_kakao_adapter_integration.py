@@ -4,12 +4,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+import pytest
 
 from app import config, services
 from .test_optimizer_integration import ready, generate, configuration, audits
 
 
-def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_path):
+@pytest.mark.parametrize("repair_needed", [False, True])
+def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_path, repair_needed):
     monkeypatch.setenv("ROUTE_CACHE_PATH", str(tmp_path / "routes.sqlite3"))
     path = Path(__file__).resolve().parents[2] / "services/planning_data/main.py"
     spec = importlib.util.spec_from_file_location("kakao_integration", path)
@@ -26,20 +28,22 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
                                                          closed=fact(False), event_active=fact(True)) for d in days})
                 for pid in ids}
 
-    # Exercise the actual HTTP batching/conversion function, replacing only the network client.
+    # Exercise the real selected-leg adapter, replacing only the provider.
     real_client = httpx.AsyncClient
 
+    calls = []
     def respond(req):
-        import json
-        if req.method == "GET":
-            assert req.url.params["avoid"] == "toll"
-            return httpx.Response(200, json={"routes": [dict(result_code=0,
-                summary=dict(duration=601, distance=500, fare=dict(toll=0)))]})
-        payload = json.loads(req.content)
-        assert payload["avoid"] == ["toll"]
+        assert req.method == "GET"
+        assert req.url.params["avoid"] == "toll"
         assert req.headers["Authorization"] == "KakaoAK synthetic-key"
-        return httpx.Response(200, json={"routes": [dict(key=d["key"], result_code=304,
-            summary=dict(duration=601, distance=500)) for d in payload["destinations"]]})
+        pair = req.url.params["origin"], req.url.params["destination"]
+        assert pair not in calls
+        calls.append(pair)
+        # A draft that gets faster keeps its order. The repair case makes
+        # one selected leg impossible and keeps the remaining legs short.
+        duration = 86400 if repair_needed and len(calls) == 1 else 60
+        return httpx.Response(200, json={"routes": [dict(result_code=0,
+            summary=dict(duration=duration, distance=500, fare=dict(toll=0)))]})
 
     class ProviderClient:
         def __init__(self, **kwargs):
@@ -56,6 +60,7 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
     monkeypatch.setattr(adapter, "KAKAO_REST_API_KEY", "synthetic-key")
     monkeypatch.setattr(adapter, "PLANNING_DATA_TOKEN", "")
     monkeypatch.setattr(adapter, "_load_operating", operating)
+    monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 20)
     monkeypatch.setitem(services.TEST_TRANSPORTS, config.PLANNING_DATA_URL, httpx.ASGITransport(app=adapter.app))
     try:
         headers, tid, _ = ready(individual_method="feature_mean")
@@ -65,8 +70,17 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
         assert result.status_code == 200, result.text
         assert result.json()["plans"][0]["stats"]["validation_status"] == "PASSED"
         audit = audits(tid)[0]
+        rounds = audit.planning_data["routing_rounds"]
+        assert len(rounds) in ((2, 3) if repair_needed else (1,))
+        assert rounds[-1]["routing_attempts"] == {"point": len(calls)}
+        assert len(calls) == sum(len(r["requested_legs"]) for r in rounds)
+        if not repair_needed:
+            day = result.json()["plans"][0]["days"][0]
+            assert len(calls) == len(day["items"]) + 1
+            assert day["return_travel_minutes"] == 1
         assert audit.optimizer_request["routing_version"] == adapter.ROUTING_VERSION
-        assert all(e["duration_minutes"] == 11 and e["group_fare"] == e["walk_minutes"] == 0
+        assert not audit.optimizer_request["provisional"]
+        assert all(e["status"] == "KNOWN" and e["straight_line_m"] is None
                    for e in audit.optimizer_request["edges"])
         assert "synthetic-key" not in str(audit.optimizer_request)
     finally:

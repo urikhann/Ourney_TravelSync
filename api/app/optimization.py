@@ -74,6 +74,7 @@ class PlanningSnapshot(Contract):
     operating_snapshot_id: Annotated[str, Field(min_length=1)]
     routing_version: Annotated[str, Field(min_length=1)]
     routing_warnings: tuple[Literal["routing_quota_exceeded", "routing_request_budget_exceeded", "routing_daily_budget_exceeded"], ...] = ()
+    routing_attempts: dict[Literal["batch", "point"], NonNegative] | None = None
     pois: Annotated[tuple[OperatingInput, ...], Field(max_length=60)]
     edges: Annotated[tuple[Edge, ...], Field(max_length=12000)]
 
