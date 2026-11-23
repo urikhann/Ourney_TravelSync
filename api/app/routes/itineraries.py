@@ -257,6 +257,7 @@ async def _generate(body, trip, user, db, *, preview=False):
                          stats={"group_fit": (None if run.response.get("score_scale") == "relative_relevance_0_1"
                                               else checked.metrics["mean_personal_fit"]),
                                 "total_cost": checked.metrics["total_cost"],
+                                "routing_warnings": operational.get("routing_warnings", []),
                                 "budget_enforced": req.enforce_cost,
                                 "opening_hours_enforced": req.enforce_opening_hours,
                                 "cost_unknown_count": sum(not usable_cost(candidate_by_id[v.poi_id].cost_per_person)

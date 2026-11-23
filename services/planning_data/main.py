@@ -447,12 +447,25 @@ async def _routes_from_origin(client, semaphore, origin_id, origin, destinations
         if misses:
             if not KAKAO_REST_API_KEY and client.headers.get("Authorization", "").strip() == "KakaoAK":
                 raise HTTPException(503, "kakao_rest_api_key_not_configured")
-            fresh = await _fetch_routes_from_origin(client, semaphore, origin_id, origin, misses, day)
+            try:
+                fresh = await _fetch_routes_from_origin(client, semaphore, origin_id, origin, misses, day)
+            except HTTPException as exc:
+                if exc.detail not in ("routing_quota_exceeded", "routing_request_budget_exceeded", "routing_daily_budget_exceeded"):
+                    raise
+                client._travelsync_limit_reason = exc.detail
+                # Successful batches/fallbacks may have completed before the limit.
+                cached = await asyncio.to_thread(_cached_routes, keys.values())
+                fresh = []
         else:
             fresh = []
         by_id = {e["destination"]: e for e in fresh}
-        return [{**cached[keys[pid]], "date": day, "origin": origin_id, "destination": pid}
-                if keys[pid] in cached else by_id[pid] for pid,_ in destinations]
+        def edge(pid):
+            if keys[pid] in cached:
+                return {**cached[keys[pid]], "date": day, "origin": origin_id, "destination": pid}
+            return by_id.get(pid) or dict(date=day, origin=origin_id, destination=pid,
+                status="UNKNOWN", duration_minutes=None, distance_m=None, group_fare=None,
+                walk_minutes=None, provider=PROVIDER, fetched_at=_now().isoformat())
+        return [edge(pid) for pid,_ in destinations]
 
 
 async def _save_provider_route(origin, destination, route):
@@ -565,6 +578,10 @@ async def _fetch_routes_from_origin(client, semaphore, origin_id, origin, destin
     return edges
 
 
+class RouteEdges(list):
+    warnings = ()
+
+
 async def _build_drive_edges(request: dict) -> list[dict]:
     if not KAKAO_REST_API_KEY:
         raise HTTPException(503, "kakao_rest_api_key_not_configured")
@@ -608,13 +625,18 @@ async def _build_drive_edges(request: dict) -> list[dict]:
                 ))
                 layouts.append((d, days))
         nested = await _gather_routes(tasks)
-    edges = []
+        limit_reason = getattr(client, "_travelsync_limit_reason", None)
+    edges = RouteEdges()
     for batch, (first, days) in zip(nested, layouts):
         for d in days:
             rename = {first["start_point"]: d["start_point"], first["end_point"]: d["end_point"]}
             edges.extend({**e, "date": d["date"],
                           "origin": rename.get(e["origin"], e["origin"]),
                           "destination": rename.get(e["destination"], e["destination"])} for e in batch)
+    if limit_reason:
+        if not any(e["status"] == "KNOWN" for e in edges):
+            raise HTTPException(503, limit_reason)
+        edges.warnings = (limit_reason,)
     return edges
 
 
@@ -666,6 +688,7 @@ async def snapshot(request: dict, authorization: str | None = Header(default=Non
         "transport_mode": "drive",
         "operating_snapshot_id": "travel-db-" + _hash(snapshot_basis)[:16],
         "routing_version": ROUTING_VERSION,
+        "routing_warnings": list(getattr(edges, "warnings", ())),
         "pois": [operating[pid] for pid in poi_ids if pid in operating],
         "edges": edges,
     }

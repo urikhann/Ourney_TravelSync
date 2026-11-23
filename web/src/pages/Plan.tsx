@@ -71,6 +71,7 @@ export default function Plan() {
       <TopBar title="Itinerary" back={`/trips/${id}`} />
       <main className="content">
         <ErrorBox error={failure} />
+        {!!selected.stats.routing_warnings?.length && <div className="banner amber" role="status">The routing allowance or provider quota was reached. This plan uses available saved routes; some alternatives could not be checked.</div>}
         <div className="banner amber">{selected.stats.opening_hours_enforced ? "Known opening intervals and closures were checked. Visits with unknown hours need confirmation." : "This older plan did not enforce opening hours. Rebuild it to apply the current rules."} Weather and accessibility are not checked.</div>
         {selected.stale && <div className="banner amber">Group inputs changed. This saved itinerary belongs to an earlier snapshot; rebuild it before approval.</div>}
         <details style={{ marginBottom: 12 }}><summary>Change planning conditions</summary><OptimizationForm tripId={id} view={v} /></details>
