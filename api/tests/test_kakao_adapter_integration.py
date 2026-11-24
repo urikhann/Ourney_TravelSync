@@ -73,13 +73,12 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
         if breakfast:
             body["daily_composition"] = {"breakfast_enabled": True}
         result = generate(headers, tid, body)
-        if breakfast:
-            assert result.status_code == 409, result.text
-            assert result.json()["detail"] == "optimizer_breakfast_unavailable"
-            assert calls == []
-            return
         assert result.status_code == 200, result.text
-        assert result.json()["plans"][0]["stats"]["validation_status"] == "PASSED"
+        plan = result.json()["plans"][0]
+        assert plan["stats"]["validation_status"] == "PASSED"
+        if breakfast:
+            assert all(day["breakfast_omitted"] for day in plan["days"])
+            assert all(item["breakfast_status"] is None for day in plan["days"] for item in day["items"])
         audit = audits(tid)[0]
         rounds = audit.planning_data["routing_rounds"]
         assert len(rounds) in ((2, 3) if repair_needed else (1,))

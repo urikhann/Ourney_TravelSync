@@ -12,6 +12,7 @@ import OptimizationForm from "../components/OptimizationForm";
 import { t } from "../i18n";
 
 const mealLabel = (it: PlanItem) => {
+  if (it.breakfast_status) return t("breakfast") + " · ";
   if (it.visit_category === "evening") return t("Evening") + " · ";
   if (it.visit_category === "meal" || (!it.visit_category && it.place?.kind === "food")) {
     return t(it.start >= "17:00" ? "Dinner" : "Lunch") + " · ";
@@ -122,6 +123,7 @@ export default function Plan() {
             c: d.items.filter(it => it.visit_category === "cafe").length, a: d.items.filter(it => it.visit_category === "activity").length,
             k: new Set(d.items.filter(it => it.visit_category === "activity").map(it => it.activity_category)).size })}
         </p>}
+        {d.breakfast_omitted && <p className="muted small" role="status">{t("Breakfast was skipped because the planner could not fit a suitable stop into this day.")}</p>}
         <div className="tl">
           <p className="muted small">{t("Leave {place} at {time}", { place: d.start_label, time: d.start })}</p>
           {d.items.map((it) => {
@@ -130,6 +132,9 @@ export default function Plan() {
             return (
               <div key={it.poi_id + it.start}>
                 <div className="leg"><Clock size={12} />{t("{n} min travel · arrive {time}", { n: it.travel_minutes, time: it.arrival })}</div>
+                {it.breakfast_status && <p className="muted small">{t(it.breakfast_status === "verified"
+                  ? "Breakfast serving hours verified."
+                  : "Likely suitable for breakfast. Confirm serving times before visiting.")}</p>}
                 {it.availability?.available !== true && <p className="small" role="status">{t("Opening hours unverified — confirm before visiting.")}</p>}
                 {it.duration_estimated && <p className="muted small">{t("Visit duration: {n} min ({src})", { n: it.stay_minutes, src: t(it.duration_source === "user-duration-override" ? "your override" : "category estimate") })}</p>}
                 <div className="tl-item">

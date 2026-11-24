@@ -66,7 +66,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const [picker, setPicker] = useState<"from" | "to" | null>(null);
 
   // ---- optional: must-visit places, visit durations, travel limits ----
-  const [breakfast, setBreakfast] = useState(composition.breakfast_enabled ?? composition.meal_windows.some(w => w.name === "breakfast"));
+  const [breakfast, setBreakfast] = useState(composition.breakfast_enabled || composition.meal_windows.some(w => w.name === "breakfast"));
   const [locks, setLocks] = useState(prior?.locked_items ?? []);
   const [durations, setDurations] = useState<Record<string, number>>(prior?.duration_overrides ?? {});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -169,8 +169,9 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
         <summary>{t("More options")} <span className="muted tiny">{t("must-visit places, visit time, travel limits")}</span></summary>
         <label className="pf-switch" style={{ marginTop: 12 }}>
           <input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
-          <span className="track" aria-hidden="true" /> {t("Include breakfast when the schedule allows")}
+          <span className="track" aria-hidden="true" /> {t("Try to include breakfast")}
         </label>
+        {breakfast && <p className="muted small">{t("Breakfast is optional. The planner uses menu or category clues and opening hours. Serving times may need confirmation.")}</p>}
         <div className="pf-label" style={{ marginTop: 12 }}>{t("Must-visit places")}</div>
         <div className="loc-search small-search">
           <input value={search} onChange={(e) => setSearch(e.target.value)} maxLength={120} placeholder={t("Search all places (2+ letters)")} aria-label={t("Search places")} />
@@ -243,7 +244,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
           <li>{t("Each day: up to {cafes} cafés and {meals} meals, and at least {acts} activities from {cats} categories.", {
             cafes: composition.max_cafes, meals: composition.max_meals, acts: composition.min_activities, cats: composition.min_activity_categories })}</li>
           <li>{t("Meal times: {windows}. A meal is added when your day covers at least {n} minutes of a meal time.", {
-            windows: composition.meal_windows.map((w) => `${t(w.name)} ${clock(w.start_min)}–${clock(w.end_min)}`).join(", "), n: composition.meal_overlap_min ?? 60 })}</li>
+            windows: composition.meal_windows.filter((w) => w.name !== "breakfast").map((w) => `${t(w.name)} ${clock(w.start_min)}–${clock(w.end_min)}`).join(", "), n: composition.meal_overlap_min ?? 60 })}</li>
           <li>{t("Opening hours and closed days are checked when known; unknown hours get a warning.")}</li>
           <li>{t("Estimated visit times: cafés 45 min, meals 60 min, culture 90 min, other activities 60 min.")}</li>
           <li>{t("Driving times come from Kakao and are saved, so the same trip plans faster next time.")}</li>

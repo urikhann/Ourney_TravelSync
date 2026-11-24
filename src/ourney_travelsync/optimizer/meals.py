@@ -16,6 +16,7 @@ class EffectiveMeal:
     required: bool
     preferred_start_min: int | None = None
     fixed_start_min: int | None = None
+    require_verified: bool = False
 
     def matches(self, start, end):
         return (self.start_min <= start < end <= self.end_min
@@ -44,10 +45,11 @@ def effective_meals(day, policy: DailyComposition) -> tuple[EffectiveMeal, ...]:
                 start, end = target, min(1440, target + end - start)
             explicit = override.required or target is not None
         overlap = max(0, min(day.end_min, end) - max(day.start_min, start))
-        result.append(EffectiveMeal(base.name, start, end,
-                                    explicit or overlap >= policy.meal_overlap_min
-                                    or (base.name == "breakfast" and policy.breakfast_enabled and overlap > 0),
-                                    preferred, fixed))
+        breakfast = base.name == "breakfast"
+        strict = breakfast and policy.breakfast_require_verified
+        required = (explicit or overlap > 0) if strict else (
+            not breakfast and (explicit or overlap >= policy.meal_overlap_min))
+        result.append(EffectiveMeal(base.name, start, end, required, preferred, fixed, strict))
     return tuple(result)
 
 
@@ -104,13 +106,52 @@ def breakfast_windows(candidate, day):
                  if max(a.start_min, b.start_min) < min(a.end_min, b.end_min))
 
 
+def breakfast_service_windows(offering, serving, suitable, require_verified):
+    """Return serving restrictions, or None when only opening hours are known."""
+    if offering.known and offering.value is False:
+        return ()
+    verified_offering = offering.known and offering.value is True
+    if require_verified and (not verified_offering or serving is None or not serving.known):
+        return ()
+    if not (verified_offering or suitable):
+        return ()
+    return serving.value if serving is not None and serving.known else None
+
+
+def breakfast_slot_windows(candidate, day, require_verified):
+    if require_verified:
+        return breakfast_windows(candidate, day)
+    op = candidate.operations.get(day)
+    if (candidate.visit_category not in ("meal", "cafe") or op is None
+            or not op.openings.known or (op.closed.known and op.closed.value)):
+        return ()
+    serving = breakfast_service_windows(candidate.breakfast_offering, candidate.breakfast_hours.get(day),
+                                        candidate.breakfast_suitable, require_verified)
+    if serving is None:
+        return op.openings.value
+    return tuple(Window(start_min=max(a.start_min, b.start_min), end_min=min(a.end_min, b.end_min))
+                 for a in serving for b in op.openings.value
+                 if max(a.start_min, b.start_min) < min(a.end_min, b.end_min))
+
+
+def visit_fits_windows(visit, windows):
+    return any(w.start_min <= visit.start_min and visit.departure_min <= w.end_min for w in windows)
+
+
+def breakfast_status(candidate, day, visit):
+    return "verified" if visit_fits_windows(visit, breakfast_windows(candidate, day)) else "inferred"
+
+
 def meal_visit_matches(meal, visit, candidate, day):
     if not meal.matches(visit.start_min, visit.departure_min):
         return False
     if meal.name == "breakfast":
-        return any(w.start_min <= visit.start_min and visit.departure_min <= w.end_min
-                   for w in breakfast_windows(candidate, day))
-    return candidate.visit_category == "meal"
+        if visit.breakfast_status is None:
+            # Older snapshots recorded breakfast visits without an assignment marker.
+            return visit_fits_windows(visit, breakfast_windows(candidate, day))
+        return (visit_fits_windows(visit, breakfast_slot_windows(candidate, day, meal.require_verified))
+                and visit.breakfast_status == breakfast_status(candidate, day, visit))
+    return visit.breakfast_status is None and candidate.visit_category == "meal"
 
 
 def meals_can_be_assigned(meals, visits, candidates=None, day=None, max_meals=3):
@@ -126,7 +167,8 @@ def meals_can_be_assigned(meals, visits, candidates=None, day=None, max_meals=3)
         if index == len(options):
             return required.issubset(used) and len(used) <= max_meals
         # Cafes can remain ordinary cafe visits without covering a meal.
-        optional = candidates is not None and candidates[visits[index].poi_id].visit_category == "cafe"
+        optional = (candidates is not None and visits[index].breakfast_status is None
+                    and candidates[visits[index].poi_id].visit_category == "cafe")
         return ((optional and assign(index + 1, used)) or
                 any(assign(index + 1, used | {i}) for i in options[index] if i not in used))
 

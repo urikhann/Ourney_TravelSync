@@ -15,6 +15,7 @@ from ..optimization import GenerateInput, catalogue_request, data_request, finge
 from ..places import load_places
 from ..scores import to_fit
 from .auth import current_user
+from ourney_travelsync.optimizer.meals import effective_meals
 from ourney_travelsync.optimizer.contracts import Contract, DailyComposition, MealOverride
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
@@ -267,8 +268,13 @@ async def _generate(body, trip, user, db, *, preview=False):
         days = []
         locked = {l.poi_id for l in req.locked_items}
         candidate_by_id = {p.poi_id: p for p in req.candidates}
+        requested_days = {day.date: day for day in req.days}
         for d in result.days:
             raw = d.model_dump(mode="json")
+            if req.daily_composition is not None:
+                meals = effective_meals(requested_days[d.date], req.daily_composition)
+                raw["breakfast_omitted"] = (any(m.name == "breakfast" and not m.require_verified for m in meals)
+                                            and not any(v.breakfast_status for v in d.items))
             raw.update(start_label=prepared[3][d.start_point]["label"], end_label=prepared[3][d.end_point]["label"],
                        start=hhmm(d.start_min), end_arrival=hhmm(d.end_arrival_min))
             raw["items"] = [{**v.model_dump(mode="json"), "start": hhmm(v.start_min), "end": hhmm(v.departure_min),

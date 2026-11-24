@@ -85,7 +85,7 @@ const MESSAGES: Record<string, string> = {
   planning_candidates_unavailable: "The catalogue candidate service is unavailable. Try again after it restarts.",
   planning_candidates_invalid_response: "The catalogue candidates did not match this trip's saved preferences.",
   optimizer_unavailable: "The itinerary optimizer is unavailable. Your saved plan is kept.",
-  optimizer_breakfast_unavailable: "No shortlisted place has verified breakfast serving and opening hours that fit a required breakfast slot. Turn off Include breakfast or change the breakfast time and try again.",
+  optimizer_breakfast_unavailable: "Strict breakfast mode could not find a suitable stop with verified serving and opening hours for the requested time.",
   optimizer_insufficient_candidates: "Too few places meet the route and scheduling requirements for every day. Review the excluded places below.",
   optimizer_no_feasible_itinerary: "No itinerary fits the dates, travel limits, and daily meal/activity rules. Check that enough restaurants and different activities are available, or extend the day.",
   optimizer_search_timeout: "The search ended without a verified itinerary. Your saved plan is kept; you can try again.",

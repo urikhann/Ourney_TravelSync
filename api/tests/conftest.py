@@ -57,6 +57,7 @@ def planning_adapter(monkeypatch):
     def fact(value):
         return dict(value=value, status="KNOWN", source="synthetic integration fixture", verified_at=stamp)
     @upstream.post("/snapshot")
+    @upstream.post("/selected-snapshot")
     def snapshot(req: dict):
         control.calls.append(req)
         ids = [p["poi_id"] for p in req["pois"]]

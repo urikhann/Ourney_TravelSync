@@ -7,17 +7,19 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app import services
+from ourney_travelsync.optimizer.contracts import PlanResponse
+
+from app import config, drive_planning, services
 from app.db import SessionLocal
 from app.models import OptimizationRun
-from app.routes import itineraries
+from app.routes import itineraries, recommendations
 from .test_flow import FEATURES, signup
-from .test_optimizer_integration import c, generate
+from .test_optimizer_integration import audits, c, configuration, generate
 
 DAY = "2026-11-06"
 
 
-def planned_trip(members=2):
+def planned_trip(members=2, *, transport_mode="walk"):
     """A trip with `members` people and one published plan."""
     heads = [signup("Ap" + uuid4().hex[:10]) for _ in range(members)]
     trip = c.post("/trips", headers=heads[0], json=dict(name="Approval", start_date=DAY, end_date=DAY)).json()
@@ -29,7 +31,7 @@ def planned_trip(members=2):
     r = c.post(f"/trips/{trip['id']}/recommendations", headers=heads[0],
                json={"group_k": 3, "individual_method": "feature_mean"})
     assert r.status_code == 200, r.text
-    res = generate(heads[0], trip["id"])
+    res = generate(heads[0], trip["id"], {**configuration(), "transport_mode": transport_mode})
     assert res.status_code == 200, res.text
     return heads, trip["id"], res.json()["plans"][0]
 
@@ -126,16 +128,76 @@ def test_suggestion_goes_stale_when_the_plan_changes(planning_adapter):
     assert r.status_code == 409 and r.json()["detail"]["status"] == "STALE"
 
 
+def test_approval_rebuilds_driving_plan_after_infeasible_keep(planning_adapter, monkeypatch):
+    leg_minutes = 10
+    estimate_edges = drive_planning.draft_edges
+    build_request = recommendations.build_request
+
+    def seeded_recommendation_request(*args):
+        request, snapshot, version = build_request(*args)
+        request["options"]["tie_seed"] = 0
+        return request, snapshot, version
+
+    def fixture_draft_edges(request, context):
+        # Isolate the approval fallback from route repair: the draft uses
+        # the same travel times as this test's selected-leg provider.
+        for edge in estimate_edges(request, context):
+            yield edge.model_copy(update={"duration_minutes": leg_minutes})
+
+    def selected_routes(request, response):
+        legs = {(leg["date"], leg["origin"], leg["destination"]) for leg in request["route_legs"]}
+        response["edges"] = [{**edge, "duration_minutes": leg_minutes} for edge in response["edges"]
+                             if (edge["date"], edge["origin"], edge["destination"]) in legs]
+        response["routing_attempts"] = request["routing_attempts"]
+        return response
+
+    planning_adapter.transform = selected_routes
+    monkeypatch.setattr(recommendations, "build_request", seeded_recommendation_request)
+    monkeypatch.setattr(drive_planning, "draft_edges", fixture_draft_edges)
+    monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 20)
+    (owner,), trip_id, plan = planned_trip(1, transport_mode="drive")
+    stop, replacement, proposal = swap_for(trip_id, plan)
+    message = ask(owner, trip_id, proposal)
+    build_plans = services.build_plans
+    attempted_locks = []
+
+    async def infeasible_keep(payload):
+        if payload["provisional"]:
+            attempted_locks.append({lock["poi_id"] for lock in payload["locked_items"]})
+            if len(attempted_locks) == 1:
+                return PlanResponse(run_id=payload["run_id"], input_snapshot=payload, solver_status="INFEASIBLE",
+                                    error_code="NO_FEASIBLE_ITINERARY").model_dump(mode="json")
+        return await build_plans(payload)
+
+    monkeypatch.setattr(services, "build_plans", infeasible_keep)
+    response = vote(owner, trip_id, message["id"])
+    assert response.status_code == 200, response.text
+    result = response.json()["messages"][0]["agent"]["result"]
+    assert result["status"] == "APPLIED", result
+    assert result["mode"] == "rebuild"
+    kept_stops = {item["poi_id"] for item in plan["days"][0]["items"]} - {stop["poi_id"]}
+    assert attempted_locks[0] == kept_stops | {replacement}
+    assert attempted_locks[1:] and all(locks == {replacement} for locks in attempted_locks[1:])
+    rebuilt = current_plan(owner, trip_id)
+    rebuilt_ids = {item["poi_id"] for item in rebuilt["days"][0]["items"]}
+    assert replacement in rebuilt_ids and stop["poi_id"] not in rebuilt_ids
+    _, failed, published = audits(trip_id)
+    assert failed.status == "FAILED" and failed.error_code == "optimizer_no_feasible_itinerary"
+    assert published.status == "PASSED" and published.itinerary_id == rebuilt["id"]
+    assert published.planning_data["routing_rounds"]
+    assert not published.optimizer_request["provisional"]
+
+
 def test_failed_rebuild_keeps_the_old_plan(planning_adapter, monkeypatch):
     (a,), tid, plan = planned_trip(1)
     _, _, proposal = swap_for(tid, plan)
     msg = ask(a, tid, proposal)
 
     async def infeasible(*args, **kwargs):
-        raise HTTPException(409, "optimizer_infeasible")
+        raise HTTPException(409, "optimizer_no_feasible_itinerary")
     monkeypatch.setattr(itineraries, "_generate", infeasible)
     voted, note = vote(a, tid, msg["id"]).json()["messages"]
-    assert voted["agent"]["proposal_status"] == "FAILED" and "optimizer_infeasible" in note["text"]
+    assert voted["agent"]["proposal_status"] == "FAILED" and "optimizer_no_feasible_itinerary" in note["text"]
     assert current_plan(a, tid) == plan
 
 
