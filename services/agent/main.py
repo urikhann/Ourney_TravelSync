@@ -1,7 +1,7 @@
 """TravelSync agent service (port 8005): the real replacement for the mock /agent/turn.
 
 Same contract as the mock (contracts/agent.request.json -> contracts/agent.response.json), so the backend only
-needs AGENT_URL=http://localhost:8005. Select a provider with AGENT_PROVIDER; missing keys use rules.
+needs AGENT_URL=http://localhost:8005. Groq is the default with Gemini and rules as backups.
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -21,5 +21,10 @@ async def agent_turn(req: dict):
 @app.get("/health")
 def health():
     settings = brain.provider_settings()
-    return {"ok": settings["configured"], "brain": settings["provider"] if settings["enabled"] else "rules",
-            "provider": settings["provider"], "model": settings["model"] if settings["enabled"] else None}
+    active, model = "rules", None
+    if settings["enabled"]:
+        active, model = settings["provider"], settings["model"]
+    elif settings["gemini_backup"]:
+        active, model = "gemini", brain.GEMINI_MODEL
+    return {"ok": settings["configured"], "brain": active,
+            "provider": settings["provider"], "model": model}

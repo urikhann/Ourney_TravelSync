@@ -5,8 +5,7 @@ One turn:
   2. it finishes by calling `answer` with a short reply and, optionally, one suggested change
   3. our code checks the suggestion (real stop, real place, not closed) before the group ever sees it
 
-If the selected provider has no key or fails, the rules fallback answers instead,
-so chat remains available without the model service.
+Groq Qwen is the default. Gemini can answer when Groq is unavailable, followed by rules.
 """
 import json
 from copy import deepcopy
@@ -16,7 +15,7 @@ import time
 
 from jsonschema import Draft202012Validator
 
-from providers import GeminiProvider, GroqProvider, GROQ_MODELS, ModelProvider, ProviderError
+from providers import DEFAULT_GROQ_MODEL, GeminiProvider, GroqProvider, ModelProvider, ProviderError
 from tools import TripData
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
@@ -29,6 +28,8 @@ busy_until: dict[str, float] = {}
 log = logging.getLogger("uvicorn.error")
 MAX_STEPS = 6
 DEADLINE_SECONDS = 40  # the backend waits up to 60 s; stop early and use the rules instead
+GROQ_RETRIES = 5  # shared across all model requests in a turn
+GROQ_SECONDS_WITH_BACKUP = 25
 
 SYSTEM = """You are TravelSync, the assistant inside a group-travel planning app for Busan.
 The group chats; you are only called when someone asks you.
@@ -42,6 +43,14 @@ Rules:
 - If the request is unclear or impossible, ask one short question instead of guessing.
 - Reply in the language of the LAST message (the "asks:" line), Korean or English. Keep it to 1-3 short sentences.
 - The current plan is already given below the chat; call get_plan only if you need it again.
+- For "why this plan/place/time?" questions, explain the relevant saved facts without proposing edits.
+  The group_recommendation_reason explains the recommendation. A locked stop and available_when_planned
+  describe recorded scheduling facts. True means the visit fit the recorded opening hours when planned;
+  null means availability was not confirmed in the plan. Do not infer why an exact time or route won.
+  If evidence is incomplete, share what is known and say which reason was not recorded.
+- For questions about approved changes, use the recent applied changes for the current plan.
+  Describe the recorded swaps and actual start times. If a day was rebuilt, other stops may
+  also have changed. Do not present this summary as a complete before-and-after diff or propose edits.
 - For greetings or small talk, call `answer` right away without other tools.
 - Always finish by calling the `answer` tool."""
 
@@ -122,12 +131,16 @@ def context_text(req: dict) -> str:
         label = "TravelSync" if m.get("kind") == "agent" else who.setdefault(m.get("user_id"), f"Member {len(who) + 1}")
         lines.append(f"{label}: {m.get('text', '')[:300]}")
     asker = who.setdefault(req["message"].get("user_id"), f"Member {len(who) + 1}")
-    return ("Recent chat:\n" + "\n".join(lines[-8:]) + "\n\n" if lines else "") + f"{asker} asks: {req['message']['text']}"
+    chat = "Recent chat:\n" + "\n".join(lines[-8:]) + "\n\n" if lines else ""
+    changes = req.get("applied_changes", [])
+    history = "Recent applied changes to the current plan (JSON):\n" + json.dumps(changes, ensure_ascii=False)
+    return chat + history + f"\n\n{asker} asks: {req['message']['text']}"
 
 
 # ---------------------------------------------------------------- shared model orchestration
 def model_turn(req: dict, data: TripData, provider: ModelProvider, started: float | None = None,
-               metrics: dict | None = None, strict: bool = True) -> dict:
+               metrics: dict | None = None, strict: bool = True,
+               deadline_seconds: float = DEADLINE_SECONDS) -> dict:
     """Shared orchestration. Adapters only exchange model messages; tools stay here.
 
     Trials call this directly, so a failed model cannot be disguised by rules.
@@ -143,12 +156,12 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
     metrics.update({"model_requests": 0, "usage": {}, "completed_answer": False,
                     "proposal_submitted": False, "proposal_rejected": False})
     for _ in range(MAX_STEPS):
-        remaining = DEADLINE_SECONDS - (time.monotonic() - started)
+        remaining = deadline_seconds - (time.monotonic() - started)
         if remaining <= 0:
             raise TimeoutError("Model took too long")
         metrics["model_requests"] += 1
         resp = provider.complete(remaining)
-        if time.monotonic() - started >= DEADLINE_SECONDS:
+        if time.monotonic() - started >= deadline_seconds:
             raise TimeoutError("Model took too long")
         for key, value in (resp.usage or {}).items():
             metrics["usage"][key] = metrics["usage"].get(key, 0) + value
@@ -167,7 +180,7 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                     raise ProviderError()
         results = []
         for fc in fcs:
-            if time.monotonic() - started >= DEADLINE_SECONDS:
+            if time.monotonic() - started >= deadline_seconds:
                 raise TimeoutError("Model took too long")
             args = fc.args
             if fc.name == "answer":
@@ -198,13 +211,14 @@ def gemini_turn(req: dict, data: TripData, client=None, model: str = GEMINI_MODE
 
 
 def provider_settings() -> dict:
-    """Explicit selection. Existing deployments keep Gemini/rules behavior."""
-    provider = os.getenv("AGENT_PROVIDER", "gemini").strip().lower()
-    model = (os.getenv("GROQ_MODEL", GROQ_MODELS[0]) if provider == "groq"
+    """Resolve the primary provider and whether Gemini is available as a backup."""
+    provider = os.getenv("AGENT_PROVIDER", "groq").strip().lower()
+    model = (os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL) if provider == "groq"
              else GEMINI_MODEL if provider == "gemini" else None)
     configured = provider in ("gemini", "groq", "rules")
     enabled = configured and provider != "rules" and bool(os.getenv(f"{provider.upper()}_API_KEY"))
-    return {"provider": provider, "model": model, "enabled": enabled, "configured": configured}
+    return {"provider": provider, "model": model, "enabled": enabled, "configured": configured,
+            "gemini_backup": provider == "groq" and bool(os.getenv("GEMINI_API_KEY"))}
 
 
 # ---------------------------------------------------------------- rules fallback (no LLM)
@@ -255,14 +269,17 @@ def rules_turn(req: dict, data: TripData) -> dict:
                              "오늘 일정에서 바꿀 만한 좋은 장소를 찾지 못했어요."), None, calls)
 
 
-def gemini_with_fallback(req: dict, data: TripData, client=None) -> dict:
+def gemini_with_fallback(req: dict, data: TripData, client=None, *, started=None) -> dict:
     """Try GEMINI_MODEL, then the fallback models when Google says the model is busy or rate-limited."""
     from google.genai import errors
 
-    started, last = time.monotonic(), None
+    started = time.monotonic() if started is None else started
+    last = None
     models = list(dict.fromkeys([GEMINI_MODEL, *FALLBACK_MODELS]))
     ready = [m for m in models if busy_until.get(m, 0) < started] or models  # all paused -> try them anyway
     for model in ready:
+        if time.monotonic() - started >= DEADLINE_SECONDS:
+            raise TimeoutError("Model took too long")
         try:
             try:
                 out = gemini_turn(req, data, client, model=model, started=started)
@@ -301,13 +318,26 @@ def turn(req: dict, client=None) -> dict:
     data = TripData(req.get("itinerary_id"))
     settings = provider_settings()
     provider = settings["provider"]
-    if provider != "rules" and (client is not None or settings["enabled"] or not settings["configured"]):
+    if provider != "rules" and (client is not None or settings["enabled"] or settings["gemini_backup"]
+                                or not settings["configured"]):
         try:
             if not settings["configured"]:
                 raise ProviderError()
             if provider == "gemini":
                 return gemini_with_fallback(req, data, client)
-            return model_turn(req, data, GroqProvider(settings["model"], client=client))
+            started = time.monotonic()
+            if settings["enabled"] or client is not None:
+                try:
+                    groq = GroqProvider(settings["model"], client=client, retries=GROQ_RETRIES)
+                    budget = GROQ_SECONDS_WITH_BACKUP if settings["gemini_backup"] else DEADLINE_SECONDS
+                    return model_turn(req, data, groq, started=started, deadline_seconds=budget)
+                except (ProviderError, TimeoutError) as error:
+                    if not settings["gemini_backup"]:
+                        raise
+                    log.warning("agent fallback to Gemini: %s", provider_failure_summary(error))
+            out = gemini_with_fallback(req, data, started=started)
+            out["tool_calls"].insert(0, {"name": "model", "summary": "Used Gemini backup"})
+            return out
         except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
             summary = provider_failure_summary(e)

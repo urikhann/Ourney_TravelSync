@@ -72,7 +72,7 @@ def current_plan(h, tid):
     return c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"][0]
 
 
-def test_suggestion_waits_for_a_majority_then_rebuilds_a_checked_plan(planning_adapter):
+def test_suggestion_waits_for_a_majority_then_rebuilds_a_checked_plan(planning_adapter, monkeypatch):
     (a, b), tid, plan = planned_trip(2)
     stop, new, proposal = swap_for(tid, plan)
     msg = ask(b, tid, proposal)
@@ -103,6 +103,24 @@ def test_suggestion_waits_for_a_majority_then_rebuilds_a_checked_plan(planning_a
         assert audit.status == "PASSED" and audit.itinerary_id == after["id"]
         assert stop["poi_id"] in audit.input["configuration"]["excluded_poi_ids"]
     assert vote(a, tid, msg["id"], False).status_code == 409  # closed
+
+    for _ in range(11):
+        assert c.post(f"/trips/{tid}/chat", headers=a, json={"text": "Thanks!"}).status_code == 201
+    replacement = next(i for i in after["days"][0]["items"] if i["poi_id"] == new)
+
+    async def explain(payload):
+        assert all(m["id"] != note["id"] for m in payload["recent_messages"])
+        assert payload["applied_changes"] == [{
+            "date": DAY,
+            "removed": [{"name": stop["place"]["name"], "start": stop["start"]}],
+            "added": [{"name": replacement["place"]["name"], "start": replacement["start"]}],
+            "day_rebuilt": voted["agent"]["result"]["mode"] == "rebuild",
+        }]
+        return {"reply": "The approved swap is in the plan.", "proposal": None}
+
+    monkeypatch.setattr(services, "agent_turn", explain)
+    response = c.post(f"/trips/{tid}/chat", headers=a, json={"text": "@TravelSync What changed?"})
+    assert response.json()["messages"][1]["text"] == "The approved swap is in the plan."
 
 
 def test_a_majority_of_rejections_closes_it_and_keeps_the_plan(planning_adapter):

@@ -5,20 +5,23 @@ Adapters own provider-specific history; neither adapter can execute a tool.
 from dataclasses import dataclass
 import json
 import os
+import time
 from typing import Protocol
 
 import httpx
 
 
 GROQ_MODELS = ("openai/gpt-oss-20b", "qwen/qwen3.8-27b")
+DEFAULT_GROQ_MODEL = GROQ_MODELS[1]
 
 
 class ProviderError(Exception):
     """Intentionally excludes raw response bodies, prompts and credentials."""
 
-    def __init__(self, code: int | None = None):
+    def __init__(self, code: int | None = None, retry_after: float = 0):
         super().__init__("Model provider request failed")
         self.code = code
+        self.retry_after = retry_after
 
 
 @dataclass
@@ -74,7 +77,20 @@ class GeminiProvider:
         calls = [ToolCall(str(i), fc.name, dict(fc.args or {})) for i, fc in enumerate(resp.function_calls or [])]
         if calls:
             self.contents.append(resp.candidates[0].content)
-        return Completion(calls, "" if calls else (resp.text or ""))
+        metadata = getattr(resp, "usage_metadata", None)
+        usage = {}
+        if metadata is not None:
+            for key, field in (
+                ("prompt_tokens", "prompt_token_count"),
+                ("completion_tokens", "candidates_token_count"),
+                ("reasoning_tokens", "thoughts_token_count"),
+                ("cached_prompt_tokens", "cached_content_token_count"),
+                ("total_tokens", "total_token_count"),
+            ):
+                value = getattr(metadata, field, None)
+                if isinstance(value, int):
+                    usage[key] = value
+        return Completion(calls, "" if calls else (resp.text or ""), usage)
 
     def add_results(self, results):
         from google.genai import types
@@ -87,14 +103,15 @@ class GeminiProvider:
 class GroqProvider:
     """Groq Chat Completions over the service's existing HTTP dependency.
 
-    One model per turn, no hidden retries or cross-model fallback: trials must
-    attribute failures to the model actually selected. Client injection is for tests.
+    One model per turn. Retries are opt-in and share a turn-level allowance.
+    Trials leave transport retries disabled so each attempt remains observable.
     """
 
-    def __init__(self, model: str, api_key: str | None = None, client=None):
+    def __init__(self, model: str, api_key: str | None = None, client=None, retries: int = 0):
         self.model = model
         self.api_key = api_key if api_key is not None else os.getenv("GROQ_API_KEY", "")
         self.client = client
+        self.retries_left = retries
 
     def start(self, system, prompt, tools):
         self.messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
@@ -103,6 +120,22 @@ class GroqProvider:
             for t in tools]
 
     def complete(self, timeout):
+        deadline = time.monotonic() + timeout
+        delay = 0.5
+        while True:
+            try:
+                return self._complete(max(0.001, deadline - time.monotonic()))
+            except (ProviderError, TimeoutError) as error:
+                code = getattr(error, "code", None)
+                transient = code is None or code in {408, 429} or 500 <= code < 600
+                wait = max(delay, getattr(error, "retry_after", 0))
+                if not transient or not self.retries_left or time.monotonic() + wait >= deadline:
+                    raise
+                self.retries_left -= 1
+                time.sleep(wait)
+                delay = min(delay * 2, 4)
+
+    def _complete(self, timeout):
         if not self.api_key:
             raise ProviderError(401)
         payload = {"model": self.model, "messages": self.messages, "tools": self.tools,
@@ -115,7 +148,8 @@ class GroqProvider:
                             headers={"Authorization": f"Bearer {self.api_key}"},
                             json=payload, timeout=min(20.0, timeout))
             if response.status_code >= 400:
-                raise ProviderError(response.status_code)
+                retry_after = response.headers.get("Retry-After", "")
+                raise ProviderError(response.status_code, int(retry_after) if retry_after.isdecimal() else 0)
             body = response.json()
             choice = body["choices"][0]
             if choice.get("finish_reason") != "tool_calls":

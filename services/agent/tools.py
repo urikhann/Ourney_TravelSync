@@ -35,6 +35,7 @@ class TripData:
     def __init__(self, itinerary_id: int | None):
         self.itinerary_id = itinerary_id
         self.days, self.version, self.group, self.places = [], None, [], {}
+        self.recommendation_reasons = {}
         if not itinerary_id:
             return
         with engine.connect() as c:
@@ -45,8 +46,17 @@ class TripData:
                 return
             self.days = _json(row["days"]) or []
             self.version = row["dataset_version"]
-            self.group = [g["poi_id"] for g in (_json(row["response"]) or {}).get("group", [])]
-            ids = {it["poi_id"] for d in self.days for it in d["items"]} | set(self.group)
+            recommendations = (_json(row["response"]) or {}).get("group", [])
+            self.group = [g["poi_id"] for g in recommendations]
+            ids = {it["poi_id"] for d in self.days for it in d["items"]}
+            for entry in recommendations:
+                if entry["poi_id"] in ids:
+                    reason = next((r["text"] for r in entry.get("reasons", [])
+                                   if r.get("code") == "shared_interest" and not r.get("user_id")
+                                   and isinstance(r.get("text"), str) and r["text"].strip()), None)
+                    if reason:
+                        self.recommendation_reasons[entry["poi_id"]] = reason
+            ids.update(self.group)
             if ids:
                 q = text(f"SELECT {PLACE_COLS} FROM pois WHERE dataset_version = :v AND id IN :ids")
                 q = q.bindparams(bindparam("ids", expanding=True))
@@ -60,6 +70,8 @@ class TripData:
             return {"plan": None, "note": "This trip has no plan yet. Ask the group to build plans on the Plan tab."}
         return {"plan": [{"date": d["date"], "items": [
             {"item_id": f"{d['date']}@{it['start']}", "start": it["start"], "end": it["end"], "locked": it.get("locked", False),
+             "group_recommendation_reason": self.recommendation_reasons.get(it["poi_id"]),
+             "available_when_planned": (it.get("availability") or {}).get("available"),
              **self.places.get(it["poi_id"], {"poi_id": it["poi_id"], "name": it["poi_id"]})} for it in d["items"]]}
             for d in self.days]}
 

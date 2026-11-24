@@ -29,9 +29,15 @@ for pid, name, indoor, walk, cost, dur in P:
     kind = "food" if pid == "lunch" else "activity"
     con.execute("INSERT INTO pois VALUES (?, 'v1', ?, 'Jung-gu', ?, 'test', ?, ?, ?, ?)", (pid, name, kind, indoor, walk, cost, dur))
 con.execute("INSERT INTO recommendation_runs VALUES (1, 'v1', ?)",
-            (json.dumps({"group": [{"poi_id": i} for i in ["park", "lunch", "museum", "market", "gallery"]]}),))
+            (json.dumps({"group": [
+                {"poi_id": "park", "reasons": [
+                    {"code": "shared_interest", "text": "2 of 3 love nature & views"},
+                    {"code": "fair_pick", "text": "Fair pick for private-member", "user_id": "private-member"},
+                ]},
+                *[{"poi_id": i} for i in ["lunch", "museum", "market", "gallery"]],
+            ]}),))
 days = [{"date": "2026-11-21", "items": [
-    {"poi_id": "park", "start": "10:00", "end": "11:30", "locked": False},
+    {"poi_id": "park", "start": "10:00", "end": "11:30", "locked": False, "availability": {"available": True}},
     {"poi_id": "lunch", "start": "12:30", "end": "13:30", "locked": False},
     {"poi_id": "market", "start": "14:00", "end": "15:00", "locked": True}]}]
 con.execute("INSERT INTO itineraries VALUES (7, 1, ?)", (json.dumps(days),))
@@ -178,6 +184,34 @@ def test_chat_tools_do_not_expose_cost_filters_or_prices():
     assert all("avg_cost_krw" not in p for p in data.find_places()["places"])
     declaration = next(t for t in brain.TOOLS if t["name"] == "find_places")
     assert "max_cost_krw" not in declaration["parameters_json_schema"]["properties"]
+
+
+def test_saved_plan_explanation_context_contains_only_group_reasons_and_schedule_facts():
+    data = tools.TripData(7)
+    park, lunch, market = data.get_plan()["plan"][0]["items"]
+    assert park["group_recommendation_reason"] == "2 of 3 love nature & views"
+    assert park["available_when_planned"] is True
+    assert lunch["group_recommendation_reason"] is None
+    assert lunch["available_when_planned"] is None
+    assert market["locked"] is True
+
+    fake = FakeGemini([("answer", {"reply": "그룹에서 자연과 전망을 좋아해 공원이 추천됐어요."})])
+    result = brain.gemini_turn(req("@TravelSync 왜 공원이 포함됐나요?"), data, client=fake)
+    prompt = fake.seen[0].parts[0].text
+    assert "2 of 3 love nature & views" in prompt
+    assert "private-member" not in prompt
+    assert result["proposal"] is None
+
+
+def test_applied_changes_reach_provider_context():
+    request = req("@TravelSync 승인 후 뭐가 바뀌었나요?")
+    request["applied_changes"] = [{
+        "date": "2026-11-21", "removed": [{"name": "Busan Park", "start": "10:00"}],
+        "added": [{"name": "Busan Museum", "start": "10:30"}], "day_rebuilt": False,
+    }]
+    prompt = brain.context_text(request)
+    assert "Recent applied changes to the current plan" in prompt
+    assert '"added": [{"name": "Busan Museum", "start": "10:30"}]' in prompt
 
 
 def test_budget_request_does_not_propose_cost_optimization():
