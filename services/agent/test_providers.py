@@ -139,7 +139,7 @@ def test_settings_missing_key_and_explicit_rules(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY")
     assert main.health()["brain"] == "rules"
     monkeypatch.setenv("GEMINI_API_KEY", "test-only")
-    assert main.health()["brain"] == "rules"
+    assert main.health()["brain"] == "gemini"
     monkeypatch.setenv("AGENT_PROVIDER", "rules")
     assert brain.provider_settings()["enabled"] is False
     monkeypatch.setenv("AGENT_PROVIDER", "typo")
@@ -149,14 +149,34 @@ def test_settings_missing_key_and_explicit_rules(monkeypatch):
 def test_groq_http_route(fixture_data, monkeypatch):
     from fastapi.testclient import TestClient
     import main
+    monkeypatch.delenv("AGENT_PROVIDER")
     provider = provider_for([response([wire_call("answer", {"reply": "안녕하세요!", "proposal": None})])])
     monkeypatch.setattr(brain, "TripData", lambda _: trial_models.TrialData(fixture_data, {}))
     monkeypatch.setattr(brain, "GroqProvider", lambda *args, **kwargs: provider)
     client = TestClient(main.app)
-    assert client.get("/health").json()["model"] == GROQ_MODELS[0]
+    assert client.get("/health").json()["model"] == GROQ_MODELS[1]
     result = client.post("/agent/turn", json=trial_models.trial_request(fixture_data["cases"][0], "ko"))
     assert result.status_code == 200
     assert result.json() == {"reply": "안녕하세요!", "tool_calls": [], "proposal": None, "needs_clarification": False}
+
+
+@pytest.mark.parametrize("failures", [0, 2, 6])
+def test_groq_retries_before_gemini_backup(fixture_data, monkeypatch, failures):
+    import providers
+
+    seen = []
+    steps = [429] * failures + [response([wire_call("answer", {"reply": "Groq answered"})])]
+    transport = provider_for(steps, seen=seen).client
+    monkeypatch.setattr(providers.time, "sleep", lambda _: None)
+    monkeypatch.setattr(brain, "TripData", lambda _: trial_models.TrialData(fixture_data, {}))
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only")
+    monkeypatch.setattr(brain, "gemini_with_fallback", lambda *args, **kwargs: {
+        "reply": "Gemini answered", "tool_calls": [],
+    })
+    out = brain.turn(trial_models.trial_request(fixture_data["cases"][0], "en"), client=transport)
+    assert len(seen) == min(failures + 1, 6)
+    assert all(request["model"] == GROQ_MODELS[1] for request in seen)
+    assert out["reply"] == ("Gemini answered" if failures == 6 else "Groq answered")
 
 
 def test_paired_runner_no_database_or_fallback(monkeypatch):
@@ -199,3 +219,19 @@ def test_dry_run_cli_and_no_overwrite(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         trial_models.main(["--live", "--output", str(tmp_path / "live.json")])
     assert not (tmp_path / "live.json").exists()
+
+
+def test_trial_retries_keep_failed_attempts_and_stop_on_answer(monkeypatch):
+    monkeypatch.setattr(trial_models.time, "sleep", lambda _: None)
+    attempts = iter([
+        {"status": "failed", "http_status": 429},
+        {"status": "answered", "response": {"proposal": {}}},
+    ])
+    monkeypatch.setattr(trial_models, "run_turn", lambda *args: next(attempts))
+    report = trial_models.build_report(
+        trial_models.FIXTURE.read_bytes(), live=True, models=(GROQ_MODELS[0],),
+        case_id="rain", languages=("en",), retries=5,
+    )
+    row, = report["records"]
+    assert row["status"] == "answered"
+    assert [attempt.get("http_status") for attempt in row["attempts"]] == [429, None]

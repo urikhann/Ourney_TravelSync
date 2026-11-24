@@ -48,6 +48,33 @@ def published_plan(db: Session, trip_id: str) -> tuple[Itinerary | None, Optimiz
     return (db.get(Itinerary, audit.itinerary_id), audit) if audit else (None, None)
 
 
+def applied_changes(db: Session, trip_id: str, run_id: int) -> list[dict]:
+    """Recent applied swaps in the current plan's ancestry, oldest first."""
+    rows = db.scalars(select(ChatMessage.agent).where(
+        ChatMessage.trip_id == trip_id, ChatMessage.kind == "agent",
+        ChatMessage.agent["proposal_status"].as_string() == APPLIED,
+    ).order_by(ChatMessage.id))
+    by_result_run = {}
+    for agent in rows:
+        result = agent.get("result") or {}
+        source, target = agent.get("plan_run_id"), result.get("plan_run_id")
+        if result.get("status") == APPLIED and type(source) is int and type(target) is int and source < target:
+            by_result_run[target] = agent
+
+    changes = []
+    while run_id in by_result_run and len(changes) < 5:
+        agent = by_result_run[run_id]
+        proposal, result = agent["proposal"], agent["result"]
+        changes.append({
+            "date": proposal["date"],
+            "removed": [{"name": stop["name"], "start": stop["start"]} for stop in agent.get("removed", [])],
+            "added": [{"name": _name(db, stop["poi_id"]), "start": result.get("start")} for stop in proposal["add"]],
+            "day_rebuilt": result.get("mode") == "rebuild",
+        })
+        run_id = agent["plan_run_id"]
+    return changes[::-1]
+
+
 def tally(db: Session, message_id: int) -> list[ProposalVote]:
     return list(db.scalars(select(ProposalVote).where(ProposalVote.message_id == message_id)))
 

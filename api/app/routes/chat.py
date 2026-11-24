@@ -74,6 +74,7 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
     payload = {
         "trip_id": trip.id,
         "itinerary_id": plan.id if plan else None,
+        "applied_changes": proposals.applied_changes(db, trip.id, plan_run.id) if plan else [],
         "message": {"id": msg.id, "user_id": msg.author_id, "text": msg.text, "sent_at": msg.created_at.isoformat()},
         "recent_messages": [{"id": r.id, "user_id": r.author_id, "kind": r.kind, "text": r.text,
                              "sent_at": r.created_at.isoformat()} for r in reversed(recent)],

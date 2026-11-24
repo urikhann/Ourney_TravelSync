@@ -12,32 +12,33 @@ so the backend only needs `AGENT_URL=http://localhost:8005`.
 
 Safety: tools only read. A suggestion is dropped unless the stop exists, is not locked, the place is real and
 not in the plan, and it is not closed at that time. Member identity fields are replaced by "Member 1, 2…".
-User-written chat text and place facts still go to the selected provider. Without its API key, or when the
-provider fails, simple rules answer instead. This does not establish full itinerary feasibility.
+User-written chat text and place facts go to the provider handling the turn.
 
 ## Select a provider
 
-`AGENT_PROVIDER` accepts `gemini` (default), `groq`, or `rules`. `GEMINI_API_KEY` and `GEMINI_MODEL`
-keep their existing behavior. Groq uses `GROQ_API_KEY` and `GROQ_MODEL` (default `openai/gpt-oss-20b`);
-the paired Qwen candidate is `qwen/qwen3.8-27b`. Model availability depends on the Groq account.
+`AGENT_PROVIDER` accepts `groq` (default), `gemini`, or `rules`. Groq uses `GROQ_API_KEY` and
+`GROQ_MODEL` (default `qwen/qwen3.8-27b`). The default path allows up to five Groq retries per turn
+for retryable provider errors, reusing tool history and applying backoff. When a Gemini key is
+configured, Groq gets up to 25 seconds of the 40-second model budget. Gemini handles the turn if
+Groq is unavailable or cannot finish within its budget. Simple rules answer if both paths fail or
+neither key is configured.
 Keys belong only in the ignored root `.env`, exported environment, or deployment secret configuration.
 
 For Docker, set these entries in the root `.env`, then rebuild the agent:
 
 ```dotenv
 AGENT_PROVIDER=groq
-GROQ_MODEL=openai/gpt-oss-20b
+GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
-Supply `GROQ_API_KEY` separately. Change `GROQ_MODEL` to `qwen/qwen3.8-27b` to trial Qwen in the app.
+Supply `GROQ_API_KEY` for Qwen and `GEMINI_API_KEY` to enable the Gemini backup.
 
 ```powershell
 docker compose up -d --build agent
 ```
 
-`GET /health` describes configuration, not a live provider probe. With the selected key missing,
-`brain` is `rules`; it never silently switches to a different provider. An invalid provider reports
-`ok: false`. Model failures produce sanitized `provider_error` tool summaries; Gemini retains its
+`GET /health` reports the configured primary and the brain available based on API keys.
+An invalid provider reports `ok: false`. Model failures produce sanitized `provider_error` tool summaries if the turn goes to rules. Explicit Gemini mode retains its
 legacy `gemini_error` name. Model responses never execute arbitrary functions: the shared loop
 dispatches only the allowlisted read tools and validates suggestions through `TripData.validate`.
 Groq additionally validates argument schemas and requires one complete swap at the original start time.

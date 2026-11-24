@@ -86,9 +86,9 @@ services:
       AVAILABILITY_URL: http://mocks:8001
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
-      AGENT_PROVIDER: ${AGENT_PROVIDER:-gemini}
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-groq}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
     ports: ["127.0.0.1:8005:8005"]
     depends_on:
       db: {condition: service_healthy}
