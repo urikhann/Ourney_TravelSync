@@ -53,6 +53,7 @@ export type Recommendations = {
 };
 
 export type PlanItem = {
+  breakfast_status?: "verified" | "inferred" | null;
   duration_source?: string; duration_estimated?: boolean;
   visit_category?: "cafe" | "meal" | "activity" | "evening";
   activity_category?: string;
@@ -64,6 +65,7 @@ export type PlanItem = {
 export type PlanningPoint = { label: string; latitude: number; longitude: number };
 export type DailyComposition = {
   breakfast_enabled?: boolean;
+  breakfast_require_verified?: boolean;
   meal_overlap_min?: number; meal_timezone?: "Asia/Seoul"; meal_policy_version?: "meal-1.0";
   meal_overrides?: { date: string; name: "breakfast" | "lunch" | "dinner";
     window?: { start_min: number; end_min: number } | null;
@@ -87,7 +89,7 @@ export type Plan = {
     routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
-  days: { date: string; items: PlanItem[]; start: string; start_label: string; end_label: string;
+  days: { date: string; breakfast_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {

@@ -13,9 +13,10 @@ from ourney_travelsync.optimizer.meals import effective_meals
 from ourney_travelsync.optimizer.validation import validate_final
 
 
-def breakfast_request(role="cafe"):
+def breakfast_request(role="cafe", *, strict=True):
     raw = fixture(420, 600, count=2)
     raw["daily_composition"]["breakfast_enabled"] = True
+    raw["daily_composition"]["breakfast_require_verified"] = strict
     raw["allow_unknown_opening_hours"] = True
     p = raw["candidates"][0]
     p.update(visit_category=role, breakfast_offering=fact(True),
@@ -155,3 +156,47 @@ def test_breakfast_overrides_use_effective_window_without_duplicating_slots():
     assert next(v for v in result.days[0].items if v.poi_id == "A").start_min == 500
     policy = result.input_snapshot.daily_composition
     assert [m.name for m in effective_meals(result.input_snapshot.days[0],policy)] == ["breakfast","lunch","dinner"]
+
+
+@pytest.mark.parametrize("obstacle", [None, "opening", "closed", "duration", "time", "travel", "budget", "meal_cap", "serving"])
+def test_optional_inferred_breakfast_respects_hard_constraints(obstacle):
+    raw = breakfast_request(strict=False)
+    breakfast = raw["candidates"][0]
+    breakfast.update(breakfast_suitable=True, breakfast_hours={})
+    breakfast.pop("breakfast_offering")
+    if obstacle == "opening":
+        breakfast["operations"] = {}
+    elif obstacle == "closed":
+        breakfast["operations"][DAY]["closed"] = fact(True)
+    elif obstacle == "duration":
+        breakfast["duration_min"] = fact(181)
+    elif obstacle == "time":
+        raw["days"][0]["start_min"] = 580
+        raw["days"][0]["end_min"] = 660
+        for member in raw["members"]:
+            member["available"][DAY][0]["end_min"] = 660
+    elif obstacle == "travel":
+        for edge in raw["edges"]:
+            if edge["origin"] == "A" or edge["destination"] == "A":
+                edge["duration_minutes"] = 200
+    elif obstacle == "budget":
+        raw.update(enforce_cost=True, budget_total=10000)
+        breakfast["cost_per_person"] = fact(10001)
+    elif obstacle == "meal_cap":
+        raw["daily_composition"]["max_meals"] = 0
+    elif obstacle == "serving":
+        breakfast["breakfast_hours"] = {DAY: fact([])}
+
+    result = optimize(raw)
+    assert result.validation_status == "PASSED", result
+    assigned = [v for v in result.days[0].items if v.breakfast_status]
+    if obstacle is None:
+        assert len(assigned) == 1 and assigned[0].breakfast_status == "inferred"
+        assert 420 <= assigned[0].start_min < assigned[0].departure_min <= 600
+        day = result.days[0]
+        tampered = day.model_copy(update={"items": tuple(
+            v.model_copy(update={"breakfast_status": "verified"}) if v == assigned[0] else v for v in day.items)})
+        assert not validate_final(result.input_snapshot, (tampered,)).passed
+    else:
+        assert not assigned
+        assert any(v.poi_id == "B" for v in result.days[0].items)

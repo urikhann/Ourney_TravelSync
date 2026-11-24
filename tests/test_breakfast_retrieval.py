@@ -22,8 +22,7 @@ def test_low_scoring_breakfast_alternative_reserved_and_exclusions_remain_upstre
                       np.array([[5.] * 39 + [1.]]))
     records = {pid: {"latitude": 35.1, "longitude": 129.1, "duration_min": 30,
         "field_status": {"duration": "KNOWN"}, "cafe": 1} for pid in ids}
-    records["p39"]["enriched_metadata"] = {"breakfast_category": fact("brunch_cafe"),
-        "breakfast_hours": {DAY: fact([dict(start_min=420, end_min=600)])}}
+    records["p39"]["enriched_metadata"] = {"representative_menu": "Weekend brunch"}
     point = dict(latitude=35.1, longitude=129.1)
     days = [dict(date=DAY, start_min=420, end_min=600, start_point=point, end_point=point)]
     composition = DailyComposition(breakfast_enabled=True).model_dump(mode="json")
@@ -38,7 +37,7 @@ def test_low_scoring_breakfast_alternative_reserved_and_exclusions_remain_upstre
     composition["breakfast_enabled"] = False
     assert "p39" not in select_days(data, records, days, composition=composition)[0].poi_ids
     composition["breakfast_enabled"] = True
-    records["p39"]["enriched_metadata"]["breakfast_hours"][DAY] = fact([])
+    records["p39"]["enriched_metadata"]["breakfast_hours"] = {DAY: fact([])}
     assert "p39" not in select_days(data, records, days, composition=composition)[0].poi_ids
 
 

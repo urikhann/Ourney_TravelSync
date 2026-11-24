@@ -124,6 +124,10 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
                     problem("REQUIRED_ACCESS", day.date, v.poi_id)
             prev, depart = v.poi_id, v.departure_min
         composition = req.daily_composition
+        if any(v.breakfast_status is not None and
+               (composition is None or (v.poi_id in pois and pois[v.poi_id].visit_category not in ("meal", "cafe")))
+               for v in plan.items):
+            problem("INVALID_BREAKFAST_ASSIGNMENT", day.date)
         if composition is not None:
             actual = [(v, pois[v.poi_id]) for v in plan.items if v.poi_id in pois]
             cafes = [v for v,p in actual if p.visit_category == "cafe"]

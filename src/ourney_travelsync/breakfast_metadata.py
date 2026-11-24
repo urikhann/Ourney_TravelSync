@@ -22,6 +22,29 @@ def _decoded(value):
     return value
 
 
+BREAKFAST_CATEGORIES = ("breakfast_restaurant", "breakfast_cafe", "brunch_cafe")
+
+
+def _mentions_breakfast(value):
+    return (bool(re.search(r"브런치|조식|아침\s*식사|\bbrunch\b|\bbreakfast\b", value, re.I))
+            and not re.search(r"없음|미제공|불가|제외|\b(?:no|not|without|tea)\b", value, re.I))
+
+
+def inferred_breakfast_suitability(record):
+    """Screen explicit menu/category cues without promoting them to facts."""
+    metadata = record.get("enriched_metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    category = _decoded(metadata.get("breakfast_category")) or metadata.get("breakfast_category")
+    if isinstance(category, dict):
+        category = category.get("value")
+    values = (metadata.get("representative_menu"), metadata.get("detailed_category"),
+              category, record.get("category_name") or record.get("category"))
+    return any(isinstance(value, str) and
+               (value.strip().lower() in BREAKFAST_CATEGORIES or _mentions_breakfast(value))
+               for value in values)
+
+
 def _imported_offering(metadata):
     """Use explicit, field-provenanced menu/category text already imported.
 
@@ -40,8 +63,7 @@ def _imported_offering(metadata):
             ("representative_menu", "menu_source_url", "menu_checked_at"),
             ("detailed_category", "category_source_url", "category_checked_at")):
         value = str(metadata.get(field) or "")
-        if (not re.search(r"브런치|조식|아침식사|\bbrunch\b|\bbreakfast\b", value, re.I)
-                or re.search(r"없음|미제공|불가|제외|\b(?:no|not|without|tea)\b", value, re.I)):
+        if not _mentions_breakfast(value):
             continue
         source, checked = metadata.get(source_key), metadata.get(checked_key)
         if not source or not checked or not any(
@@ -66,7 +88,7 @@ def breakfast_metadata(record):
     if not offering.known:
         try:
             category = Fact[str].model_validate(_decoded(metadata.get("breakfast_category")) or {})
-            if category.known and category.value in ("breakfast_restaurant", "breakfast_cafe", "brunch_cafe"):
+            if category.known and category.value in BREAKFAST_CATEGORIES:
                 offering = Fact[StrictBool].model_validate({**category.model_dump(), "value": True})
         except (ValidationError, TypeError):
             pass

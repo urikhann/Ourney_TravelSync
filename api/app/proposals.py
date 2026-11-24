@@ -97,7 +97,7 @@ def _attempts(raw: dict, plan: Itinerary, proposal: dict, removed_ids: set, adde
 
 
 # Optimizer answers that mean "this configuration doesn't fit", so a looser one is worth trying.
-RETRYABLE = ("optimizer_search_timeout", "optimizer_infeasible", "optimizer_insufficient_candidates")
+RETRYABLE = ("optimizer_search_timeout", "optimizer_no_feasible_itinerary", "optimizer_insufficient_candidates")
 
 
 def removed_stops(db: Session, plan: Itinerary, proposal: dict) -> list[dict]:

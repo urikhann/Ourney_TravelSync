@@ -11,13 +11,12 @@ performed here; existing dated-day and operating-data contracts still apply.
 defines the standalone 45-minute overlap threshold and policy version.
 The application supplies a 60-minute threshold.
 
-For each requested day and each effective meal window:
+For each requested day and each effective lunch or dinner window:
 
 ```
 overlap = max(0, min(day.end_min, meal.end_min)
                  - max(day.start_min, meal.start_min))
-required = (explicit_requirement or overlap >= meal_overlap_min
-            or (breakfast_enabled and meal.name == "breakfast" and overlap > 0))
+required = explicit_requirement or overlap >= meal_overlap_min
 ```
 
 Requirements use the user's requested day bounds, not a shortened restaurant or
@@ -38,10 +37,13 @@ The old `min_meals` field is accepted but deprecated and ignored: it cannot forc
 two meals on a morning-only day. `max_meals` remains enforced. Setting
 `breakfast_enabled: true` adds breakfast 07:00–10:00 (420–600); the default
 remains false for compatibility with saved lunch/dinner configurations.
-An explicitly configured breakfast window also enables that slot. Opting in
-requires breakfast on days with any overlap with its effective window; a short
-overlap may be infeasible for a full stay. Custom windows without the opt-in flag
-retain the legacy overlap-threshold rule. Overrides cannot relax evidence checks.
+An explicitly configured breakfast window also enables that slot. By default
+the solver maximizes the number of days with breakfast before group utility.
+It skips breakfast when needed to satisfy the hard constraints. Breakfast
+time overrides constrain a breakfast visit if selected.
+Set `breakfast_require_verified: true` to use strict mode. In strict mode an
+overlapping breakfast window or explicit breakfast requirement makes the meal
+mandatory and requires verified offering, serving and operating evidence.
 
 ## CP-SAT and E3
 
@@ -69,14 +71,16 @@ tags and individual foods such as toast are insufficient. An explicit negative
 breakfast fact takes precedence over older imported text.
 
 `breakfast_hours` maps ISO calendar dates to `Fact[tuple[Window, ...]]` serving
-intervals, in local minutes. These must be KNOWN with source and verification
-timestamp; an empty list means no breakfast that day. Serving hours are never
-derived from opening hours. The complete stay must fit a single serving
-interval, a known opening interval, the effective breakfast slot and travel
-bounds, with known `closed: false`. The general unknown-opening-hours option
-does not relax breakfast evidence. All evidence is captured in the optimizer
-input snapshot and independently checked by E3; no live menu lookup is needed
-to replay a run.
+intervals in local minutes. Known intervals restrict the full stay in either
+mode. A verified empty interval list excludes breakfast that day. Optional mode
+can infer suitability from explicit breakfast or brunch cues in available menu
+or category fields, including fields without verification provenance. The full
+visit must still fit a known opening interval and the breakfast slot, and a known
+closure disqualifies the stop. Opening hours establish when the venue is open.
+Breakfast is labeled `verified` only when the strict evidence check confirms
+the full visit, including known `closed: false`. Otherwise the visit is labeled
+`inferred` and the UI asks the traveler to confirm serving times. E3 checks the
+recorded assignment against the pinned optimizer input.
 
 Synthetic metadata example (not a real venue fact):
 
@@ -96,24 +100,18 @@ Synthetic metadata example (not a real venue fact):
 }
 ```
 
-The pinned V4 catalogue has 3,570 records and some sourced brunch-menu text,
-but no structured breakfast-serving-hours fields. This implementation does not
-populate those hours or certify the current real-world validity of imported
-menus. Until serving intervals are independently verified and imported in a
-versioned metadata record, breakfast may correctly return infeasibility. It
-never substitutes an ordinary café or silently drops a required meal.
+The pinned V4 catalogue has some sourced brunch-menu text and lacks structured
+breakfast-serving hours. Its qualifying stops can be used as inferred breakfast
+options when known opening intervals and other hard constraints permit.
 
-Day retrieval reserves up to three breakfast alternatives with verified menu/
-category and serving-window evidence before the existing role quotas. Opening
-hours and directed-route feasibility remain adapter/E2/solver checks. The
-bounded candidate pool is not an exhaustive search of the catalogue; feasibility
-is guaranteed only within the supplied candidates and hard constraints. E1
-exclusions, GFAR score/ranking calculations, objectives, deterministic seed and
-single-worker search remain unchanged. Opting in changes which candidates
-are retrieved, so the resulting recommendation set can change.
+Optional breakfast retrieval adds up to three options to the ordinary day
+shortlist where the overall 60-place limit allows. Strict mode reserves
+verified alternatives within the ordinary shortlist. The planning adapter and
+optimizer evaluate opening hours and directed-route feasibility on the selected
+candidates. E1 exclusions and GFAR scoring still apply.
 
-Optional meal visits can be selected if they improve the existing objectives;
-there is no extra meal reward. The existing cross-day no-repeat rule means two
+Other optional meal visits can be selected if they improve the existing objectives.
+The existing cross-day no-repeat rule means two
 required meals need distinct POIs, and multi-day trips need enough distinct POIs.
 Full-catalogue retrieval reserves restaurant alternatives. Meal constraints do
 not modify GFAR or individual/group utility calculations.

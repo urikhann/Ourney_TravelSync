@@ -18,7 +18,7 @@ from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyCom
                                                   NonNegative, Operation, PlanRequest, Window)
 
 from ourney_travelsync.planning_categories import visit_role
-from ourney_travelsync.breakfast_metadata import breakfast_metadata
+from ourney_travelsync.breakfast_metadata import breakfast_metadata, inferred_breakfast_suitability
 from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
 
 from . import config
@@ -170,13 +170,15 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         scores = {u: (v - 1) / 4 if scale == "1-5" else v for u, v in raw_scores.items()}
         p = rows[row["poi_id"]]
         role, category = visit_role({**p.features, "category_name": p.category, "tags": p.tags})
-        breakfast, breakfast_hours = breakfast_metadata({"enriched_metadata": p.enriched_metadata})
+        breakfast_record = {"enriched_metadata": p.enriched_metadata, "category_name": p.category}
+        breakfast, breakfast_hours = breakfast_metadata(breakfast_record)
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
                                     personal_scores=scores, relevance=relevance, tags=tuple(p.tags),
                                     is_festival=bool(p.features.get("festival")),
                                     allowed_dates=row.get("candidate_dates"),
+                                    breakfast_suitable=inferred_breakfast_suitability(breakfast_record),
                                     breakfast_offering=breakfast, breakfast_hours=breakfast_hours,
                                     visit_category=role, activity_category=category))
     daily = [dict(date=d.date.isoformat(), start_min=d.start_min, end_min=d.end_min,

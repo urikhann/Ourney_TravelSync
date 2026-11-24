@@ -72,6 +72,7 @@ class MealOverride(Contract):
 
 class DailyComposition(Contract):
     breakfast_enabled: bool = False
+    breakfast_require_verified: bool = False
     max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
     # Accepted for old clients; named requirements now determine the minimum.
     min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = Field(default=0, deprecated=True)
@@ -134,6 +135,7 @@ class Candidate(Contract):
     personal_scores: dict[str, Unit]
     relevance: dict[str, Unit]
     visit_category: Literal["cafe", "meal", "activity", "evening"] = "activity"
+    breakfast_suitable: bool = False
     breakfast_offering: Fact[StrictBool] = Field(default_factory=Fact)
     breakfast_hours: dict[date, Fact[tuple[Window, ...]]] = Field(default_factory=dict)
     activity_category: Literal["nature", "history", "art", "shopping", "activity", "entertainment", "relax", "festival", "other"] = "other"
@@ -252,6 +254,7 @@ class Visit(Contract):
     travel_minutes: NonNegative
     stay_minutes: NonNegative
     visit_cost: NonNegative
+    breakfast_status: Literal["verified", "inferred"] | None = None
 
 
 class DayPlan(Contract):
@@ -276,7 +279,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m"]
+    objective: Literal["group_utility", "breakfast_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

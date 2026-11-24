@@ -114,6 +114,17 @@ async def plan_drive(run, body, prepared, context, audit, db):
     evidence = {}
     warnings = set()
     last_result = None
+    best_result = None
+    best_breakfast_count = -1
+    draft_composition = base.daily_composition
+    fallback_composition = None
+    if draft_composition is not None and not draft_composition.breakfast_require_verified:
+        if draft_composition.breakfast_enabled or any(w.name == "breakfast" for w in draft_composition.meal_windows):
+            fallback_composition = draft_composition.model_copy(update={
+                "breakfast_enabled": False,
+                "meal_windows": tuple(w for w in draft_composition.meal_windows if w.name != "breakfast"),
+                "meal_overrides": tuple(o for o in draft_composition.meal_overrides if o.name != "breakfast"),
+            })
     # Give the initial search half the total time. Split the other half across
     # the two possible repair rounds.
     for round_index in range(MAX_ROUTE_ROUNDS):
@@ -122,23 +133,46 @@ async def plan_drive(run, body, prepared, context, audit, db):
             evidence[key].model_copy(update={"straight_line_m": estimate.straight_line_m})
             if key in evidence else estimate for key, estimate in estimates.items()
             if key not in evidence or evidence[key].usable)
+        # Reserve the final routing attempt for a route that can work without breakfast.
+        if round_index == MAX_ROUTE_ROUNDS - 1 and fallback_composition is not None and not best_result:
+            draft_composition = fallback_composition
         draft_req = base.model_copy(update={"provisional": True, "edges": provisional,
+                                           "daily_composition": draft_composition,
                                            "search_seconds": round_seconds * .65})
         _, draft = await solve_checked(draft_req)
         if draft.validation_status != "NOT_RUN":
             raise HTTPException(502, "optimizer_invalid_response")
         if not draft.days:
             if last_result:
+                if fallback_composition is not None and draft_composition is not fallback_composition:
+                    draft_composition = fallback_composition
+                    continue
                 break
             if draft.error_code in ("NO_FEASIBLE_ITINERARY", "INSUFFICIENT_CANDIDATES") and missing_required_breakfast(draft_req, draft):
                 raise HTTPException(409, "optimizer_breakfast_unavailable")
             raise HTTPException(409, "optimizer_" + (draft.error_code or "invalid_result").lower())
-        legs = [key for key in chosen_edges(draft.days) if key not in evidence]
+        legs = list(chosen_edges(draft.days))
+        if fallback_composition is not None:
+            # Verify a path around optional breakfast too. A slower provider
+            # leg can otherwise invalidate the draft before the solver can skip it.
+            for day in draft.days:
+                remaining = tuple(item for item in day.items if item.breakfast_status is None)
+                if remaining and len(remaining) < len(day.items):
+                    legs.extend(chosen_edges((day.model_copy(update={"items": remaining}),)))
+        legs = [key for key in dict.fromkeys(legs) if key not in evidence]
         if not legs:
+            if fallback_composition is not None and draft_composition is not fallback_composition:
+                draft_composition = fallback_composition
+                continue
             break
-        request, _, data, spent = await routing_snapshot(context, legs, spent, round_index)
-        if data.routing_version != base.routing_version:
-            raise HTTPException(502, "planning_data_invalid_response")
+        try:
+            request, _, data, spent = await routing_snapshot(context, legs, spent, round_index)
+            if data.routing_version != base.routing_version:
+                raise HTTPException(502, "planning_data_invalid_response")
+        except HTTPException:
+            if best_result is None:
+                raise
+            break
         evidence.update((edge_key(edge), edge) for edge in data.edges)
         warnings.update(data.routing_warnings)
         rounds.append({"request_context_id": request["context_id"], "requested_legs": request["route_legs"],
@@ -155,9 +189,18 @@ async def plan_drive(run, body, prepared, context, audit, db):
         db.commit()
         response, result = await solve_checked(verified)
         last_result = verified, response, result, operational
-        if result.validation_status == "PASSED" or result.error_code not in (
-                "INSUFFICIENT_CANDIDATES", "NO_FEASIBLE_ITINERARY", "SEARCH_TIMEOUT"):
+        if result.validation_status == "PASSED":
+            count = sum(item.breakfast_status is not None for day in result.days for item in day.items)
+            if count > best_breakfast_count:
+                best_result, best_breakfast_count = last_result, count
+            draft_count = sum(item.breakfast_status is not None for day in draft.days for item in day.items)
+            if fallback_composition is None or count >= draft_count:
+                break
+        elif result.error_code not in ("INSUFFICIENT_CANDIDATES", "NO_FEASIBLE_ITINERARY", "SEARCH_TIMEOUT"):
             break
+    if best_result is not None and best_result is not last_result:
+        audit.optimizer_request = best_result[0].model_dump(mode="json")
+        audit.planning_data = {**audit.planning_data, "response": best_result[3]}
     if last_result is None:
         raise HTTPException(502, "optimizer_invalid_response")
-    return last_result
+    return best_result or last_result

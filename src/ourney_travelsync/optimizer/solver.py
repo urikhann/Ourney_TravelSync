@@ -6,7 +6,7 @@ from ortools.sat.python import cp_model
 
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
 from .eligibility import common_bounds, usable_cost
-from .meals import effective_meals, breakfast_windows
+from .meals import breakfast_slot_windows, breakfast_status, effective_meals
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,8 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     visits, times, day_arcs = {}, {}, {}
     total_cost = []
     meal_preferences = []
+    breakfast_assignments = {}
+    optional_breakfast = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes = [day.start_point, *pois, day.end_point]
         end = len(nodes) - 1
@@ -81,11 +83,15 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 for k,w in enumerate(meals):
                     if pois[pid].visit_category == "cafe" and w.name != "breakfast":
                         continue
-                    windows = breakfast_windows(pois[pid], day.date) if w.name == "breakfast" else None
+                    windows = (breakfast_slot_windows(pois[pid], day.date, w.require_verified)
+                               if w.name == "breakfast" else None)
                     if windows == ():
                         continue
                     z = model.new_bool_var(f"meal_{day.date}_{pid}_{w.name}")
                     if windows is not None:
+                        breakfast_assignments[day.date, pid] = z
+                        if not w.require_verified:
+                            optional_breakfast.append(z)
                         serving_choices = []
                         for n, interval in enumerate(windows):
                             serving = model.new_bool_var(f"breakfast_hours_{day.date}_{pid}_{n}")
@@ -164,6 +170,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     objectives = [("group_utility", utility, True, 0.7),
                   ("minimum_relevance", minimum, True, 0.2),
                   ("travel_minutes", travel, False, 0.1)]
+    if optional_breakfast:
+        # One additional breakfast outweighs any possible difference in group utility.
+        bonus = 1 + sum(p.group_utility for p in pois.values())
+        objectives[0] = ("breakfast_and_group_utility", utility + bonus * sum(optional_breakfast), True, 0.7)
     if meal_preferences:
         objectives[-1] = ("travel_minutes", travel, False, 0.05)
         objectives.append(("meal_preference", sum(meal_preferences), False, 0.05))
@@ -210,7 +220,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 return RawSolution(solver.status_name(status), phases=tuple(phases))
             all_optimal = False
             break  # retain earlier solution; never read values from UNKNOWN
-        incumbent = _extract(req, solver, pois, day_arcs, times)
+        incumbent = _extract(req, solver, pois, day_arcs, times, breakfast_assignments)
         all_optimal = all_optimal and status == cp_model.OPTIMAL
         model.add(expression == solver.value(expression))
         model.clear_hints()
@@ -223,7 +233,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                        incumbent, tuple(phases))
 
 
-def _extract(req, solver, pois, day_arcs, times):
+def _extract(req, solver, pois, day_arcs, times, breakfast_assignments):
     days = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes, arcs = day_arcs[day.date]
@@ -242,9 +252,13 @@ def _extract(req, solver, pois, day_arcs, times):
             depart = start + p.duration_min.value
             visit_cost = len(req.members) * (p.cost_per_person.value if usable_cost(p.cost_per_person) else 0)
             cost += visit_cost
-            items.append(Visit(poi_id=p.poi_id, arrival_min=arrival, start_min=start,
-                               departure_min=depart, travel_minutes=edge.duration_minutes,
-                               stay_minutes=p.duration_min.value, visit_cost=visit_cost))
+            visit = Visit(poi_id=p.poi_id, arrival_min=arrival, start_min=start,
+                          departure_min=depart, travel_minutes=edge.duration_minutes,
+                          stay_minutes=p.duration_min.value, visit_cost=visit_cost)
+            assignment = breakfast_assignments.get((day.date, p.poi_id))
+            if assignment is not None and solver.value(assignment):
+                visit = visit.model_copy(update={"breakfast_status": breakfast_status(p, day.date, visit)})
+            items.append(visit)
             i = j
         days.append(DayPlan(date=day.date, start_point=day.start_point, end_point=day.end_point,
                             start_min=day.start_min, items=tuple(items), end_arrival_min=arrival,
