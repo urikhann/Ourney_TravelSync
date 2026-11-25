@@ -1,5 +1,8 @@
 # Reproducible enriched deployment
 
+To select the November 25 V5 release, use the [V5 snapshot and import record](poi_enrichment_import_20261125.md).
+The default configuration documented below selects V4.
+
 E5 hybrid is the accepted recommender, with the existing GFAR integration.
 Budget is excluded from product scope. Driving is the supported planning mode.
 Known hours remain enforced; unknown hours remain permitted with warnings.
