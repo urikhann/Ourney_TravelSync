@@ -9,6 +9,7 @@ from app import config, services
 from app.db import SessionLocal
 from app.main import app
 from app.models import Itinerary, OptimizationRun, Preference
+from .conftest import real_rec
 from .test_flow import signup, FEATURES
 
 c = TestClient(app)
@@ -46,7 +47,9 @@ def audits(tid):
 
 
 @pytest.mark.parametrize("individual_method", [None, "e5_hybrid", "tfidf", "feature_mean"])
-def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(planning_adapter, monkeypatch, individual_method):
+def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(
+    compact_planning_adapter, monkeypatch, individual_method,
+):
     import numpy as np
     from ourney_travelsync.recommenders import hybrid
 
@@ -57,6 +60,7 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
         return vectors[:-10], vectors[-10:], {"dataset_content_hash": "synthetic optimizer integration"}
 
     monkeypatch.setattr(hybrid, "embeddings", embeddings)
+    monkeypatch.setattr(real_rec, "trip_seed", lambda _trip_id: 4)
     ratings = dict.fromkeys(FEATURES, 3)
     ratings["nature"] = 5
     h, tid, rec = ready(individual_method=individual_method, ratings=ratings)
@@ -89,7 +93,7 @@ def test_auth_to_real_solver_persists_private_replay_and_public_return_leg(plann
                     for u, v in row["member_scores"].items()}
         assert candidate["personal_scores"] == expected
         assert candidate["relevance"] == row["member_relevance"]
-    assert planning_adapter.calls[0]["group_size"] == 1
+    assert compact_planning_adapter.calls[0]["group_size"] == 1
     assert c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"][0] == plan
 
 

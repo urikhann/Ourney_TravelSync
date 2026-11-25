@@ -82,8 +82,9 @@ def planning_adapter(monkeypatch):
 
 @pytest.fixture
 def compact_planning_adapter(planning_adapter):
-    """Use two activity categories and two lunch choices for API state tests."""
-    routable_pois = {"bmuseum", "gwangalli", "milmyeon", "stew"}
+    """Keep two activity categories and two lunch choices routable."""
+    # E5 and the feature-based scorers can retrieve different nature stops.
+    routable_pois = {"bmuseum", "gwangalli", "xsky", "milmyeon", "stew"}
 
     def restrict_routes(request, response):
         nodes = routable_pois | set(request["points"])
@@ -92,3 +93,4 @@ def compact_planning_adapter(planning_adapter):
         return response
 
     planning_adapter.transform = restrict_routes
+    return planning_adapter
