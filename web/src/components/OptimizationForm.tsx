@@ -113,13 +113,15 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     if (problems.length) return;
     generate.mutate({
       budget_total: 0, transport_mode: "drive",
+      gap_policy: prior?.gap_policy,
       max_leg_minutes: leg === "" ? null : Number(leg), max_total_walk_minutes: walk === "" ? null : Number(walk),
       daily_composition: { ...composition, breakfast_enabled: breakfast,
         meal_windows: breakfast ? composition.meal_windows : composition.meal_windows.filter(w => w.name !== "breakfast"),
         meal_overrides: breakfast ? composition.meal_overrides : composition.meal_overrides?.filter(w => w.name !== "breakfast") }, duration_overrides: durations,
       required_access: prior?.required_access ?? [], locked_items: locks,
       days: rows.map((r) => ({ date: r.date, start_min: minute(r.start), end_min: r.end === "00:00" ? 1440 : minute(r.end),
-        start_point: r.from!, end_point: sameEnd ? r.from! : r.to! })),
+        start_point: r.from!, end_point: sameEnd ? r.from! : r.to!,
+        breaks: prior?.days.find(d => d.date === r.date)?.breaks })),
     });
   };
 

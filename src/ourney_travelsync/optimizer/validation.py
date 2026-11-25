@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from .contracts import DayPlan, PlanRequest
 from .meals import effective_meals, meals_can_be_assigned, meal_visit_matches
 from ..planning_categories import EVENING_START_MIN
+from .waiting import waiting_gaps
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,8 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             cost += e.group_fare
             travel += e.duration_minutes
             walk += e.walk_minutes
+            if any(depart < w.end_min and depart + e.duration_minutes > w.start_min for w in day.breaks):
+                problem("BREAK_TRAVEL_OVERLAP", day.date, destination)
             return e
 
         for v in plan.items:
@@ -106,6 +109,8 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
                     problem("VISIT_COST_MISMATCH", day.date, v.poi_id)
             if v.start_min < v.arrival_min or v.start_min < day.start_min or v.departure_min > day.end_min:
                 problem("VISIT_TIME_ORDER", day.date, v.poi_id)
+            if any(v.start_min < w.end_min and v.departure_min > w.start_min for w in day.breaks):
+                problem("BREAK_VISIT_OVERLAP", day.date, v.poi_id)
             op = p.operations.get(day.date)
             if req.enforce_opening_hours:
                 unknown = op is None or not op.openings.known or not op.closed.known
@@ -181,13 +186,22 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
         actual = records.get(lock.poi_id)
         if actual is None or actual[0] != lock.date or (lock.start_min is not None and actual[1] != lock.start_min):
             errors.append(f"{lock.poi_id}:LOCK_VIOLATION")
+    if req.gap_target:
+        target = req.gap_target
+        if not any(day.date == target.date and v.poi_id in target.candidate_ids
+                   and target.start_min <= v.start_min and v.departure_min <= target.end_min
+                   for day in days for v in day.items):
+            errors.append("GAP_TARGET_UNSATISFIED")
     if errors:
         return ValidationResult(tuple(errors))
     selected = [pois[pid] for pid in sorted(seen)]
     member_utility = {m.member_id: sum(p.relevance[m.member_id] for p in selected) for m in req.members}
     personal = {m.member_id: sum(p.personal_scores[m.member_id] for p in selected) for m in req.members}
     minimum, maximum = min(member_utility.values()), max(member_utility.values())
+    gaps = waiting_gaps(req, days)
     return ValidationResult((), dict(total_cost=total_cost, travel_minutes=total_travel,
+                                     waiting_minutes=sum(g["duration_minutes"] for g in gaps),
+                                     waiting_gaps=gaps,
                                      walk_minutes=total_walk, visit_count=len(selected),
                                      group_utility=sum(p.group_utility for p in selected),
                                      per_member_utility=member_utility, per_member_personal_score=personal,

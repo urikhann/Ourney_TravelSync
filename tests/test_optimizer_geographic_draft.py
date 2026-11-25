@@ -23,7 +23,8 @@ def test_draft_prefers_shorter_geographic_order_and_cannot_pass_final_validation
     ]
     result = optimize(data)
     assert [visit.poi_id for visit in result.days[0].items] == ["A", "B"]
-    assert result.phases[-1].objective == "haversine_distance_m"
+    assert result.phases[-2].objective == "haversine_distance_m"
+    assert result.phases[-1].objective == "waiting_minutes"
     assert result.validation_status == "NOT_RUN"
     assert not validate_final(result.input_snapshot, result.days).passed
     with pytest.raises(ValidationError, match="estimated routes are restricted"):

@@ -1,6 +1,8 @@
 // Korean for every English UI text. Key = the exact English text used in t("…"); {name} placeholders stay as they are.
 // A text missing here simply shows in English, so new screens never break.
 export const KO: Record<string, string> = {
+  "Free time": "자유 시간", "Rest time": "휴식 시간",
+  "Waiting until lunch": "점심까지 대기", "Waiting until dinner": "저녁까지 대기", "Waiting until breakfast": "아침 식사까지 대기",
   // ---- common ----
   "Loading…": "불러오는 중…", "Something went wrong.": "문제가 생겼어요.", "Something went wrong ({code}).": "문제가 생겼어요 ({code}).",
   "Still waiting for: {names}": "아직 기다리는 중: {names}", "Back": "뒤로", "Close": "닫기", "Cancel": "취소", "Copy": "복사",

@@ -53,6 +53,7 @@ export type Recommendations = {
 };
 
 export type PlanItem = {
+  arrival_min?: number; start_min?: number;
   breakfast_status?: "verified" | "inferred" | null;
   duration_source?: string; duration_estimated?: boolean;
   visit_category?: "cafe" | "meal" | "activity" | "evening";
@@ -75,9 +76,10 @@ export type DailyComposition = {
   meal_windows: { name: "breakfast" | "lunch" | "dinner"; start_min: number; end_min: number }[];
 };
 export type OptimizationInput = {
+  gap_policy?: { enabled?: boolean; buffer_minutes?: number; rest_minutes?: number; reoptimize_minutes?: number; nearby_leg_minutes?: number };
   duration_overrides?: Record<string, number>;
   daily_composition?: DailyComposition;
-  days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint }[];
+  days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint; breaks?: { start_min: number; end_min: number }[] }[];
   budget_total: number; transport_mode: "walk" | "drive" | "transit";
   max_leg_minutes?: number | null; max_total_walk_minutes?: number | null;
   required_access?: string[];
@@ -89,7 +91,7 @@ export type Plan = {
     routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
-  days: { date: string; breakfast_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
+  days: { date: string; gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {

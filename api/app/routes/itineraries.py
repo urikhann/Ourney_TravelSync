@@ -271,6 +271,7 @@ async def _generate(body, trip, user, db, *, preview=False):
         requested_days = {day.date: day for day in req.days}
         for d in result.days:
             raw = d.model_dump(mode="json")
+            raw["gaps"] = [g for g in checked.metrics["waiting_gaps"] if g["date"] == d.date.isoformat()]
             if req.daily_composition is not None:
                 meals = effective_meals(requested_days[d.date], req.daily_composition)
                 raw["breakfast_omitted"] = (any(m.name == "breakfast" and not m.require_verified for m in meals)
@@ -297,6 +298,7 @@ async def _generate(body, trip, user, db, *, preview=False):
                                 "daily_composition": req.daily_composition.model_dump(mode="json") if req.daily_composition else None,
                                 "budget_total": req.budget_total, "transport_mode": req.transport_mode,
                                 "travel_minutes": checked.metrics["travel_minutes"],
+                                "waiting_minutes": checked.metrics["waiting_minutes"],
                                 "walking_km_per_day": None, "solver_status": result.solver_status,
                                 "validation_status": "PASSED", "optimization_run_id": audit_id,
                                 "dataset_version": req.dataset_version, "routing_version": req.routing_version,

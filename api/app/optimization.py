@@ -14,7 +14,7 @@ from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyComposition, Edge, Fact, Lock, Member,
+from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyComposition, Day, Edge, Fact, GapPolicy, Lock, Member,
                                                   NonNegative, Operation, PlanRequest, Window)
 
 from ourney_travelsync.planning_categories import visit_role
@@ -39,9 +39,11 @@ class DailyInput(Window):
     date: date
     start_point: Point
     end_point: Point
+    breaks: tuple[Window, ...] = ()
 
 
 class GenerateInput(Contract):
+    gap_policy: GapPolicy = Field(default_factory=GapPolicy)
     daily_composition: DailyComposition = Field(default_factory=lambda: DailyComposition(meal_overlap_min=60))
     days: Annotated[tuple[DailyInput, ...], Field(min_length=1, max_length=3)]
     budget_total: NonNegative = 0  # Compatibility field; app planning does not enforce a budget.
@@ -59,6 +61,9 @@ class GenerateInput(Contract):
     def valid_meals(self):
         from ourney_travelsync.optimizer.meals import validate_meal_overrides
         validate_meal_overrides(self.days, self.daily_composition)
+        for day in self.days:
+            Day(date=day.date, start_min=day.start_min, end_min=day.end_min,
+                start_point="start", end_point="end", breaks=day.breaks)
         return self
 
 
@@ -182,7 +187,8 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
                                     breakfast_offering=breakfast, breakfast_hours=breakfast_hours,
                                     visit_category=role, activity_category=category))
     daily = [dict(date=d.date.isoformat(), start_min=d.start_min, end_min=d.end_min,
-                  start_point=f"start:{d.date}", end_point=f"end:{d.date}") for d in sorted(body.days, key=lambda d: d.date)]
+                  start_point=f"start:{d.date}", end_point=f"end:{d.date}",
+                  breaks=[w.model_dump() for w in d.breaks]) for d in sorted(body.days, key=lambda d: d.date)]
     points = {f"{kind}:{d.date}": getattr(d, f"{kind}_point").model_dump(mode="json")
               for d in body.days for kind in ("start", "end")}
     return members, candidates, daily, points, rows, version.mapping_version
@@ -251,6 +257,7 @@ def solver_request(run, audit_id, body, prepared, request, response):
                    transport_mode=body.transport_mode, days=daily, members=[m.model_dump(mode="json") for m in members],
                    candidates=[p.model_dump(mode="json") for p in enriched], edges=[e.model_dump(mode="json") for e in data.edges],
                    daily_composition=body.daily_composition.model_dump(mode="json"),
+                   gap_policy=body.gap_policy.model_dump(mode="json"),
                    budget_total=body.budget_total, enforce_cost=False, enforce_opening_hours=True,
                    allow_unknown_opening_hours=True, optimize_travel=False,
                    max_leg_minutes=body.max_leg_minutes,

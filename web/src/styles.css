@@ -178,3 +178,14 @@ svg { flex: none; display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.waiting-period {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px 28px;
+  padding: 10px 14px;
+  border-left: 3px dashed var(--muted);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+}

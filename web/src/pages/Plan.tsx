@@ -9,6 +9,7 @@ import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
+import WaitingPeriod from "../components/WaitingPeriod";
 import { t } from "../i18n";
 
 const mealLabel = (it: PlanItem) => {
@@ -126,12 +127,17 @@ export default function Plan() {
         {d.breakfast_omitted && <p className="muted small" role="status">{t("Breakfast was skipped because the planner could not fit a suitable stop into this day.")}</p>}
         <div className="tl">
           <p className="muted small">{t("Leave {place} at {time}", { place: d.start_label, time: d.start })}</p>
-          {d.items.map((it) => {
+          {d.items.map((it, index) => {
             const moved = !!it.moved_from;
             const col = moved ? "#E0A21B" : "var(--blue)";
+            const gap = d.gaps?.find(g => g.before_poi_id === it.poi_id);
+            const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+            const gapStart = gap?.start_min ?? it.arrival_min ?? minutes(it.arrival);
+            const gapEnd = gap?.end_min ?? it.start_min ?? minutes(it.start);
             return (
               <div key={it.poi_id + it.start}>
                 <div className="leg"><Clock size={12} />{t("{n} min travel · arrive {time}", { n: it.travel_minutes, time: it.arrival })}</div>
+                {index > 0 && <WaitingPeriod start={gapStart} end={gapEnd} reason={gap?.reason} />}
                 {it.breakfast_status && <p className="muted small">{t(it.breakfast_status === "verified"
                   ? "Breakfast serving hours verified."
                   : "Likely suitable for breakfast. Confirm serving times before visiting.")}</p>}

@@ -48,6 +48,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             total_cost.append(len(req.members) * (pois[pid].cost_per_person.value if usable_cost(pois[pid].cost_per_person) else 0) * y)
             starts[i] = model.new_int_var(day.start_min, day.end_min, f"time_{day.date}_{pid}")
             times[day.date, pid] = starts[i]
+            for k, rest in enumerate(day.breaks):
+                before = model.new_bool_var(f"before_break_{day.date}_{pid}_{k}")
+                model.add(starts[i] + pois[pid].duration_min.value <= rest.start_min).only_enforce_if([y, before])
+                model.add(starts[i] >= rest.end_min).only_enforce_if([y, before.Not()])
             circuit.append((i, i, y.Not()))
             windows = eligible[pid].windows.get(day.date, ())
             choices = []
@@ -144,6 +148,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 total_cost.append(edge.group_fare * a)
                 stay = 0 if i == 0 else pois[nodes[i]].duration_min.value
                 model.add(starts[j] >= starts[i] + stay + edge.duration_minutes).only_enforce_if(a)
+                for k, rest in enumerate(day.breaks):
+                    before = model.new_bool_var(f"travel_before_break_{day.date}_{i}_{j}_{k}")
+                    model.add(starts[i] + stay + edge.duration_minutes <= rest.start_min).only_enforce_if([a, before])
+                    model.add(starts[i] + stay >= rest.end_min).only_enforce_if([a, before.Not()])
         model.add_circuit(circuit)
         if req.max_total_walk_minutes is not None:
             model.add(sum(a * e.walk_minutes for a, e in arcs.values()) <= req.max_total_walk_minutes)
@@ -158,6 +166,15 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         model.add(visits[lock.date, lock.poi_id] == 1)
         if lock.start_min is not None:
             model.add(times[lock.date, lock.poi_id] == lock.start_min)
+    if req.gap_target:
+        target = req.gap_target
+        choices = [visits[target.date, pid] for pid in target.candidate_ids if pid in pois]
+        model.add(sum(choices) >= 1)
+        for pid in target.candidate_ids:
+            if pid in pois:
+                chosen = visits[target.date, pid]
+                model.add(times[target.date, pid] >= target.start_min).only_enforce_if(chosen)
+                model.add(times[target.date, pid] + pois[pid].duration_min.value <= target.end_min).only_enforce_if(chosen)
     utility = sum(pois[pid].group_utility * y for (_, pid), y in visits.items())
     minimum = model.new_int_var(0, len(pois) * 10000, "minimum_member_relevance")
     model.add_min_equality(minimum, [sum(round(pois[pid].relevance[m.member_id] * 10000) * y
@@ -187,7 +204,13 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                        for _, arcs in day_arcs.values() for a, e in arcs.values())
         objectives = [(n, e, m, f * .8) for n, e, m, f in objectives]
         objectives.insert(2, ("haversine_distance_m", distance, False, .2))
+    objectives = [(n, e, m, f * .85) for n, e, m, f in objectives]
+    objectives.append(("waiting_minutes", 0, False, .15))
     for name, expression, maximize, fraction in objectives:
+        if name == "waiting_minutes":
+            # Add these variables only for the final phase so they cannot
+            # enlarge the search for the earlier prioritized objectives.
+            expression = _waiting_objective(model, req, visits, times, day_arcs, pois)
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:
             all_optimal = False
@@ -231,6 +254,28 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         return RawSolution("UNKNOWN", phases=tuple(phases))
     return RawSolution("OPTIMAL" if all_optimal and len(phases) == len(objectives) else "FEASIBLE",
                        incumbent, tuple(phases))
+
+
+def _waiting_objective(model, req, visits, times, day_arcs, pois):
+    waiting = []
+    for day in req.days:
+        nodes, arcs = day_arcs[day.date]
+        by_poi = {}
+        for pid in pois:
+            wait = model.new_int_var(0, 1440, f"wait_{day.date}_{pid}")
+            model.add(wait == 0).only_enforce_if(visits[day.date, pid].Not())
+            by_poi[pid] = wait
+            waiting.append(wait)
+        for (i, j), (arc, edge) in arcs.items():
+            if j == len(nodes) - 1:
+                continue
+            wait = by_poi[nodes[j]]
+            if i == 0:
+                model.add(wait == 0).only_enforce_if(arc)
+            else:
+                model.add(wait == times[day.date, nodes[j]] - times[day.date, nodes[i]]
+                          - pois[nodes[i]].duration_min.value - edge.duration_minutes).only_enforce_if(arc)
+    return sum(waiting)
 
 
 def _extract(req, solver, pois, day_arcs, times, breakfast_assignments):
