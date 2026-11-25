@@ -78,3 +78,17 @@ def planning_adapter(monkeypatch):
     monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 2)
     monkeypatch.setitem(services.TEST_TRANSPORTS, "http://planning-test", httpx.ASGITransport(app=upstream))
     return control
+
+
+@pytest.fixture
+def compact_planning_adapter(planning_adapter):
+    """Use two activity categories and two lunch choices for API state tests."""
+    routable_pois = {"bmuseum", "gwangalli", "milmyeon", "stew"}
+
+    def restrict_routes(request, response):
+        nodes = routable_pois | set(request["points"])
+        response["edges"] = [edge for edge in response["edges"]
+                             if edge["origin"] in nodes and edge["destination"] in nodes]
+        return response
+
+    planning_adapter.transform = restrict_routes

@@ -7,18 +7,8 @@ def proposal(h, tid, **change):
                   json=dict(configuration=configuration(),change=dict(date="2026-11-06",name="lunch",**change)))
 
 
-def test_preview_reoptimizes_without_changing_approved_plan_or_votes(planning_adapter):
+def test_preview_reoptimizes_without_changing_approved_plan_or_votes(compact_planning_adapter):
     meal_ids = {"milmyeon", "stew"}
-    routable_pois = {"bmuseum", "gwangalli"} | meal_ids
-
-    def meal_preview_routes(request, response):
-        # Keep two activity categories and two lunch choices in the synthetic route graph.
-        nodes = routable_pois | set(request["points"])
-        response["edges"] = [edge for edge in response["edges"]
-                             if edge["origin"] in nodes and edge["destination"] in nodes]
-        return response
-
-    planning_adapter.transform = meal_preview_routes
     h,tid,_=ready(individual_method="feature_mean")
     generated = generate(h, tid)
     assert generated.status_code == 200, generated.text
@@ -40,7 +30,7 @@ def test_preview_reoptimizes_without_changing_approved_plan_or_votes(planning_ad
     assert audit.optimizer_request==audit.response["input_snapshot"]
 
 
-def test_infeasible_change_keeps_plan_and_reports_conflict(planning_adapter):
+def test_infeasible_change_keeps_plan_and_reports_conflict(compact_planning_adapter):
     h,tid,_=ready(individual_method="feature_mean")
     old=generate(h,tid).json()["plans"][0]
     response=proposal(h,tid,fixed_start_min=1070)

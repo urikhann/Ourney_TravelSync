@@ -144,7 +144,7 @@ def test_wrong_adapter_snapshot_is_rejected(planning_adapter, field):
     assert audits(tid)[0].status == "FAILED"
 
 
-def test_service_claiming_passed_cannot_bypass_backend_e3(monkeypatch, planning_adapter):
+def test_service_claiming_passed_cannot_bypass_backend_e3(monkeypatch, compact_planning_adapter):
     h, tid, _ = ready()
     old = generate(h, tid).json()["plans"][0]
     assert c.post(f"/itineraries/{old['id']}/vote", headers=h).status_code == 200
@@ -161,7 +161,7 @@ def test_service_claiming_passed_cannot_bypass_backend_e3(monkeypatch, planning_
     assert audits(tid)[-1].status == "FAILED"
 
 
-def test_changed_preferences_during_search_cannot_publish(monkeypatch, planning_adapter):
+def test_changed_preferences_during_search_cannot_publish(monkeypatch, compact_planning_adapter):
     h, tid, _ = ready()
     original = services.build_plans
     async def changed(payload):
@@ -174,7 +174,10 @@ def test_changed_preferences_during_search_cannot_publish(monkeypatch, planning_
     monkeypatch.setattr(services, "build_plans", changed)
     res = generate(h, tid)
     assert res.status_code == 409 and res.json()["detail"] == "optimizer_inputs_changed"
-    assert audits(tid)[-1].status == "FAILED"
+    audit = audits(tid)[-1]
+    assert audit.response["validation_status"] == "PASSED"
+    assert audit.status == "FAILED" and audit.itinerary_id is None
+    assert c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"] == []
 
 
 def test_owner_dates_budget_and_unknown_body_data_are_enforced(planning_adapter):
@@ -245,7 +248,7 @@ def test_invalid_or_stale_inputs_stop_before_adapter(planning_adapter, change, c
     assert not planning_adapter.calls
 
 
-def test_saved_snapshot_is_preserved_but_not_approvable_after_member_change(planning_adapter):
+def test_saved_snapshot_is_preserved_but_not_approvable_after_member_change(compact_planning_adapter):
     h, tid, _ = ready()
     old = generate(h, tid).json()["plans"][0]
     assert not old["stale"]
