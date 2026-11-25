@@ -78,3 +78,19 @@ def planning_adapter(monkeypatch):
     monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 2)
     monkeypatch.setitem(services.TEST_TRANSPORTS, "http://planning-test", httpx.ASGITransport(app=upstream))
     return control
+
+
+@pytest.fixture
+def compact_planning_adapter(planning_adapter):
+    """Keep two activity categories and two lunch choices routable."""
+    # E5 and the feature-based scorers can retrieve different nature stops.
+    routable_pois = {"bmuseum", "gwangalli", "xsky", "milmyeon", "stew"}
+
+    def restrict_routes(request, response):
+        nodes = routable_pois | set(request["points"])
+        response["edges"] = [edge for edge in response["edges"]
+                             if edge["origin"] in nodes and edge["destination"] in nodes]
+        return response
+
+    planning_adapter.transform = restrict_routes
+    return planning_adapter

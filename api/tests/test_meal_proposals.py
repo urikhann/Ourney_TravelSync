@@ -7,15 +7,18 @@ def proposal(h, tid, **change):
                   json=dict(configuration=configuration(),change=dict(date="2026-11-06",name="lunch",**change)))
 
 
-def test_preview_reoptimizes_without_changing_approved_plan_or_votes(planning_adapter):
+def test_preview_reoptimizes_without_changing_approved_plan_or_votes(compact_planning_adapter):
+    meal_ids = {"milmyeon", "stew"}
     h,tid,_=ready(individual_method="feature_mean")
-    old=generate(h,tid).json()["plans"][0]
+    generated = generate(h, tid)
+    assert generated.status_code == 200, generated.text
+    old=generated.json()["plans"][0]
     c.post(f"/itineraries/{old['id']}/vote",headers=h)
     response=proposal(h,tid,fixed_start_min=900)
     assert response.status_code==200,response.text
     result=response.json()
     assert result["status"]=="AWAITING_APPROVAL" and result["validation_status"]=="PASSED"
-    assert any(v["start_min"]==900 for d in result["days"] for v in d["items"])
+    assert any(v["poi_id"] in meal_ids and v["start_min"] == 900 for d in result["days"] for v in d["items"])
     saved=c.get(f"/trips/{tid}/itineraries",headers=h).json()
     assert saved["plans"][0]=={**old,"votes":1}
     assert saved["my_vote"]==old["id"]
@@ -27,7 +30,7 @@ def test_preview_reoptimizes_without_changing_approved_plan_or_votes(planning_ad
     assert audit.optimizer_request==audit.response["input_snapshot"]
 
 
-def test_infeasible_change_keeps_plan_and_reports_conflict(planning_adapter):
+def test_infeasible_change_keeps_plan_and_reports_conflict(compact_planning_adapter):
     h,tid,_=ready(individual_method="feature_mean")
     old=generate(h,tid).json()["plans"][0]
     response=proposal(h,tid,fixed_start_min=1070)

@@ -5,7 +5,7 @@
 x-places: &places
   PLACES_CSV: /data/${PLACES_FILE:-travelsync_poi_metadata_enriched_v4.csv}
   PLACES_VERSION: ${PLACES_VERSION:-busan-enriched-v4-20261121}
-  TRAVELSYNC_DATASET_SNAPSHOT: /data/deployment_snapshot.json
+  TRAVELSYNC_DATASET_SNAPSHOT: ${TRAVELSYNC_DATASET_SNAPSHOT:-/data/deployment_snapshot.json}
 
 services:
   db:
