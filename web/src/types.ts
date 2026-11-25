@@ -123,11 +123,12 @@ export type Tastes = {
 // Trip chat (GET/POST /trips/{id}/chat). Agent replies follow contracts/agent.response.json.
 export type AgentState = "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_CLARIFICATION" | "FAILED" | "CANCELLED";
 export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string }[] };
+type SavedPlanProposal = { kind: "switch"; itinerary_id: number; label: string } | { kind: "regenerate" };
 // Group approval of a suggestion (issue #19). A majority of members decides.
 export type ProposalStatus = "PENDING" | "APPLYING" | "APPLIED" | "REJECTED" | "FAILED" | "STALE";
 export type ProposalVotes = { approve: number; reject: number; needed: number; members: number; mine: boolean | null };
 export type AgentInfo = {
-  state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | null; error?: string;
+  state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
   removed?: { poi_id: string; start: string; name: string }[];
   result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild";

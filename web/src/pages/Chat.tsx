@@ -8,7 +8,8 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle, X } from "lucide-react";
 import { api, message } from "../api";
-import type { ChatMessage, ChatPage, Place, ProposalStatus, Trip } from "../types";
+import { useMe } from "../auth";
+import type { AgentProposal, ChatMessage, ChatPage, Place, ProposalStatus, Trip } from "../types";
 import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
@@ -36,20 +37,30 @@ export default function Chat() {
   const [text, setText] = useState("");
   const [askAI, setAskAI] = useState(false);  // "ask TravelSync" mode (pill in the box)
   const inputRef = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState<string | null>(null); // the question TravelSync is answering right now
+  const [pending, setPending] = useState<{ text: string; afterId: number } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   const send = useMutation({
     mutationFn: (b: { text: string; trigger: "MESSAGE" | "MENTION" | "QUICK_ACTION" }) =>
       api.post<{ messages: ChatMessage[] }>(`/trips/${id}/chat`, b),
-    onMutate: (b) => { if (b.trigger !== "MESSAGE") setPending(b.text); },
-    onSettled: () => { setPending(null); qc.invalidateQueries({ queryKey: ["chat", id] }); },
+    onMutate: (b) => {
+      if (b.trigger === "MESSAGE") return;
+      const messages = qc.getQueryData<ChatPage>(["chat", id])?.messages ?? [];
+      setPending({ text: b.text.trim().replace(MENTION, `@${AGENT}$2`), afterId: messages[messages.length - 1]?.id ?? 0 });
+    },
+    onSettled: () => {
+      setPending(null);
+      return qc.invalidateQueries({ queryKey: ["chat", id] });
+    },
   });
 
   const msgs = chat.data?.messages ?? [];
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs.length, pending]);
 
-  const me = trip.data?.members.find((m) => m.is_me)?.user_id;
+  const me = useMe().data?.id ?? trip.data?.members.find((m) => m.is_me)?.user_id;
+  // Polling can receive the saved question while the agent is still replying.
+  const pendingSaved = pending && me && msgs.some((m) =>
+    m.id > pending.afterId && m.kind === "user" && m.author?.id === me && m.text === pending.text);
   const colorIndex = useMemo(() => Object.fromEntries((trip.data?.members ?? []).map((m, i) => [m.user_id, i])), [trip.data]);
 
   const submit = (e?: FormEvent) => {
@@ -85,11 +96,11 @@ export default function Chat() {
                 ? <AgentBubble key={m.id} m={m} tripId={id} />
                 : <UserBubble key={m.id} m={m} mine={m.author?.id === me} grouped={!!grouped} color={colorIndex[m.author?.id ?? ""] ?? 0} />;
             })}
-            {pending && (  // show my question right away while TravelSync works on it
+            {pending && (
               <>
-                <UserBubble mine grouped={false} color={0}
-                  m={{ id: -1, kind: "user", text: pending, reply_to: null, created_at: new Date().toISOString(), author: { id: me ?? null, name: "" }, agent: null }} />
-                <Thinking question={pending} />
+                {!pendingSaved && <UserBubble mine grouped={false} color={0}
+                  m={{ id: -1, kind: "user", text: pending.text, reply_to: null, created_at: new Date().toISOString(), author: { id: me ?? null, name: "" }, agent: null }} />}
+                <Thinking question={pending.text} />
               </>
             )}
             <div ref={bottom} className="chat-end" />
@@ -161,6 +172,10 @@ function UserBubble({ m, mine, grouped, color }: { m: ChatMessage; mine: boolean
 function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const a = m.agent;
   const failed = a?.state === "FAILED";
+  const proposal = a?.proposal;
+  const stopChange = proposal && typeof proposal === "object" && "date" in proposal &&
+    typeof proposal.date === "string" && Array.isArray(proposal.remove_item_ids) && Array.isArray(proposal.add)
+    ? proposal : null;
   return (
     <div className="msg agent">
       <span className="msg-av"><span className="agent-av"><Sparkles size={15} /></span></span>
@@ -176,7 +191,7 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
             {a.tool_calls.map((t, i) => <span key={i} className="tool">{["gemini_error", "provider_error"].includes(t.name) ? <AlertTriangle size={12} /> : <Check size={12} />} {toolText(t)}</span>)}
           </div>
         )}
-        {a?.proposal && <ProposalCard m={m} tripId={tripId} />}
+        {stopChange && <ProposalCard m={m} proposal={stopChange} tripId={tripId} />}
         <div className="msg-time">{time(m.created_at)}</div>
       </div>
     </div>
@@ -214,9 +229,8 @@ const CLOSED: Record<Exclude<ProposalStatus, "PENDING">, string> = {
 };
 
 /** A suggested change to the plan. It only changes the plan after a majority of the group approves (issue #19). */
-function ProposalCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
+function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: AgentProposal; tripId: string }) {
   const a = m.agent!;
-  const p = a.proposal!;
   const v = a.votes;
   const status: ProposalStatus = a.proposal_status ?? "STALE";
   const qc = useQueryClient();
