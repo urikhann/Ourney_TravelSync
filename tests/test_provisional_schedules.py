@@ -1,4 +1,8 @@
 import pytest
+
+pytest.importorskip("sqlalchemy")
+pytest.importorskip("ortools")
+
 from ourney_travelsync.provisional_schedules import provisional,validate_provisional
 from ourney_travelsync.operating_schedules import day_windows
 from ourney_travelsync.optimizer.contracts import PlanRequest

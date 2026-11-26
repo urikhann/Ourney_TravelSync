@@ -4,6 +4,8 @@ from datetime import date
 
 import pytest
 
+pytest.importorskip("ortools")
+
 from optimizer_fixtures import request_data
 from ourney_travelsync.place_identity import visit_identity
 from ourney_travelsync.optimizer.api import optimize

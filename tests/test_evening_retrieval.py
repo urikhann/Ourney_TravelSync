@@ -1,5 +1,8 @@
 """Optional nightlife extends rather than displaces the ordinary shortlist."""
 import numpy as np
+import pytest
+
+pytest.importorskip("pydantic")
 
 from ourney_travelsync.common import GroupInput
 from ourney_travelsync.features import FEATURE_NAMES
