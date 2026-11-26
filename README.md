@@ -11,6 +11,8 @@ The authenticated API/web app calls the OR-Tools itinerary optimizer with an
 independent E3 publication gate. Operating facts and directed driving routes come from the server-side planning
 adapter. The chat assistant uses read-only tools and validated suggestions.
 See [optimizer app setup](docs/optimizer_app_integration.md).
+Chat replacements are [validated before voting](docs/localized_itinerary_repair.md),
+using fixed-slot/local/day-only repair and atomic approval of the stored draft.
 
 ## Install and run
 

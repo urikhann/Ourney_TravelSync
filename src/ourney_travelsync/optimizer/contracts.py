@@ -234,6 +234,7 @@ class PlanRequest(Contract):
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     locked_items: tuple[Lock, ...] = ()
+    preferred_start_minutes: Annotated[dict[str, Minute], Field(max_length=60)] = Field(default_factory=dict)
     gap_policy: GapPolicy = Field(default_factory=GapPolicy)
     gap_target: GapTarget | None = None
     search_seconds: Annotated[float, Field(ge=0, le=30, allow_inf_nan=False)] = 30
@@ -250,6 +251,8 @@ class PlanRequest(Contract):
         unique([(e.date, e.origin, e.destination) for e in self.edges], "edge")
         unique([l.poi_id for l in self.locked_items], "lock")
         ids = {p.poi_id for p in self.candidates}
+        if not set(self.preferred_start_minutes) <= ids:
+            raise ValueError("preferred start references unknown POI")
         dates = {d.date for d in self.days}
         members = {m.member_id for m in self.members}
         if any(d.start_point in ids or d.end_point in ids for d in self.days):
@@ -312,7 +315,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "breakfast_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes"]
+    objective: Literal["group_utility", "breakfast_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

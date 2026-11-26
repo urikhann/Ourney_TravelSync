@@ -36,7 +36,7 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     # Old greedy mock rows lack a private E3 publication audit and stay hidden.
     its = db.scalars(select(Itinerary).join(OptimizationRun, OptimizationRun.itinerary_id == Itinerary.id)
                      .where(Itinerary.trip_id == trip.id, OptimizationRun.status == "PASSED",
-                            Itinerary.variant == "optimized").order_by(Itinerary.id)).all()
+                            Itinerary.variant == "optimized").order_by(Itinerary.id.desc())).all()
     votes = db.scalars(select(Vote).where(Vote.trip_id == trip.id)).all()
     votes = [v for v in votes if v.itinerary_id in {it.id for it in its}]
     saved = {a.itinerary_id: a for a in db.scalars(select(OptimizationRun).where(

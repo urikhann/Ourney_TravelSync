@@ -206,6 +206,20 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         objectives.insert(2, ("haversine_distance_m", distance, False, .2))
     objectives = [(n, e, m, f * .85) for n, e, m, f in objectives]
     objectives.append(("waiting_minutes", 0, False, .15))
+    if req.preferred_start_minutes:
+        # Replacement-only soft objective. Hard locks and feasibility stay
+        # unchanged; normal generation has no preferred starts and is identical.
+        deviations = []
+        for (day, pid), preferred_time in ((key, req.preferred_start_minutes[key[1]])
+                                          for key in visits if key[1] in req.preferred_start_minutes):
+            delta = model.new_int_var(0, 1440, f"schedule_delta_{day}_{pid}")
+            active = model.new_int_var(0, 1440, f"schedule_deviation_{day}_{pid}")
+            model.add_abs_equality(delta, times[day, pid] - preferred_time)
+            model.add(active == delta).only_enforce_if(visits[day, pid])
+            model.add(active == 0).only_enforce_if(visits[day, pid].Not())
+            deviations.append(active)
+        objectives = [(n, e, m, f*.4) for n, e, m, f in objectives]
+        objectives.insert(0, ("schedule_deviation_minutes", sum(deviations), False, .6))
     for name, expression, maximize, fraction in objectives:
         if name == "waiting_minutes":
             # Add these variables only for the final phase so they cannot

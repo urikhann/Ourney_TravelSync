@@ -80,7 +80,7 @@ services:
     volumes: ["./services/mocks:/code", "./src:/package/src:ro"]
 
   agent:  # TravelSync AI agent with selectable model provider and read-only tools.
-    build: ./services/agent
+    build: {context: ., dockerfile: services/agent/Dockerfile}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-travelsync}:${POSTGRES_PASSWORD:-travelsync}@db:5432/${POSTGRES_DB:-travelsync}
       AVAILABILITY_URL: http://mocks:8001

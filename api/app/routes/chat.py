@@ -16,10 +16,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .. import proposals, services
+from .. import proposals, replacements, services
+from ourney_travelsync.replacement_intent import extract_replacement
 from ..db import get_db
 from ..deps import member_trip
 from ..models import ChatMessage, ProposalVote, Trip, User
@@ -80,14 +82,18 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
                              "sent_at": r.created_at.isoformat()} for r in reversed(recent)],
     }
     try:
-        out = await services.agent_turn(payload)
+        # Straightforward replacements need no model round trips. The same backend
+        # gate validates every model-originated suggestion below.
+        out = ({"reply": "", "proposal": None, "tool_calls": []} if extract_replacement(msg.text)
+               else await services.agent_turn(payload))
     except HTTPException as e:  # e.detail: agent_unavailable (not running / too slow) or agent_error_500 (it crashed)
         return {"state": "FAILED", "reply": f"{AGENT_NAME} can't answer right now. Please try again in a moment.",
                 "tool_calls": [], "proposal": None, "error": e.detail}
     answer = {"state": "NEEDS_CLARIFICATION" if out.get("needs_clarification") else "SUCCEEDED",
               "reply": out.get("reply") or "", "tool_calls": out.get("tool_calls") or [],
               "proposal": out.get("proposal")}
-    if answer["proposal"] and plan:  # waits for the group's vote; tied to the plan the agent looked at
+    answer = await replacements.validate_proposal(db, trip, msg, plan, plan_run, answer)
+    if answer["proposal"] and plan:
         answer.update(proposal_status=proposals.PENDING, plan_run_id=plan_run.id,
                       removed=proposals.removed_stops(db, plan, answer["proposal"]))
     elif answer["proposal"]:
@@ -129,7 +135,23 @@ class VoteIn(BaseModel):
 @router.post("/trips/{trip_id}/chat/{message_id}/vote")
 async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(member_trip),
                            user: User = Depends(current_user), db: Session = Depends(get_db)):
+    trip_id = trip.id
+    try:
+        return await _vote_on_proposal(message_id, body, trip, user, db)
+    except SQLAlchemyError:
+        db.rollback()
+        proposals.log.error("proposal_commit_failed message=%s trip=%s", message_id, trip_id)
+        raise HTTPException(503, {"code": "proposal_commit_failed",
+                                 "message": "The change could not be saved. The original plan is unchanged."}) from None
+
+
+async def _vote_on_proposal(message_id, body, trip, user, db):
     """A member approves or rejects a TravelSync suggestion. A majority of members decides (issue #19)."""
+    # Serialize approval against normal generation and other proposals for this trip.
+    db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
+    if db.bind.dialect.name == "sqlite":
+        # SQLite ignores FOR UPDATE; acquire its write reservation before reading votes.
+        db.execute(update(Trip).where(Trip.id == trip.id).values(name=Trip.name))
     msg = db.scalar(select(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.trip_id == trip.id)
                     .with_for_update())
     if not msg or msg.kind != "agent" or not (msg.agent or {}).get("proposal"):
@@ -138,6 +160,8 @@ async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(m
     if status == proposals.STALE and msg.agent.get("proposal_status", proposals.PENDING) == proposals.PENDING:
         msg.agent = {**msg.agent, "proposal_status": proposals.STALE}
         db.commit()
+    if status == proposals.APPLIED:
+        return {"messages": messages_out(db, trip, [msg], user)}
     if status != proposals.PENDING:
         raise HTTPException(409, {"code": "proposal_closed", "status": status})
     vote = db.scalar(select(ProposalVote).where(ProposalVote.message_id == msg.id, ProposalVote.user_id == user.id))
@@ -145,7 +169,7 @@ async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(m
         vote.approve = body.approve  # members may change their mind while it is open
     else:
         db.add(ProposalVote(message_id=msg.id, user_id=user.id, approve=body.approve))
-    db.commit()
+    db.flush()
 
     votes = proposals.tally(db, msg.id)
     approve, reject, members = sum(v.approve for v in votes), sum(not v.approve for v in votes), len(trip.members)
@@ -154,10 +178,11 @@ async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(m
     if decision:
         if decision == "APPROVED":
             msg.agent = {**msg.agent, "proposal_status": proposals.APPLYING}  # blocks a second apply
-            db.commit()
             result = await proposals.apply(db, trip, msg)
         else:
             result = {"status": proposals.REJECTED}
+        proposals.log.info("replacement proposal=%s message=%s status=%s reason=%s", msg.agent.get("draft_id"),
+                           message_id, result["status"], result.get("reason", ""))
         msg = db.get(ChatMessage, message_id)
         msg.agent = {**msg.agent, "proposal_status": result["status"], "result": result}
         text = proposals.result_text(db, msg, result, approve, members)
@@ -174,4 +199,6 @@ async def vote_on_proposal(message_id: int, body: VoteIn, trip: Trip = Depends(m
         db.add(note)
         db.commit()
         created.append(note)
+    else:
+        db.commit()
     return {"messages": messages_out(db, db.get(Trip, trip.id), [db.get(ChatMessage, message_id), *created], user)}

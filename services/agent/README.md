@@ -102,6 +102,13 @@ python -m pytest -q
 
 ## Product scope and provider errors
 
+Named replacement requests use the API's shared deterministic intent parser and
+[pre-vote repair gate](../../docs/localized_itinerary_repair.md). Model/rule output is
+only a suggestion until that backend gate stores an E3-validated draft. Approval
+applies the exact stored schedule without another optimizer call. Unknown or provisional
+replacement hours cannot qualify for voting. Ambiguous targets require clarification.
+Build the agent image from repository-root context (Compose is already configured).
+
 Chat supports indoor alternatives and less walking. Budget optimization, cheaper-plan
 suggestions and cost filtering are excluded. Agent tools omit price fields. Opening
 hours checks keep the itinerary's pinned dataset; unknown hours remain unknown.

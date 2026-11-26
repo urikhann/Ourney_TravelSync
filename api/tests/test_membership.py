@@ -8,7 +8,7 @@ from app.db import SessionLocal, engine
 from app.models import (ChatMessage, MemberAvailability, OptimizationRun, Preference, ProposalVote, Trip,
                         TripInvite, User)
 from .test_flow import FEATURES, c, signup
-from .test_proposal_approval import ask, planned_trip, swap_for, vote
+from .test_proposal_approval import ask, planned_trip, swap_for, vote, replacement_fixture_clock
 
 DAY = "2026-11-06"
 
@@ -113,7 +113,7 @@ def test_owner_removes_a_member():
     assert c.get(f"/trips/{trip['id']}", headers=friend).status_code == 404
 
 
-def test_deleting_a_planned_trip_removes_everything(planning_adapter):
+def test_deleting_a_planned_trip_removes_everything(planning_adapter, replacement_fixture_clock):
     (a, b), tid, plan = planned_trip(2)
     _, _, proposal = swap_for(tid, plan)
     msg = ask(b, tid, proposal)

@@ -197,7 +197,11 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                                proposal_rejected=bool(args.get("proposal")) and out["proposal"] is None)
                 return out
             out = run_tool(data, fc.name, args)
-            calls.append({"name": fc.name, "summary": SUMMARY.get(fc.name, fc.name)})
+            summary = SUMMARY.get(fc.name, fc.name)
+            if fc.name == "check_hours":
+                summary = ("Opening hours verified" if out.get("available") is True else
+                           "Place closed at requested time" if out.get("available") is False else "Opening hours unknown")
+            calls.append({"name": fc.name, "summary": summary})
             results.append((fc, out))
         provider.add_results(results)
     if strict:
@@ -235,6 +239,43 @@ def rules_turn(req: dict, data: TripData) -> dict:
     ko = any("\uac00" <= ch <= "\ud7a3" for ch in t)  # a Korean message gets a Korean reply
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
+    try:
+        from ourney_travelsync.replacement_intent import extract_replacement, resolve_target
+    except ModuleNotFoundError:  # standalone image or service-only CI install
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).with_name("replacement_intent.py")
+        if not path.exists():
+            path = Path(__file__).resolve().parents[2] / "src/ourney_travelsync/replacement_intent.py"
+        spec = importlib.util.spec_from_file_location("replacement_intent", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        extract_replacement, resolve_target = module.extract_replacement, module.resolve_target
+    intent = extract_replacement(req["message"]["text"])
+    if intent:
+        if intent["replacement_constraints"].get("needs_clarification"):
+            return finish(data, _say(ko, "Which additional conditions are mandatory?", "반드시 지켜야 할 추가 조건을 알려 주세요."), None, calls, True)
+        plan = data.get_plan()["plan"] or []
+        names = {item["poi_id"]: [item.get("name", ""), item.get("name_ko", "")]
+                 for day in plan for item in day["items"]}
+        target, error = resolve_target(intent, plan, names)
+        if error:
+            return finish(data, _say(ko, "Which scheduled place do you mean? Please give its date and time.",
+                                     "어느 일정의 장소인가요? 날짜와 시간을 알려 주세요."), None, calls, True)
+        item = target["item"]
+        if item.get("locked"):
+            return finish(data, _say(ko, "That activity is locked.", "잠긴 일정은 바꿀 수 없어요."), None, calls)
+        kind = intent["replacement_constraints"].get("category")
+        found = data.find_places(kind="food" if kind == "meal" else kind, limit=8)["places"]
+        for candidate in found:
+            hours = data.check_hours(candidate["poi_id"], target["date"], item["start"], candidate.get("duration_min") or 90)
+            if hours["available"] is True:
+                return finish(data, _say(ko, "The backend will check a replacement against the full schedule before voting.",
+                                         "투표 전에 백엔드에서 대체 장소와 전체 일정의 조건을 확인할게요."),
+                              {"date": target["date"], "remove_item_ids": [item["item_id"]],
+                               "add": [{"poi_id": candidate["poi_id"], "start": item["start"]}]}, calls)
+        return finish(data, _say(ko, "No replacement with verified opening hours was found; the plan is unchanged.",
+                                 "운영시간이 확인된 대체 장소를 찾지 못했어요. 기존 일정은 유지됩니다."), None, calls)
     if want is None:
         return finish(data, _say(ko, "I can help with rain (indoor places) or less walking.",
                                  "비 오는 날 실내 장소 찾기나 덜 걷는 일정으로 바꾸는 것을 도와드릴 수 있어요."), None, calls, True)
@@ -341,7 +382,8 @@ def turn(req: dict, client=None) -> dict:
         except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
             summary = provider_failure_summary(e)
-            log.warning("agent fallback to rules: %s", summary)
+            log.warning("agent fallback to rules: code=%s %s",
+                        "llm_request_timeout" if isinstance(e, TimeoutError) else "provider_error", summary)
             out["tool_calls"].insert(0, {"name": "gemini_error" if provider == "gemini" else "provider_error", "summary": summary})
             return out
     return rules_turn(req, data)

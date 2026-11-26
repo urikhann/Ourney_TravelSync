@@ -42,6 +42,8 @@ async def _post(base_url: str, path: str, payload: dict, service: str, timeout: 
             if isinstance(detail, str) and detail in allowed:
                 raise HTTPException(503, detail) from None
         raise HTTPException(502, f"{service}_error_{e.response.status_code}")
+    except httpx.TimeoutException:
+        raise HTTPException(503, f"{service}_request_timeout") from None
     except httpx.HTTPError:
         raise HTTPException(503, f"{service}_unavailable")
 

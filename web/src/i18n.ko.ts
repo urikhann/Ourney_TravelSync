@@ -230,7 +230,10 @@ export const KO: Record<string, string> = {
   "The group rejected this suggestion, so the plan stays the same.": "그룹이 이 제안에 반대해서 일정은 그대로예요.",
   "This suggestion is out of date because the plan changed. Ask me again for a new one.": "일정이 바뀌어서 지난 제안이 됐어요. 새 제안을 다시 요청해 주세요.",
   "The group approved, but I couldn't fit this change into a valid plan ({reason}). The plan is unchanged.": "그룹이 찬성했지만 이 변경을 맞는 일정에 넣지 못했어요 ({reason}). 일정은 그대로예요.",
-  "Read the plan": "일정 확인함", "Searched places": "장소 검색함", "Checked opening hours": "영업시간 확인함", "Simple rules (AI not connected)": "간단 규칙 (AI 연결 안 됨)",
+  "Read the plan": "일정 확인함", "Searched places": "장소 검색함", "Checked opening hours": "영업시간 조회함", "Simple rules (AI not connected)": "간단 규칙 (AI 연결 안 됨)",
+  "Opening hours verified": "운영시간 검증됨", "Opening hours unknown": "운영시간 확인 불가", "Place closed at requested time": "요청 시간에 운영하지 않음",
+  "Schedule validated before voting": "투표 전에 일정 검증 완료", "Adjusted activity time": "일정 시간 변경",
+  "Saving your vote and checking the approved schedule…": "투표를 저장하고 승인한 일정을 확인하고 있어요…",
 
   // ---- server messages (api.ts) ----
   "Can't reach the server. Is the backend running?": "서버에 연결할 수 없어요. 백엔드가 실행 중인가요?", "Email or password is wrong.": "이메일 또는 비밀번호가 틀렸어요.",

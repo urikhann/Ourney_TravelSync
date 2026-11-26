@@ -132,6 +132,8 @@ export type ProposalVotes = { approve: number; reject: number; needed: number; m
 export type AgentInfo = {
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
+  validation_status?: string; repair_strategy?: string;
+  affected_activities?: { date: string; poi_id: string; start_min: number; departure_min: number }[];
   removed?: { poi_id: string; start: string; name: string }[];
   result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild";
     approve?: number; members?: number; date?: string; added?: string[] };

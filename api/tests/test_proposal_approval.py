@@ -1,22 +1,35 @@
 """Issue #19: TravelSync's suggestions change the plan only after the group approves them.
 
-Approval rebuilds the plan with the real offline CP-SAT optimizer and the E3 check, like any plan.
+Suggestions are validated before voting; approval applies the exact E3-checked draft.
 """
 from uuid import uuid4
+from datetime import datetime, timezone
+import pytest
 
-from fastapi import HTTPException
 from sqlalchemy import select
 
-from ourney_travelsync.optimizer.contracts import PlanResponse
 
 from app import config, drive_planning, services
 from app.db import SessionLocal
 from app.models import OptimizationRun
-from app.routes import itineraries, recommendations
+from app.routes import recommendations
 from .test_flow import FEATURES, signup
 from .test_optimizer_integration import audits, c, configuration, generate
 
 DAY = "2026-11-06"
+
+
+@pytest.fixture(autouse=True)
+def replacement_fixture_clock(monkeypatch):
+    # Historical synthetic itineraries are future visits relative to this clock.
+    from app import replacements
+    monkeypatch.setattr(replacements, "current_time", lambda: datetime(2026, 11, 1, tzinfo=timezone.utc))
+    original = recommendations.build_request
+    def seeded(*args):
+        request, members, version = original(*args)
+        request["options"]["tie_seed"] = 0
+        return request, members, version
+    monkeypatch.setattr(recommendations, "build_request", seeded)
 
 
 def planned_trip(members=2, *, transport_mode="walk"):
@@ -72,11 +85,12 @@ def current_plan(h, tid):
     return c.get(f"/trips/{tid}/itineraries", headers=h).json()["plans"][0]
 
 
-def test_suggestion_waits_for_a_majority_then_rebuilds_a_checked_plan(planning_adapter, monkeypatch):
+def test_validated_suggestion_waits_for_majority_then_applies_stored_plan(planning_adapter, monkeypatch):
     (a, b), tid, plan = planned_trip(2)
     stop, new, proposal = swap_for(tid, plan)
     msg = ask(b, tid, proposal)
     assert msg["agent"]["proposal_status"] == "PENDING"
+    new = msg["agent"]["proposal"]["add"][0]["poi_id"]
     assert msg["agent"]["removed"] == [{"poi_id": stop["poi_id"], "start": stop["start"], "name": stop["place"]["name"]}]
     assert msg["agent"]["votes"] == {"approve": 0, "reject": 0, "needed": 2, "members": 2, "mine": None}
 
@@ -102,7 +116,7 @@ def test_suggestion_waits_for_a_majority_then_rebuilds_a_checked_plan(planning_a
         audit = db.scalar(select(OptimizationRun).where(OptimizationRun.trip_id == tid).order_by(OptimizationRun.id.desc()))
         assert audit.status == "PASSED" and audit.itinerary_id == after["id"]
         assert stop["poi_id"] in audit.input["configuration"]["excluded_poi_ids"]
-    assert vote(a, tid, msg["id"], False).status_code == 409  # closed
+    assert vote(a, tid, msg["id"], False).json()["messages"][0]["agent"]["proposal_status"] == "APPLIED"  # idempotent
 
     for _ in range(11):
         assert c.post(f"/trips/{tid}/chat", headers=a, json={"text": "Thanks!"}).status_code == 201
@@ -139,14 +153,15 @@ def test_suggestion_goes_stale_when_the_plan_changes(planning_adapter):
     (a,), tid, plan = planned_trip(1)
     _, _, proposal = swap_for(tid, plan)
     msg = ask(a, tid, proposal)
-    assert generate(a, tid).status_code == 200  # owner rebuilds the plan before anyone votes
+    response = generate(a, tid)
+    assert response.status_code == 200, response.text  # owner rebuilds before voting
     listed = c.get(f"/trips/{tid}/chat", headers=a).json()["messages"]
     assert next(m for m in listed if m["id"] == msg["id"])["agent"]["proposal_status"] == "STALE"
     r = vote(a, tid, msg["id"])
     assert r.status_code == 409 and r.json()["detail"]["status"] == "STALE"
 
 
-def test_approval_rebuilds_driving_plan_after_infeasible_keep(planning_adapter, monkeypatch):
+def test_driving_approval_applies_draft_without_optimizer(planning_adapter, monkeypatch):
     leg_minutes = 10
     estimate_edges = drive_planning.draft_edges
     build_request = recommendations.build_request
@@ -176,46 +191,35 @@ def test_approval_rebuilds_driving_plan_after_infeasible_keep(planning_adapter, 
     (owner,), trip_id, plan = planned_trip(1, transport_mode="drive")
     stop, replacement, proposal = swap_for(trip_id, plan)
     message = ask(owner, trip_id, proposal)
-    build_plans = services.build_plans
-    attempted_locks = []
+    async def forbidden_optimizer(*args, **kwargs):
+        raise AssertionError("Approval must not optimize")
 
-    async def infeasible_keep(payload):
-        if payload["provisional"]:
-            attempted_locks.append({lock["poi_id"] for lock in payload["locked_items"]})
-            if len(attempted_locks) == 1:
-                return PlanResponse(run_id=payload["run_id"], input_snapshot=payload, solver_status="INFEASIBLE",
-                                    error_code="NO_FEASIBLE_ITINERARY").model_dump(mode="json")
-        return await build_plans(payload)
-
-    monkeypatch.setattr(services, "build_plans", infeasible_keep)
+    monkeypatch.setattr(services, "build_plans", forbidden_optimizer)
     response = vote(owner, trip_id, message["id"])
     assert response.status_code == 200, response.text
     result = response.json()["messages"][0]["agent"]["result"]
     assert result["status"] == "APPLIED", result
-    assert result["mode"] == "rebuild"
-    kept_stops = {item["poi_id"] for item in plan["days"][0]["items"]} - {stop["poi_id"]}
-    assert attempted_locks[0] == kept_stops | {replacement}
-    assert attempted_locks[1:] and all(locks == {replacement} for locks in attempted_locks[1:])
+    new = message["agent"]["proposal"]["add"][0]["poi_id"]
     rebuilt = current_plan(owner, trip_id)
     rebuilt_ids = {item["poi_id"] for item in rebuilt["days"][0]["items"]}
-    assert replacement in rebuilt_ids and stop["poi_id"] not in rebuilt_ids
-    _, failed, published = audits(trip_id)
-    assert failed.status == "FAILED" and failed.error_code == "optimizer_no_feasible_itinerary"
-    assert published.status == "PASSED" and published.itinerary_id == rebuilt["id"]
-    assert published.planning_data["routing_rounds"]
-    assert not published.optimizer_request["provisional"]
+    assert new in rebuilt_ids and stop["poi_id"] not in rebuilt_ids
+    assert {item["poi_id"] for item in plan["days"][0]["items"]} - {stop["poi_id"]} <= rebuilt_ids
 
 
-def test_failed_rebuild_keeps_the_old_plan(planning_adapter, monkeypatch):
+def test_failed_validation_before_voting_keeps_the_old_plan(planning_adapter, monkeypatch):
     (a,), tid, plan = planned_trip(1)
     _, _, proposal = swap_for(tid, plan)
-    msg = ask(a, tid, proposal)
 
-    async def infeasible(*args, **kwargs):
-        raise HTTPException(409, "optimizer_no_feasible_itinerary")
-    monkeypatch.setattr(itineraries, "_generate", infeasible)
-    voted, note = vote(a, tid, msg["id"]).json()["messages"]
-    assert voted["agent"]["proposal_status"] == "FAILED" and "optimizer_no_feasible_itinerary" in note["text"]
+    def closed(req, response):
+        for p in response["pois"]:
+            for op in p["operations"].values():
+                op["closed"]["value"] = True
+        return response
+    planning_adapter.transform = closed
+    msg = ask(a, tid, proposal)
+    assert msg["agent"]["proposal"] is None
+    assert "proposal_status" not in msg["agent"]
+    assert vote(a, tid, msg["id"]).status_code == 404
     assert current_plan(a, tid) == plan
 
 

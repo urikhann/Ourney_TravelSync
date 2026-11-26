@@ -249,6 +249,11 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
       {!removed.length && p.remove_item_ids.length > 0 &&
         <div className="small muted">{p.remove_item_ids.length > 1 ? tr("Remove {n} stops", { n: p.remove_item_ids.length }) : tr("Remove 1 stop")}</div>}
       {p.add.map((x) => <AddedStop key={x.poi_id + x.start} poiId={x.poi_id} start={x.start} />)}
+      {a.validation_status === "PASSED" && <div className="tiny muted">{tr("Schedule validated before voting")}</div>}
+      {a.affected_activities?.map((x) => <div key={x.date + x.poi_id} className="small muted">
+        {tr("Adjusted activity time")}: {x.date} <AddedStop poiId={x.poi_id}
+          start={`${Math.floor(x.start_min / 60).toString().padStart(2, "0")}:${(x.start_min % 60).toString().padStart(2, "0")}`} />
+      </div>)}
       {status === "PENDING" ? (
         <>
           <div className="proposal-actions">
@@ -258,7 +263,7 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
               aria-pressed={v?.mine === false} onClick={() => vote.mutate(false)}><X size={15} /> {tr("Reject")}</button>
           </div>
           <div className="tiny muted">
-            {vote.isPending ? tr("Saving your vote… if it's the deciding one, the plan is rebuilt (up to a minute).")
+            {vote.isPending ? tr("Saving your vote and checking the approved schedule…")
               : v ? tr("{a} approve · {r} reject · {need} of {n} approvals needed", { a: v.approve, r: v.reject, need: v.needed, n: v.members })
               + (v.mine === null ? "" : " · " + (v.mine ? tr("you approved") : tr("you rejected"))) : ""}
           </div>
