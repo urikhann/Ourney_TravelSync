@@ -11,6 +11,7 @@ import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
 import WaitingPeriod from "../components/WaitingPeriod";
+import DayRouteOverview from "../components/DayRouteOverview";
 import { t } from "../i18n";
 
 const mealLabel = (it: PlanItem, date: string, policy?: DailyComposition | null) => {
@@ -128,6 +129,8 @@ export default function Plan() {
           </div>
         )}
 
+        <DayRouteOverview key={selected.id} day={d} onOpenItem={setOpenItem} />
+
         {d.items.every(it => it.visit_category) && <p className="muted small">
           {t("{m} meals · {c} cafés · {a} activities across {k} categories", { m: d.items.filter(it => it.visit_category === "meal").length,
             c: d.items.filter(it => it.visit_category === "cafe").length, a: d.items.filter(it => it.visit_category === "activity").length,
@@ -219,7 +222,7 @@ export default function Plan() {
         )}
       </main>
       <TabBar tripId={id} />
-      <PlaceSheet poiId={openItem?.poi_id ?? null} onClose={() => setOpenItem(null)} dates={days.map((x) => x.date)} start={openItem?.start} />
+      <PlaceSheet poiId={openItem?.poi_id ?? null} onClose={() => setOpenItem(null)} dates={days.map((x) => x.date)} start={openItem?.start} version={selected.stats.dataset_version} />
     </>
   );
 }

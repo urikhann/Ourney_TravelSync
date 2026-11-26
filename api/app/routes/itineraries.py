@@ -28,6 +28,14 @@ router = APIRouter(tags=["itineraries"])
 NAMES = {"optimized": "Optimized itinerary"}
 
 
+def map_endpoints(audit: OptimizationRun, day: str) -> dict:
+    """Use the displayed plan's saved endpoints, never the current form defaults."""
+    configuration = audit.input.get("configuration") or {}
+    saved = next((d for d in configuration.get("days") or [] if isinstance(d, dict) and d.get("date") == day), {})
+    return {kind: {k: p.get(k) for k in ("label", "latitude", "longitude")} if isinstance(p, dict) else None
+            for kind in ("start", "end") for p in [saved.get(f"{kind}_point")]}
+
+
 def trip_dates(trip: Trip) -> list[str]:
     return [(trip.start_date + timedelta(d)).isoformat() for d in range((trip.end_date - trip.start_date).days + 1)]
 
@@ -47,8 +55,11 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     current = state(db, trip.id)
     current.pop("recommendation_run_id")  # an independent comparison run does not change member constraints
     run = db.get(RecommendationRun, its[0].run_id) if its else None
-    ids = {i["poi_id"] for it in its for d in it.days for i in d["items"]}
-    places = load_places(db, run.dataset_version, ids) if run else {}
+    versions = {it.id: saved[it.id].optimizer_request.get("dataset_version") or it.stats.get("dataset_version")
+                or (run.dataset_version if run else None) for it in its}
+    catalogues = {version: load_places(db, version,
+        {i["poi_id"] for it in its if versions[it.id] == version for d in it.days for i in d["items"]})
+        for version in set(versions.values()) if version}
     scale = run.response.get("score_scale", "0-1") if run else None
     fit = {r["poi_id"]: to_fit(r.get("mean_score"), scale) for r in (run.response.get("group", []) if run else [])}
 
@@ -81,7 +92,8 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
             "id": it.id, "letter": it.letter, "variant": it.variant, "name": NAMES.get(it.variant, it.variant),
             "stale": {k: v for k, v in saved[it.id].input["state"].items() if k != "recommendation_run_id"} != current,
             "stats": it.stats, "lock_revision": it.stats.get("lock_revision", 0), "votes": count[it.id],
-            "days": [{**d, "items": [{**i, **protection[it.id][f"{d['date']}@{i['start']}"], "place": places.get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
+            "days": [{**d, "map_endpoints": map_endpoints(saved[it.id], d["date"]),
+                      "items": [{**i, **protection[it.id][f"{d['date']}@{i['start']}"], "place": catalogues.get(versions[it.id], {}).get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
                                                    for i in d["items"]]} for d in it.days],
         } for it in its],
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
