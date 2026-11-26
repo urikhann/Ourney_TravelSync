@@ -182,7 +182,7 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
       <div className="msg-col">
         <div className="msg-name">{AGENT} <span className="ai-tag">AI</span></div>
         <div className={"bubble" + (failed ? " failed" : "")}>
-          {failed ? tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT }) : agentText(m)}
+          {agentText(m) || tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT })}
           {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">{tr("Reply with @ai to answer.")}</div>}
           {failed && a?.error && <div className="agent-note">{tr("Error: {code}", { code: a.error })}</div>}
         </div>
@@ -192,6 +192,7 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
           </div>
         )}
         {stopChange && <ProposalCard m={m} proposal={stopChange} tripId={tripId} />}
+        {a?.pending_action?.status === "PENDING" && <ConfirmationCard m={m} tripId={tripId} />}
         <div className="msg-time">{time(m.created_at)}</div>
       </div>
     </div>
@@ -203,6 +204,7 @@ function agentText(m: ChatMessage): string {
   const r = m.agent?.result;
   if (m.agent?.event !== "proposal_result" || !r || r.approve == null) return m.text;
   if (r.status === "APPLIED") {
+    if (m.agent?.action_type && m.agent.action_type !== "replace_poi") return m.text;
     const when = r.start ? tr(" at {time}", { time: r.start }) : "";
     return tr("✅ {a} of {n} approved, so I updated the plan: {names} is now on {date}{when}.", {
       a: r.approve, n: r.members ?? 0, names: (r.added ?? []).join(", "), date: r.date ?? "", when }) + " "
@@ -211,7 +213,23 @@ function agentText(m: ChatMessage): string {
   }
   if (r.status === "REJECTED") return tr("The group rejected this suggestion, so the plan stays the same.");
   if (r.status === "STALE") return tr("This suggestion is out of date because the plan changed. Ask me again for a new one.");
+  if (m.text) return m.text;
   return tr("The group approved, but I couldn't fit this change into a valid plan ({reason}). The plan is unchanged.", { reason: r.reason ?? "" });
+}
+
+function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
+  const qc = useQueryClient();
+  const me = useMe();
+  const confirm = useMutation({
+    mutationFn: (yes: boolean) => api.post(`/trips/${tripId}/chat`, { text: `@TravelSync ${tr(yes ? "Yes" : "No")}`, reply_to: m.id }),
+    onSettled: () => { qc.invalidateQueries({ queryKey: ["chat", tripId] }); },
+  });
+  if (me.data?.id !== m.agent?.pending_action?.authorized_user_id) return null;
+  return <div className="proposal-actions">
+    <button className="btn sm" disabled={confirm.isPending} onClick={() => confirm.mutate(true)}>{tr("Confirm search or replanning")}</button>
+    <button className="btn ghost sm" disabled={confirm.isPending} onClick={() => confirm.mutate(false)}>{tr("Cancel")}</button>
+    {confirm.error && <span className="tiny proposal-error">{message(confirm.error)}</span>}
+  </div>;
 }
 
 function toolText(tc: { name: string; summary: string }): string {
@@ -242,13 +260,17 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
     },
   });
   const removed = a.removed ?? [];
+  const scopeLabels: Record<string, string> = { replace_poi: "Replace an activity", remove_poi: "Remove an activity", add_poi: "Add an activity",
+    replan_day: "Replan one date", replan_unlocked: "Replan unlocked activities", replan_all: "Replan the whole trip" };
+  const multipleDates = (a.affected_dates?.length ?? 0) > 1;
   return (
     <div className={"proposal " + status.toLowerCase()}>
       <div className="eyebrow" style={{ color: "var(--purple)" }}>{tr("Suggested change · {date}", { date: p.date })}</div>
-      {removed.map((r) => <div key={r.poi_id} className="removed"><span className="num">{r.start}</span> <s>{r.name}</s></div>)}
+      {a.action_type && <div className="small muted">{tr(scopeLabels[a.action_type] ?? "Suggested change")} · {(a.affected_dates ?? [p.date]).join(", ")}</div>}
+      {removed.map((r, index) => <div key={r.poi_id} className="removed">{multipleDates && <span>{p.remove_item_ids[index]?.split("@")[0]} </span>}<span className="num">{r.start}</span> <s>{r.name}</s></div>)}
       {!removed.length && p.remove_item_ids.length > 0 &&
         <div className="small muted">{p.remove_item_ids.length > 1 ? tr("Remove {n} stops", { n: p.remove_item_ids.length }) : tr("Remove 1 stop")}</div>}
-      {p.add.map((x) => <AddedStop key={x.poi_id + x.start} poiId={x.poi_id} start={x.start} />)}
+      {p.add.map((x) => <div key={x.poi_id + x.start}>{multipleDates && <span className="tiny muted">{x.date ?? p.date}</span>}<AddedStop poiId={x.poi_id} start={x.start} /></div>)}
       {a.validation_status === "PASSED" && <div className="tiny muted">{tr("Schedule validated before voting")}</div>}
       {a.affected_activities?.map((x) => <div key={x.date + x.poi_id} className="small muted">
         {tr("Adjusted activity time")}: {x.date} <AddedStop poiId={x.poi_id}

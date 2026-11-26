@@ -152,7 +152,8 @@ export default function Plan() {
                       {it.locked && <Lock size={15} color="var(--muted)" />}
                     </div>
                     <div className="muted tiny">{it.start}–{it.end} · {t("{n} min stay", { n: it.stay_minutes })}</div>
-                    {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>{t("Reserved · locked")}</div>}
+                    {it.locked && <div className="muted tiny" style={{ marginTop: 3 }}>{t(it.lock_reason === "confirmed_reservation" ? "Confirmed reservation" : it.lock_reason === "legacy_lock_unverified" ? "Protected activity · lock origin unverified" : "Explicitly locked activity")}</div>}
+                    {it.completed && <div className="muted tiny">{t("Completed or already started")}</div>}
                     {moved ? (
                       <span className="badge" style={{ background: "var(--amber-50)", color: "var(--amber-d)" }}>
                         <Clock size={12} /> {t("Moved from {time}", { time: it.moved_from ?? "" })}{it.availability?.close ? " · " + t("closes {time}", { time: it.availability.close }) : ""}

@@ -233,6 +233,12 @@ export const KO: Record<string, string> = {
   "Read the plan": "일정 확인함", "Searched places": "장소 검색함", "Checked opening hours": "영업시간 조회함", "Simple rules (AI not connected)": "간단 규칙 (AI 연결 안 됨)",
   "Opening hours verified": "운영시간 검증됨", "Opening hours unknown": "운영시간 확인 불가", "Place closed at requested time": "요청 시간에 운영하지 않음",
   "Schedule validated before voting": "투표 전에 일정 검증 완료", "Adjusted activity time": "일정 시간 변경",
+  "Confirm search or replanning": "검색·재계획 진행 확인", "Explicitly locked activity": "명시적으로 잠긴 일정",
+  "Confirmed reservation": "확정 예약", "Completed or already started": "완료되었거나 이미 시작한 일정",
+  "Yes": "네", "No": "아니요",
+  "Protected activity · lock origin unverified": "보호된 일정 · 잠금 경위 확인 필요",
+  "Replace an activity": "일정 장소 교체", "Remove an activity": "일정 제거", "Add an activity": "일정 추가",
+  "Replan one date": "하루 재계획", "Replan unlocked activities": "잠기지 않은 일정 재계획", "Replan the whole trip": "전체 여행 재계획",
   "Saving your vote and checking the approved schedule…": "투표를 저장하고 승인한 일정을 확인하고 있어요…",
 
   // ---- server messages (api.ts) ----

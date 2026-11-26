@@ -69,7 +69,8 @@ class TripData:
         if not self.days:
             return {"plan": None, "note": "This trip has no plan yet. Ask the group to build plans on the Plan tab."}
         return {"plan": [{"date": d["date"], "items": [
-            {"item_id": f"{d['date']}@{it['start']}", "start": it["start"], "end": it["end"], "locked": it.get("locked", False),
+            {"item_id": f"{d['date']}@{it['start']}", "start": it["start"], "end": it["end"],
+             **getattr(self, "protection", {}).get(f"{d['date']}@{it['start']}", {"locked": it.get("locked", False)}),
              "group_recommendation_reason": self.recommendation_reasons.get(it["poi_id"]),
              "available_when_planned": (it.get("availability") or {}).get("available"),
              **self.places.get(it["poi_id"], {"poi_id": it["poi_id"], "name": it["poi_id"]})} for it in d["items"]]}
@@ -132,7 +133,8 @@ class TripData:
         remove = [i for i in proposal.get("remove_item_ids") or [] if i in items]
         if len(remove) != len(proposal.get("remove_item_ids") or []):
             return None, "it referred to a stop that is not in the plan"
-        if any(items[i][1].get("locked") for i in remove):
+        if any(getattr(self, "protection", {}).get(i, {}).get("locked", items[i][1].get("locked")) or
+               getattr(self, "protection", {}).get(i, {}).get("completed", False) for i in remove):
             return None, "it tried to change a locked stop"
         day = proposal.get("date") or (items[remove[0]][0] if remove else None)
         if day is None or (remove and any(items[i][0] != day for i in remove)):

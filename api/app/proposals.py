@@ -62,6 +62,12 @@ def applied_changes(db: Session, trip_id: str, run_id: int) -> list[dict]:
     while run_id in by_result_run and len(changes) < 5:
         agent = by_result_run[run_id]
         proposal, result = agent["proposal"], agent["result"]
+        if agent.get("action_type", "replace_poi") != "replace_poi":
+            changes.append(dict(action_type=agent["action_type"], affected_dates=agent.get("affected_dates", []),
+                added=[dict(name=_name(db, a["poi_id"]), date=a.get("date"), start=a["start"]) for a in proposal.get("add", [])],
+                removed=agent.get("removed", [])))
+            run_id = agent["plan_run_id"]
+            continue
         changes.append({
             "date": proposal["date"],
             "removed": [{"name": stop["name"], "start": stop["start"]} for stop in agent.get("removed", [])],
@@ -105,8 +111,7 @@ def _name(db: Session, poi_id: str) -> str:
 
 def removed_stops(db: Session, plan: Itinerary, proposal: dict) -> list[dict]:
     """Names of the stops a suggestion would remove, so the card can show "10:00 Busan Park → …"."""
-    day = next((d for d in plan.days if d["date"] == proposal.get("date")), {"items": []})
-    items = {f"{proposal['date']}@{i['start']}": i for i in day["items"]}
+    items = {f"{d['date']}@{i['start']}": i for d in plan.days for i in d["items"]}
     return [{"poi_id": items[x]["poi_id"], "start": items[x]["start"], "name": _name(db, items[x]["poi_id"])}
             for x in proposal.get("remove_item_ids") or [] if x in items]
 
@@ -128,6 +133,8 @@ def result_text(db: Session, msg: ChatMessage, result: dict, approve: int, membe
         from .replacements import explanation
         return explanation(result.get("reason", "stale_proposal"), True)
     if status == APPLIED:
+        if msg.agent.get("action_type", "replace_poi") != "replace_poi":
+            return "The group approved, so I updated the plan with the validated changes for the requested scope. Check the Plan tab."
         names = ", ".join(_name(db, a["poi_id"]) for a in p.get("add") or [])
         when = f" at {result['start']}" if result.get("start") else ""
         rest = ("Other activity times are unchanged." if result.get("strategy") == "fixed" else

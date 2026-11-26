@@ -21,6 +21,7 @@ from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
 from ourney_travelsync.visit_durations import default_duration
 from ourney_travelsync.planning_categories import is_evening_venue
+from ..lock_policy import describe as protection_description
 
 router = APIRouter(tags=["itineraries"])
 
@@ -41,6 +42,8 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     votes = [v for v in votes if v.itinerary_id in {it.id for it in its}]
     saved = {a.itinerary_id: a for a in db.scalars(select(OptimizationRun).where(
         OptimizationRun.trip_id == trip.id, OptimizationRun.itinerary_id.in_([it.id for it in its])))}
+    from ..replacements import current_time
+    protection = {it.id: protection_description(it, saved[it.id], db, current_time()) for it in its}
     current = state(db, trip.id)
     current.pop("recommendation_run_id")  # an independent comparison run does not change member constraints
     run = db.get(RecommendationRun, its[0].run_id) if its else None
@@ -75,7 +78,7 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
             "id": it.id, "letter": it.letter, "variant": it.variant, "name": NAMES.get(it.variant, it.variant),
             "stale": {k: v for k, v in saved[it.id].input["state"].items() if k != "recommendation_run_id"} != current,
             "stats": it.stats, "votes": count[it.id],
-            "days": [{**d, "items": [{**i, "place": places.get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
+            "days": [{**d, "items": [{**i, **protection[it.id][f"{d['date']}@{i['start']}"], "place": places.get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
                                                    for i in d["items"]]} for d in it.days],
         } for it in its],
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
@@ -279,7 +282,8 @@ async def _generate(body, trip, user, db, *, preview=False):
             raw.update(start_label=prepared[3][d.start_point]["label"], end_label=prepared[3][d.end_point]["label"],
                        start=hhmm(d.start_min), end_arrival=hhmm(d.end_arrival_min))
             raw["items"] = [{**v.model_dump(mode="json"), "start": hhmm(v.start_min), "end": hhmm(v.departure_min),
-                             "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked, "moved_from": None,
+                             "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked,
+                             "lock_reason": "explicit_lock" if v.poi_id in locked else None, "moved_from": None,
                              "visit_category": candidate_by_id[v.poi_id].visit_category,
                              "activity_category": candidate_by_id[v.poi_id].activity_category,
                              "duration_source": candidate_by_id[v.poi_id].duration_min.source,

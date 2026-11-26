@@ -5,7 +5,6 @@ import logging
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -36,11 +35,41 @@ def plans(days):
                    "travel_minutes", "stay_minutes", "visit_cost", "breakfast_status"}} for i in d["items"]]}) for d in days)
 
 
-def protected(plan):
-    now = current_time().astimezone(ZoneInfo("Asia/Seoul"))
-    return {i["poi_id"] for d in plan.days for i in d["items"]
-            if i.get("locked") or i.get("completed") or
-            (d["date"], i["start"]) <= (now.date().isoformat(), now.strftime("%H:%M"))}
+def protected(plan, audit=None, db=None):
+    from .lock_policy import describe
+    info = describe(plan, audit, db, current_time())
+    return {i["poi_id"] for d in plan.days for i in d["items"] if info[f"{d['date']}@{i['start']}"]["protection_reason"]}
+
+
+def persist_draft(db, trip, message, plan, audit, req, days, configuration, before, meta, evidence):
+    """One private persistence gate for every planning scope."""
+    from .proposals import published_plan
+    checked = validate_final(req, days)
+    if not checked.passed:
+        raise HTTPException(409, "final_validation_failed")
+    base_hash = meta["base_plan_hash"]
+    db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
+    if db.bind.dialect.name == "sqlite":
+        db.execute(update(Trip).where(Trip.id == trip.id).values(name=Trip.name))
+    db.expire(plan)
+    _, latest = published_plan(db, trip.id)
+    if state(db, trip.id) != before or not latest or latest.id != audit.id or fingerprint(plan.days) != base_hash:
+        raise HTTPException(409, "stale_proposal")
+    from .lock_policy import describe
+    info = describe(plan, audit, db, current_time())
+    explicit = {v["poi_id"]: info[f"{d['date']}@{v['start']}"]["lock_reason"]
+                for d in plan.days for v in d["items"] if info[f"{d['date']}@{v['start']}"]["locked"]}
+    draft = OptimizationRun(trip_id=trip.id, recommendation_run_id=audit.recommendation_run_id,
+        requested_by=message.author_id, status="VALIDATED", input={**copy.deepcopy(audit.input),
+            "configuration": configuration, "state": before, "lock_provenance": explicit,
+            "replacement": {**meta, "base_run_id": audit.id, "base_itinerary_id": plan.id,
+                "created_at": current_time().isoformat(), "explicit_lock_ids": list(explicit)}},
+        optimizer_request=req.model_dump(mode="json"), planning_data=copy.deepcopy(audit.planning_data),
+        response={"days": [d.model_dump(mode="json") for d in days], "metrics": checked.metrics,
+                  "validation_status": "PASSED", "solver_status": "FEASIBLE", "replacement_evidence": evidence})
+    db.add(draft)
+    db.flush()
+    return draft
 
 
 def explanation(code, korean):
@@ -106,9 +135,9 @@ def path_edges(days):
                             (*(i.poi_id for i in d.items), d.end_point))]
 
 
-async def validate_proposal(db, trip, message, plan, audit, answer):
+async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_override=None):
     """Backend gate for model suggestions and deterministic replacement intents alike."""
-    intent = extract_replacement(message.text)
+    intent = intent_override or extract_replacement(message.text)
     suggested = answer.get("proposal")
     if not intent and not suggested:
         return answer
@@ -143,7 +172,7 @@ async def validate_proposal(db, trip, message, plan, audit, answer):
                 if len(targets) != 1:
                     raise HTTPException(409, "target_poi_not_found")
                 target = targets[0]
-            protected_ids = protected(plan)
+            protected_ids = protected(plan, audit, db)
             old_id = target["item"]["poi_id"]
             if old_id in protected_ids:
                 raise HTTPException(409, "locked_activity_conflict")
@@ -188,7 +217,8 @@ async def validate_proposal(db, trip, message, plan, audit, answer):
             pool = pool[:config.REPLACEMENT_CANDIDATE_LIMIT]
             log.info("replacement request=%s base=%s target=%s candidates=%s intent=replace_poi", request_id, audit.id, old_id, len(pool))
             # Preserve displayed locks even when a legacy audit had only a date lock.
-            configured_locks = {l["poi_id"] for l in audit.input["configuration"].get("locked_items", [])}
+            from .lock_policy import provenance
+            configured_locks = set(provenance(db, audit)[0])
             locks = {l.poi_id: l for l in base.locked_items if l.poi_id in configured_locks or l.poi_id in protected_ids}
             for d in original:
                 for item in d.items:
@@ -251,28 +281,12 @@ async def validate_proposal(db, trip, message, plan, audit, answer):
             checked = validate_final(req, outcome.days)
             if not checked.passed:
                 raise HTTPException(409, "final_validation_failed")
-            db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
-            if db.bind.dialect.name == "sqlite":
-                db.execute(update(Trip).where(Trip.id == trip.id).values(name=Trip.name))
-            db.expire(plan)
-            from .proposals import published_plan
-            _, latest = published_plan(db, trip.id)
-            if state(db, trip.id) != before or not latest or latest.id != audit.id or fingerprint(plan.days) != base_hash:
-                raise HTTPException(409, "stale_proposal")
             configuration = copy.deepcopy(audit.input["configuration"])
             configuration["excluded_poi_ids"] = sorted(set(configuration.get("excluded_poi_ids", [])) | {old_id})
-            # Store private vectors and complete replay in the existing audit table.
-            draft = OptimizationRun(trip_id=trip.id, recommendation_run_id=audit.recommendation_run_id,
-                requested_by=message.author_id, status="VALIDATED", input={**copy.deepcopy(audit.input),
-                    "configuration": configuration, "state": before, "replacement": {
-                        "base_run_id": audit.id, "base_itinerary_id": plan.id, "base_plan_hash": base_hash, "request_id": request_id,
-                        "target_item_id": target["item_id"], "strategy": outcome.strategy,
-                        "created_at": current_time().isoformat(), "protected_ids": sorted(protected_ids)}},
-                optimizer_request=req.model_dump(mode="json"), planning_data=copy.deepcopy(audit.planning_data),
-                response={"days": [d.model_dump(mode="json") for d in outcome.days], "metrics": checked.metrics,
-                          "validation_status": "PASSED", "solver_status": "FEASIBLE", "replacement_evidence": evidence})
-            db.add(draft)
-            db.flush()
+            draft = persist_draft(db, trip, message, plan, audit, req, outcome.days, configuration, before,
+                dict(base_plan_hash=base_hash, request_id=request_id, target_item_id=target["item_id"],
+                     strategy=outcome.strategy, action_type="replace_poi", affected_dates=[target["date"]],
+                     protected_ids=sorted(protected_ids)), evidence)
             log.info("replacement request=%s proposal=%s base=%s strategy=%s e3=PASSED status=PENDING",
                      request_id, draft.id, audit.id, outcome.strategy)
             visit = next(v for d in outcome.days for v in d.items if v.poi_id == candidate.poi_id)
@@ -318,7 +332,7 @@ async def apply_draft(db, trip, msg):
         return {"status": "STALE", "reason": "stale_proposal"}
     req, days = PlanRequest.model_validate(draft.optimizer_request), plans(draft.response["days"])
     # Do not apply a proposal whose target started while members were voting.
-    if protected(plan) - set(meta["protected_ids"]):
+    if protected(plan, base, db) - set(meta["protected_ids"]):
         return {"status": "STALE", "reason": "locked_activity_conflict"}
     try:
         async with asyncio.timeout(config.REPLACEMENT_TOTAL_SECONDS):
@@ -335,11 +349,18 @@ async def apply_draft(db, trip, msg):
     checked = validate_final(refreshed, days)
     # A replacement always requires positively verified hours, even when retained
     # historical visits are allowed to have unknown hours under the app policy.
-    pid = msg.agent["proposal"]["add"][0]["poi_id"]
-    visit_day = next(d for d in days if any(v.poi_id == pid for v in d.items))
-    candidate = next(p for p in refreshed.candidates if p.poi_id == pid)
-    op = candidate.operations.get(visit_day.date)
-    if not checked.passed or op is None or not op.openings.known or not op.closed.known:
+    old_ids = {v["poi_id"] for d in plan.days for v in d["items"]}
+    for day in days:
+        for visit in day.items:
+            if visit.poi_id in old_ids and meta.get("action_type", "replace_poi") != "replace_poi":
+                continue
+            if visit.poi_id not in {a["poi_id"] for a in msg.agent["proposal"].get("add", [])}:
+                continue
+            candidate = next(p for p in refreshed.candidates if p.poi_id == visit.poi_id)
+            op = candidate.operations.get(day.date)
+            if op is None or not op.openings.known or not op.closed.known:
+                return {"status": "FAILED", "reason": "final_validation_failed"}
+    if not checked.passed:
         return {"status": "FAILED", "reason": "final_validation_failed"}
     # Trip is locked by the voting endpoint across the freshness check and write.
     db.expire(plan)
@@ -352,7 +373,7 @@ async def apply_draft(db, trip, msg):
     for raw, day in zip(rendered, days):
         if raw["date"] != day.date.isoformat():
             return {"status": "FAILED", "reason": "final_validation_failed"}
-        if raw["date"] != msg.agent["proposal"]["date"]:
+        if raw["date"] not in meta.get("affected_dates", [msg.agent["proposal"]["date"]]):
             continue
         old_items = {i["poi_id"]: i for i in raw["items"]}
         raw.update(day.model_dump(mode="json"))
@@ -360,11 +381,18 @@ async def apply_draft(db, trip, msg):
                    gaps=[g for g in checked.metrics["waiting_gaps"] if g["date"] == raw["date"]])
         raw["items"] = [{**old_items.get(v.poi_id, {}), **v.model_dump(mode="json"),
             "start": hhmm(v.start_min), "end": hhmm(v.departure_min), "arrival": hhmm(v.arrival_min),
-            "locked": v.poi_id in set(meta["protected_ids"]), "moved_from": None,
+            "locked": v.poi_id in set(meta.get("explicit_lock_ids", meta["protected_ids"])),
+            "lock_reason": draft.input.get("lock_provenance", {}).get(v.poi_id), "moved_from": None,
             "visit_category": by_id[v.poi_id].visit_category, "activity_category": by_id[v.poi_id].activity_category,
             "duration_source": by_id[v.poi_id].duration_min.source,
             "duration_estimated": by_id[v.poi_id].duration_min.status == "ESTIMATED",
             "availability": visit_availability(by_id[v.poi_id], day.date, v)} for v in day.items]
+        if refreshed.daily_composition is not None:
+            from ourney_travelsync.optimizer.meals import effective_meals
+            requested = next(d for d in refreshed.days if d.date == day.date)
+            meals = effective_meals(requested, refreshed.daily_composition)
+            raw["breakfast_omitted"] = (any(m.name == "breakfast" and not m.require_verified for m in meals)
+                                        and not any(v.breakfast_status for v in day.items))
     # Keep the original as a separate version. The new audit becomes the published head.
     new_plan = Itinerary(trip_id=trip.id, run_id=plan.run_id, letter=chr(min(ord(plan.letter)+1, ord("Z"))),
         variant="optimized", days=rendered, stats={**plan.stats, "total_cost": checked.metrics["total_cost"],
@@ -389,6 +417,6 @@ async def apply_draft(db, trip, msg):
     draft.status, draft.itinerary_id = "PASSED", new_plan.id
     draft.optimizer_request = refreshed.model_dump(mode="json")
     draft.response = {**draft.response, "metrics": checked.metrics, "replacement_evidence": evidence}
-    start = msg.agent["proposal"]["add"][0]["start"]
+    start = next((a["start"] for a in msg.agent["proposal"].get("add", [])), None)
     return {"status": "APPLIED", "mode": "keep" if meta["strategy"] != "same_day" else "rebuild",
             "strategy": meta["strategy"], "start": start, "plan_run_id": draft.id}

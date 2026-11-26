@@ -41,6 +41,11 @@ Rules:
 - indoor_guess is inferred from the category; say "probably indoor", not "definitely".
 - If opening hours are unknown (available = null), say they should check before going. Never call that "closed".
 - If the request is unclear or impossible, ask one short question instead of guessing.
+- A request to replan all/day/unlocked activities has that exact scope; never reinterpret it as one swap.
+  The backend routes planning scopes. Approved visits are editable unless protection explicitly says otherwise.
+- When asking a yes/no question about a planning operation, include pending_action with its action_type,
+  target_item_id (for replacing/removing), date if needed, and constraints. Confirmation starts planning,
+  never approves an itinerary change; a separate group vote is always required.
 - Reply in the language of the LAST message (the "asks:" line), Korean or English. Keep it to 1-3 short sentences.
 - The current plan is already given below the chat; call get_plan only if you need it again.
 - For "why this plan/place/time?" questions, explain the relevant saved facts without proposing edits.
@@ -78,6 +83,11 @@ TOOLS = [
                  "poi_id": {"type": "string"}, "start": {"type": "string"}}}}}}}}},
 ]
 SUMMARY = {"get_plan": "Read the plan", "find_places": "Searched places", "check_hours": "Checked opening hours"}
+TOOLS[-1]["parameters_json_schema"]["properties"]["pending_action"] = {
+    "type": "object", "required": ["action_type"], "properties": {
+        "action_type": {"type": "string", "enum": ["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all"]},
+        "target_item_id": {"type": "string"}, "target_name": {"type": "string"}, "date": {"type": "string"},
+        "constraints": {"type": "object", "properties": {"category": {"type": "string"}}}}}
 
 
 def strict_tools() -> list[dict]:
@@ -184,7 +194,7 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                 raise TimeoutError("Model took too long")
             args = fc.args
             if fc.name == "answer":
-                if strict and not args.get("reply", "").strip():
+                if strict and not args.get("reply", "").strip() and not args.get("proposal"):
                     raise ProviderError()
                 if strict and args.get("proposal"):
                     proposal = args["proposal"]
@@ -192,9 +202,19 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                     replacement = proposal["add"][0]
                     if proposal["remove_item_ids"] != [f"{proposal['date']}@{replacement['start']}"]:
                         raise ProviderError()
-                out = finish(data, args.get("reply", ""), args.get("proposal"), calls, bool(args.get("needs_clarification")))
+                reply = args.get("reply", "").strip()
+                if not reply and args.get("proposal"):
+                    ko = any("가" <= ch <= "힣" for ch in req["message"]["text"])
+                    reply = ("대체 후보를 찾았어요. 투표 전에 백엔드에서 전체 일정을 검증할게요." if ko else
+                             "A replacement candidate is ready for backend schedule validation before voting.")
+                out = finish(data, reply, args.get("proposal"), calls, bool(args.get("needs_clarification")))
                 metrics.update(completed_answer=True, proposal_submitted=bool(args.get("proposal")),
                                proposal_rejected=bool(args.get("proposal")) and out["proposal"] is None)
+                if args.get("pending_action"):
+                    if args.get("proposal"):
+                        raise ProviderError()  # asking to search cannot also request a group vote
+                    out["pending_action"] = args["pending_action"]
+                    out["needs_clarification"] = True
                 return out
             out = run_tool(data, fc.name, args)
             summary = SUMMARY.get(fc.name, fc.name)
@@ -357,6 +377,7 @@ def provider_failure_summary(error: Exception) -> str:
 
 def turn(req: dict, client=None) -> dict:
     data = TripData(req.get("itinerary_id"))
+    data.protection = req.get("protection", {})
     settings = provider_settings()
     provider = settings["provider"]
     if provider != "rules" and (client is not None or settings["enabled"] or settings["gemini_backup"]

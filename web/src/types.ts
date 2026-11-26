@@ -59,6 +59,7 @@ export type PlanItem = {
   visit_category?: "cafe" | "meal" | "activity" | "evening";
   activity_category?: string;
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
+  lock_reason?: string | null; completed?: boolean;
   availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown
   place: Place | null; mean_score: number | null;
   arrival: string; travel_minutes: number; stay_minutes: number; visit_cost: number;
@@ -124,7 +125,7 @@ export type Tastes = {
 
 // Trip chat (GET/POST /trips/{id}/chat). Agent replies follow contracts/agent.response.json.
 export type AgentState = "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_CLARIFICATION" | "FAILED" | "CANCELLED";
-export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string }[] };
+export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string; date?: string }[] };
 type SavedPlanProposal = { kind: "switch"; itinerary_id: number; label: string } | { kind: "regenerate" };
 // Group approval of a suggestion (issue #19). A majority of members decides.
 export type ProposalStatus = "PENDING" | "APPLYING" | "APPLIED" | "REJECTED" | "FAILED" | "STALE";
@@ -133,6 +134,8 @@ export type AgentInfo = {
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
   validation_status?: string; repair_strategy?: string;
+  action_type?: string; affected_dates?: string[];
+  pending_action?: { id: string; status: string; question_message_id: number | null; authorized_user_id: string; expires_at: string };
   affected_activities?: { date: string; poi_id: string; start_min: number; departure_min: number }[];
   removed?: { poi_id: string; start: string; name: string }[];
   result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild";

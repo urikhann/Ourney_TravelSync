@@ -1,5 +1,7 @@
 # Validated chat replacements
 
+Follow-up: [structured confirmation, lock provenance and planning scopes](conversation_state_and_replanning.md).
+
 Implemented on `improvements`, November 26, 2026. No database migration is required.
 The implementation uses the existing GFAR recommendation snapshot, planning-data
 adapter, E2 checker, E3 validator, private optimization audits and group votes.

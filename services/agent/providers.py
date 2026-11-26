@@ -73,7 +73,15 @@ class GeminiProvider:
         self.contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
 
     def complete(self, timeout):
-        resp = self.client.models.generate_content(model=self.model, contents=self.contents, config=self.config)
+        from google.genai import types
+        if timeout <= 0:
+            raise TimeoutError("Model deadline exceeded")
+        # Respect the shared remaining turn budget, including time already spent
+        # in primary-provider retries and read tools. Never increase the 20s cap.
+        bounded = self.config.model_copy(update={"http_options": types.HttpOptions(
+            timeout=max(1, min(20_000, int(timeout*1000))),
+            retry_options=types.HttpRetryOptions(attempts=1))})
+        resp = self.client.models.generate_content(model=self.model, contents=self.contents, config=bounded)
         calls = [ToolCall(str(i), fc.name, dict(fc.args or {})) for i, fc in enumerate(resp.function_calls or [])]
         if calls:
             self.contents.append(resp.candidates[0].content)

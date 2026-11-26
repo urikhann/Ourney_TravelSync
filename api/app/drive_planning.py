@@ -206,7 +206,7 @@ async def fill_driving_gap(baseline, context, estimates, seconds, audit, db):
     return baseline
 
 
-async def plan_drive(run, body, prepared, context, audit, db):
+async def plan_drive(run, body, prepared, context, audit, db, *, request_transform=None):
     # The operating snapshot is read once for optimization. Individual routing
     # rounds only contribute route evidence and keep its provenance.
     initial, operating, _, spent = await routing_snapshot(context, [], {}, 0)
@@ -215,6 +215,8 @@ async def plan_drive(run, body, prepared, context, audit, db):
     db.commit()
     try:
         base = solver_request(run, audit.id, body, prepared, initial, operating)
+        if request_transform is not None:
+            base = request_transform(base)
     except (ValidationError, ValueError, TypeError, KeyError):
         raise HTTPException(502, "planning_data_invalid_response") from None
     estimates = {edge_key(edge): edge for edge in draft_edges(base, context)}

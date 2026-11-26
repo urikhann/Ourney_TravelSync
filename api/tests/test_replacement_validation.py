@@ -186,12 +186,17 @@ def test_concurrent_approvals_apply_once_and_keep_original(planning_adapter):
 
 
 def test_started_activity_cannot_be_replaced(planning_adapter, monkeypatch):
+    from copy import deepcopy
     (h,), tid, plan = planned_trip(1)
+    with SessionLocal() as db:
+        original_days = deepcopy(db.get(Itinerary, plan["id"]).days)
     _, _, proposal = swap_for(tid, plan)
     monkeypatch.setattr(replacements, "current_time", lambda: datetime(2026, 11, 7, tzinfo=timezone.utc))
     msg = ask(h, tid, proposal)
     assert msg["agent"]["proposal"] is None and msg["agent"]["reason"] == "locked_activity_conflict"
-    assert current_plan(h, tid) == plan
+    assert current_plan(h, tid)["id"] == plan["id"]
+    with SessionLocal() as db:
+        assert db.get(Itinerary, plan["id"]).days == original_days
 
 
 def test_group_can_select_preserved_original_before_a_new_request(planning_adapter):

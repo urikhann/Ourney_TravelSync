@@ -20,11 +20,12 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .. import proposals, replacements, services
+from .. import proposals, replacements, services, conversation, planning_actions, planning_intents
 from ourney_travelsync.replacement_intent import extract_replacement
 from ..db import get_db
 from ..deps import member_trip
 from ..models import ChatMessage, ProposalVote, Trip, User
+from ..lock_policy import describe as protection_description
 from .auth import current_user
 
 router = APIRouter(tags=["chat"])
@@ -39,6 +40,7 @@ class ChatIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1, max_length=2000)
     trigger: Literal["MESSAGE", "MENTION", "QUICK_ACTION"] = "MESSAGE"
+    reply_to: int | None = Field(default=None, ge=1)
 
     @field_validator("text")
     @classmethod
@@ -68,14 +70,18 @@ def wants_agent(body: ChatIn) -> bool:
     return body.trigger == "QUICK_ACTION" or bool(MENTION.match(body.text))
 
 
-async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
+async def ask_agent(db: Session, trip: Trip, msg: ChatMessage, *, reply_to=None) -> dict:
     """Send one request to the agent service. Returns the `agent` field saved on the reply message."""
     recent = db.scalars(select(ChatMessage).where(ChatMessage.trip_id == trip.id, ChatMessage.id < msg.id)
                         .order_by(ChatMessage.id.desc()).limit(CONTEXT)).all()
     plan, plan_run = proposals.published_plan(db, trip.id)
+    answer = await conversation.route(db, trip, msg, plan, plan_run, reply_to)
+    if answer is not None:
+        return attach_proposal(db, plan, plan_run, answer)
     payload = {
         "trip_id": trip.id,
         "itinerary_id": plan.id if plan else None,
+        "protection": protection_description(plan, plan_run, db, replacements.current_time()) if plan else {},
         "applied_changes": proposals.applied_changes(db, trip.id, plan_run.id) if plan else [],
         "message": {"id": msg.id, "user_id": msg.author_id, "text": msg.text, "sent_at": msg.created_at.isoformat()},
         "recent_messages": [{"id": r.id, "user_id": r.author_id, "kind": r.kind, "text": r.text,
@@ -86,13 +92,28 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage) -> dict:
         # gate validates every model-originated suggestion below.
         out = ({"reply": "", "proposal": None, "tool_calls": []} if extract_replacement(msg.text)
                else await services.agent_turn(payload))
-    except HTTPException as e:  # e.detail: agent_unavailable (not running / too slow) or agent_error_500 (it crashed)
-        return {"state": "FAILED", "reply": f"{AGENT_NAME} can't answer right now. Please try again in a moment.",
-                "tool_calls": [], "proposal": None, "error": e.detail}
+    except HTTPException as e:
+        code = e.detail if isinstance(e.detail, str) else "agent_unavailable"
+        proposals.log.warning("agent_request_failed request=%s code=%s", msg.id, code)
+        return {**planning_actions.failure(code, conversation.korean(msg)), "error": code}
+    if not isinstance(out, dict) or (out.get("proposal") is not None and not isinstance(out.get("proposal"), dict)):
+        return planning_actions.failure("agent_invalid_response", conversation.korean(msg))
+    calls = out.get("tool_calls")
+    calls = [c for c in calls if isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("summary"), str)] if isinstance(calls, list) else []
     answer = {"state": "NEEDS_CLARIFICATION" if out.get("needs_clarification") else "SUCCEEDED",
-              "reply": out.get("reply") or "", "tool_calls": out.get("tool_calls") or [],
+              "reply": out.get("reply") if isinstance(out.get("reply"), str) else "", "tool_calls": calls,
               "proposal": out.get("proposal")}
+    pending = out.get("pending_action")
+    if pending:
+        return conversation.question(db, trip, msg, plan, plan_run, pending, answer["reply"])
+    if not answer["proposal"] and re.search(r"would you like|shall I|should I|do you want|할까요|원하시나요|하시겠어요", answer["reply"], re.I):
+        return {**planning_actions.failure("no_pending_action", conversation.korean(msg)),
+                "reason": "unstructured_confirmation", "diagnostic_code": "unstructured_confirmation"}
     answer = await replacements.validate_proposal(db, trip, msg, plan, plan_run, answer)
+    return attach_proposal(db, plan, plan_run, answer)
+
+
+def attach_proposal(db, plan, plan_run, answer):
     if answer["proposal"] and plan:
         answer.update(proposal_status=proposals.PENDING, plan_run_id=plan_run.id,
                       removed=proposals.removed_stops(db, plan, answer["proposal"]))
@@ -112,17 +133,38 @@ def list_chat(after: int = 0, trip: Trip = Depends(member_trip), user: User = De
 @router.post("/trips/{trip_id}/chat", status_code=201)
 async def post_chat(body: ChatIn, trip: Trip = Depends(member_trip), user: User = Depends(current_user),
                     db: Session = Depends(get_db)):
+    if body.reply_to is not None and not db.scalar(select(ChatMessage.id).where(
+            ChatMessage.id == body.reply_to, ChatMessage.trip_id == trip.id, ChatMessage.kind == "agent")):
+        raise HTTPException(404, "confirmation_question_not_found")
     mine = ChatMessage(trip_id=trip.id, author_id=user.id, kind="user", text=body.text,
-                       created_at=datetime.now(timezone.utc))
+                       reply_to=body.reply_to, created_at=datetime.now(timezone.utc))
     db.add(mine)
     db.commit()
     created = [mine]
-    if wants_agent(body):
-        answer = await ask_agent(db, trip, mine)
+    has_confirmation = planning_intents.confirmation(body.text) is not None and (body.reply_to is not None or
+                       any(q.agent["pending_action"]["status"] == "PENDING" for q in conversation.own_questions(db, trip.id, user.id)))
+    if wants_agent(body) or has_confirmation:
+        try:
+            answer = await ask_agent(db, trip, mine, reply_to=body.reply_to)
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(503, {"code": "planning_action_persistence_failed", "message": "The action could not be saved. The itinerary is unchanged."}) from None
+        except Exception as exc:
+            # Return a structured backend failure, never mislabel a post-tool crash as an LLM outage.
+            db.rollback()
+            proposals.log.error("planning_action_failed request=%s type=%s", mine.id, type(exc).__name__)
+            answer = planning_actions.failure("planning_action_failed", conversation.korean(mine))
         reply = ChatMessage(trip_id=trip.id, author_id=None, kind="agent", text=answer["reply"], agent=answer,
                             reply_to=mine.id, created_at=datetime.now(timezone.utc))
         db.add(reply)
-        db.commit()
+        try:
+            db.flush()
+            if answer.get("pending_action"):
+                reply.agent = {**answer, "pending_action": {**answer["pending_action"], "question_message_id": reply.id}}
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise HTTPException(503, {"code": "planning_action_persistence_failed", "message": "The action could not be saved. The itinerary is unchanged."}) from None
         created.append(reply)
     return {"messages": messages_out(db, trip, created, user)}
 
@@ -188,6 +230,7 @@ async def _vote_on_proposal(message_id, body, trip, user, db):
         text = proposals.result_text(db, msg, result, approve, members)
         note = ChatMessage(trip_id=trip.id, author_id=None, kind="agent", text=text, reply_to=msg.id,
                            agent={"state": "SUCCEEDED", "reply": text, "proposal": None, "event": "proposal_result",
+                                  "action_type": msg.agent.get("action_type", "replace_poi"),
                                   # lets the web app show this note in the reader's language
                                   "result": {**result, "approve": approve, "members": members,
                                              "date": msg.agent["proposal"].get("date"),
