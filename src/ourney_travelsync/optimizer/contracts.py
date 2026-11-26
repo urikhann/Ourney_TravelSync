@@ -28,6 +28,12 @@ class Fact(Contract, Generic[T]):
     user_upper_bound: bool = False
 
     @property
+    def provisional_hours(self) -> bool:
+        return (self.status == 'ESTIMATED' and self.value is not None and bool(self.source)
+                and self.source.startswith('provisional-hours:') and self.verified_at is not None
+                and self.rule_version == 'provisional-hours-1.0')
+
+    @property
     def known(self) -> bool:
         return (self.value is not None and self.status == "KNOWN"
                 and bool(self.source) and self.verified_at is not None)
@@ -73,6 +79,7 @@ class MealOverride(Contract):
 class DailyComposition(Contract):
     breakfast_enabled: bool = False
     breakfast_require_verified: bool = False
+    evening_enabled: bool = False
     max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
     # Accepted for old clients; named requirements now determine the minimum.
     min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = Field(default=0, deprecated=True)
@@ -137,6 +144,7 @@ class Member(Contract):
 
 class Candidate(Contract):
     poi_id: Annotated[str, Field(min_length=1)]
+    visit_identity: Annotated[str, Field(min_length=1, max_length=160)] | None = None
     dataset_version: Annotated[str, Field(min_length=1)]
     group_rank: Annotated[int, Field(strict=True, ge=1)]
     group_utility: Annotated[int, Field(strict=True, ge=0, le=1000)]
@@ -315,7 +323,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "breakfast_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes"]
+    objective: Literal["group_utility", "breakfast_and_group_utility", "optional_stops_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

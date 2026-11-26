@@ -59,7 +59,7 @@ def test_travel_objective_can_be_disabled_but_return_still_must_fit():
     raw['optimize_travel'] = False
     result = optimize(raw)
     assert result.validation_status == 'PASSED'
-    assert [p.objective for p in result.phases] == ['group_utility', 'minimum_relevance']
+    assert [p.objective for p in result.phases] == ['group_utility', 'minimum_relevance', 'waiting_minutes']
     for edge in raw['edges']:
         if edge['destination'] == 'hotel':
             edge['duration_minutes'] = 1440

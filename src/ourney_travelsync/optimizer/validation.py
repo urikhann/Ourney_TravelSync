@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from .contracts import DayPlan, PlanRequest
 from .meals import effective_meals, meals_can_be_assigned, meal_visit_matches
 from ..planning_categories import EVENING_START_MIN
+from ..place_identity import candidate_identity
 from .waiting import waiting_gaps
 
 
@@ -41,7 +42,7 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
         errors.append("DUPLICATE_DATE")
     pois = {p.poi_id: p for p in req.candidates}
     edges = {(e.date, e.origin, e.destination): e for e in req.edges}
-    seen, records = set(), {}
+    seen, seen_identities, records = set(), set(), {}
     total_cost, total_travel, total_walk = 0, 0, 0
 
     def problem(code, day, pid=""):
@@ -87,8 +88,13 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             if p is None:
                 problem("UNKNOWN_POI", day.date, v.poi_id)
                 continue
-            if p.visit_category == "evening" and (v.start_min < EVENING_START_MIN or not any(
-                    l.poi_id == p.poi_id and l.date == day.date for l in req.locked_items)):
+            identity = candidate_identity(p)
+            if identity in seen_identities:
+                problem("DUPLICATE_PLACE", day.date, v.poi_id)
+            seen_identities.add(identity)
+            if p.visit_category == "evening" and (v.start_min < EVENING_START_MIN or not (
+                    (req.daily_composition and req.daily_composition.evening_enabled) or any(
+                    l.poi_id == p.poi_id and l.date == day.date for l in req.locked_items))):
                 problem("EVENING_CHOICE_OR_TIME", day.date, v.poi_id)
             if p.allowed_dates is not None and day.date not in p.allowed_dates:
                 problem("DAY_CANDIDATE_NOT_SELECTED", day.date, v.poi_id)
@@ -114,8 +120,8 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             op = p.operations.get(day.date)
             if req.enforce_opening_hours:
                 unknown = op is None or not op.openings.known or not op.closed.known
-                closed = op is not None and op.closed.known and op.closed.value is True
-                outside = op is not None and op.openings.known and not any(
+                closed = op is not None and (op.closed.known or (req.allow_unknown_opening_hours and op.closed.provisional_hours)) and op.closed.value is True
+                outside = op is not None and (op.openings.known or (req.allow_unknown_opening_hours and op.openings.provisional_hours)) and not any(
                     w.start_min <= v.start_min and v.departure_min <= w.end_min for w in op.openings.value)
                 if closed or outside or (unknown and not req.allow_unknown_opening_hours):
                     problem("OPERATING_WINDOW", day.date, v.poi_id)
@@ -135,6 +141,11 @@ def validate_final(req: PlanRequest, days: tuple[DayPlan, ...]) -> ValidationRes
             problem("INVALID_BREAKFAST_ASSIGNMENT", day.date)
         if composition is not None:
             actual = [(v, pois[v.poi_id]) for v in plan.items if v.poi_id in pois]
+            if composition.evening_enabled:
+                evening_ids = {p.poi_id for p in pois.values() if p.visit_category == "evening"}
+                locked_evening = {l.poi_id for l in req.locked_items if l.date == day.date and l.poi_id in evening_ids}
+                if sum(p.visit_category == "evening" for _, p in actual) > max(1, len(locked_evening)):
+                    problem("EVENING_LIMIT", day.date)
             cafes = [v for v,p in actual if p.visit_category == "cafe"]
             meals = [v for v,p in actual if p.visit_category == "meal"]
             activities = [p for v,p in actual if p.visit_category == "activity"]

@@ -10,6 +10,7 @@ from ourney_travelsync.optimizer.eligibility import check_eligibility
 from ourney_travelsync.optimizer.meals import breakfast_windows, effective_meals
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.waiting import gap_retry_request, improves_gap, waiting_gaps
+from ourney_travelsync.place_identity import candidate_identity
 
 from . import services
 from .optimization import PlanningSnapshot, fingerprint, solver_request
@@ -106,6 +107,7 @@ def missing_required_breakfast(req, result):
 def gap_route_legs(req, result, estimates):
     """Shortlist unused activities geographically, then verify their road legs."""
     selected = {v.poi_id for day in result.days for v in day.items}
+    selected_identities = {candidate_identity(p) for p in req.candidates if p.poi_id in selected}
     evidence = {edge_key(e): e for e in req.edges}
     draft_routes = {**estimates, **evidence}
     draft = req.model_copy(update={"provisional": True, "edges": tuple(draft_routes.values())})
@@ -121,7 +123,7 @@ def gap_route_legs(req, result, estimates):
             continue
         legs, shortlisted = [], 0
         for candidate in candidates:
-            if (candidate.poi_id in selected or candidate.visit_category != "activity"
+            if (candidate_identity(candidate) in selected_identities or candidate.visit_category != "activity"
                     or day not in eligible[candidate.poi_id].feasible_dates):
                 continue
             keys = ((day, gap["after_poi_id"], candidate.poi_id),
@@ -206,10 +208,10 @@ async def fill_driving_gap(baseline, context, estimates, seconds, audit, db):
     return baseline
 
 
-async def plan_drive(run, body, prepared, context, audit, db, *, request_transform=None):
+async def plan_drive(run, body, prepared, context, audit, db, *, request_transform=None, initial_attempts=None):
     # The operating snapshot is read once for optimization. Individual routing
     # rounds only contribute route evidence and keep its provenance.
-    initial, operating, _, spent = await routing_snapshot(context, [], {}, 0)
+    initial, operating, _, spent = await routing_snapshot(context, [], initial_attempts or {}, 0)
     rounds = []
     audit.planning_data = {"request": initial, "response": operating, "routing_rounds": []}
     db.commit()
@@ -224,7 +226,7 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
     warnings = set()
     last_result = None
     best_result = None
-    best_breakfast_count = -1
+    best_optional_count = -1
     allocated_search = 0
     draft_composition = base.daily_composition
     fallback_composition = None
@@ -235,6 +237,16 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
                 "meal_windows": tuple(w for w in draft_composition.meal_windows if w.name != "breakfast"),
                 "meal_overrides": tuple(o for o in draft_composition.meal_overrides if o.name != "breakfast"),
             })
+    if draft_composition is not None and draft_composition.evening_enabled:
+        fallback_composition = (fallback_composition or draft_composition).model_copy(update={"evening_enabled": False})
+    automatic_evening = {p.poi_id for p in base.candidates if p.visit_category == "evening"
+                         and not any(l.poi_id == p.poi_id for l in base.locked_items)}
+
+    def optional_visit(item):
+        return bool((item.breakfast_status is not None and base.daily_composition is not None
+                     and not base.daily_composition.breakfast_require_verified)
+                    or (base.daily_composition is not None and base.daily_composition.evening_enabled
+                        and item.poi_id in automatic_evening))
     # Give the initial search half the total time. Split the other half across
     # the two possible repair rounds.
     for round_index in range(MAX_ROUTE_ROUNDS):
@@ -243,14 +255,20 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
             evidence[key].model_copy(update={"straight_line_m": estimate.straight_line_m})
             if key in evidence else estimate for key, estimate in estimates.items()
             if key not in evidence or evidence[key].usable)
-        # Reserve the final routing attempt for a route that can work without breakfast.
+        # Reserve a route that can work without optional breakfast/evening stops.
         if round_index == MAX_ROUTE_ROUNDS - 1 and fallback_composition is not None and not best_result:
             draft_composition = fallback_composition
         draft_req = base.model_copy(update={"provisional": True, "edges": provisional,
                                            "daily_composition": draft_composition,
                                            "search_seconds": round_seconds * .65})
         allocated_search += draft_req.search_seconds
-        _, draft = await solve_checked(draft_req)
+        draft_response, draft = await solve_checked(draft_req)
+        # Keep failed initial drafts replayable, including the stage and E2 reasons.
+        # _generate may exit before the later verified-solve persistence path.
+        audit.optimizer_request = draft_req.model_dump(mode="json")
+        audit.response = draft_response
+        audit.planning_data = {**audit.planning_data, "stage": "draft"}
+        db.commit()
         if draft.validation_status != "NOT_RUN":
             raise HTTPException(502, "optimizer_invalid_response")
         if not draft.days:
@@ -264,10 +282,10 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
             raise HTTPException(409, "optimizer_" + (draft.error_code or "invalid_result").lower())
         legs = list(chosen_edges(draft.days))
         if fallback_composition is not None:
-            # Verify a path around optional breakfast too. A slower provider
+            # Verify a path around optional stops too. A slower provider
             # leg can otherwise invalidate the draft before the solver can skip it.
             for day in draft.days:
-                remaining = tuple(item for item in day.items if item.breakfast_status is None)
+                remaining = tuple(item for item in day.items if not optional_visit(item))
                 if remaining and len(remaining) < len(day.items):
                     legs.extend(chosen_edges((day.model_copy(update={"items": remaining}),)))
         legs = [key for key in dict.fromkeys(legs) if key not in evidence]
@@ -300,12 +318,15 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
         audit.optimizer_request = verified.model_dump(mode="json")
         db.commit()
         response, result = await solve_checked(verified)
+        audit.response = response
+        audit.planning_data = {**audit.planning_data, "stage": "verified"}
+        db.commit()
         last_result = verified, response, result, operational
         if result.validation_status == "PASSED":
-            count = sum(item.breakfast_status is not None for day in result.days for item in day.items)
-            if count > best_breakfast_count:
-                best_result, best_breakfast_count = last_result, count
-            draft_count = sum(item.breakfast_status is not None for day in draft.days for item in day.items)
+            count = sum(optional_visit(item) for day in result.days for item in day.items)
+            if count > best_optional_count:
+                best_result, best_optional_count = last_result, count
+            draft_count = sum(optional_visit(item) for day in draft.days for item in day.items)
             if fallback_composition is None or count >= draft_count:
                 break
         elif result.error_code not in ("INSUFFICIENT_CANDIDATES", "NO_FEASIBLE_ITINERARY", "SEARCH_TIMEOUT"):
@@ -319,4 +340,5 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
     if selected[2].validation_status == "PASSED":
         remaining = max(0, min(base.search_seconds * .2, base.search_seconds - allocated_search))
         selected = await fill_driving_gap(selected, context, estimates, remaining, audit, db)
+    audit.planning_data = {**audit.planning_data, "stage": "verified"}
     return selected

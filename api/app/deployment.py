@@ -182,7 +182,7 @@ def initialize(db, *, activate=False, expected_active=None):
         target = db.get(DatasetVersion, v)
         target.status, target.activated_at = "ACTIVE", datetime.now(timezone.utc)
     db.commit()
-    return {"dataset_version":v, "active_dataset":active_version(db), "metadata_version":v, "hours_batch":"hours-"+v, "normalized_schedules":len(payload["schedules"])}
+    return {"dataset_version":v, "active_dataset":active_version(db), "metadata_version":v, "hours_batch":"hours-"+v, "normalized_schedules":sum(r["schedule"]["schema_version"] == "normalized-hours-1.0" for r in payload["schedules"]), "provisional_schedules":sum(r["schedule"]["schema_version"] == "provisional-hours-1.0" for r in payload["schedules"])}
 
 def check_startup(db):
     spec, payload, pois, weekly = expected()

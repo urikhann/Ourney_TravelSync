@@ -19,7 +19,8 @@ from ourney_travelsync.replacement_intent import extract_replacement, resolve_ta
 from . import config, services
 from .drive_planning import solve_checked
 from .models import Itinerary, OptimizationRun, Poi, ProposalVote, Trip, Vote
-from .optimization import PlanningSnapshot, fingerprint, state
+from .optimization import PlanningSnapshot, fingerprint, state, with_visit_identities
+from ourney_travelsync.place_identity import candidate_identity
 
 log = logging.getLogger("uvicorn.error")
 
@@ -151,7 +152,7 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
                 raise HTTPException(409, "target_poi_not_found")
             if intent and intent["replacement_constraints"].get("needs_clarification"):
                 raise HTTPException(409, "unsupported_replacement_constraints")
-            base = PlanRequest.model_validate(audit.optimizer_request)
+            base = with_visit_identities(PlanRequest.model_validate(audit.optimizer_request), db)
             base_hash = fingerprint(plan.days)
             original = plans(plan.days)
             before = state(db, trip.id)
@@ -179,10 +180,12 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
             day = next(d for d in original if d.date.isoformat() == target["date"])
             index = next(i for i, v in enumerate(day.items) if v.poi_id == old_id)
             used = {v.poi_id for d in original for v in d.items}
+            used_identities = {candidate_identity(p) for p in base.candidates if p.poi_id in used}
             desired = (intent or {}).get("replacement_constraints", {}).get("category")
             banned = {pid for m in base.members for pid in m.excluded_poi_ids}
             tags = {tag for m in base.members for tag in m.excluded_tags}
             pool = [p for p in base.candidates if p.poi_id not in used | banned and not tags.intersection(p.tags)
+                    and candidate_identity(p) not in used_identities
                     and (not desired or p.visit_category == desired)
                     and (p.allowed_dates is None or day.date in p.allowed_dates)
                     and p.visit_category != "evening"]
@@ -330,7 +333,7 @@ async def apply_draft(db, trip, msg):
             or state(db, trip.id) != draft.input["state"]
             or (current_time() - datetime.fromisoformat(meta["created_at"])).total_seconds() > config.REPLACEMENT_VALID_SECONDS):
         return {"status": "STALE", "reason": "stale_proposal"}
-    req, days = PlanRequest.model_validate(draft.optimizer_request), plans(draft.response["days"])
+    req, days = with_visit_identities(PlanRequest.model_validate(draft.optimizer_request), db), plans(draft.response["days"])
     # Do not apply a proposal whose target started while members were voting.
     if protected(plan, base, db) - set(meta["protected_ids"]):
         return {"status": "STALE", "reason": "locked_activity_conflict"}
@@ -393,6 +396,8 @@ async def apply_draft(db, trip, msg):
             meals = effective_meals(requested, refreshed.daily_composition)
             raw["breakfast_omitted"] = (any(m.name == "breakfast" and not m.require_verified for m in meals)
                                         and not any(v.breakfast_status for v in day.items))
+            raw["evening_omitted"] = (refreshed.daily_composition.evening_enabled
+                                      and not any(by_id[v.poi_id].visit_category == "evening" for v in day.items))
     # Keep the original as a separate version. The new audit becomes the published head.
     new_plan = Itinerary(trip_id=trip.id, run_id=plan.run_id, letter=chr(min(ord(plan.letter)+1, ord("Z"))),
         variant="optimized", days=rendered, stats={**plan.stats, "total_cost": checked.metrics["total_cost"],

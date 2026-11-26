@@ -50,7 +50,8 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
     windows, reasons = {}, {}
     for p in req.candidates:
         why = []
-        if p.visit_category == "evening" and not any(l.poi_id == p.poi_id for l in req.locked_items):
+        if (p.visit_category == "evening" and not (req.daily_composition and req.daily_composition.evening_enabled)
+                and not any(l.poi_id == p.poi_id for l in req.locked_items)):
             why.append("EVENING_CHOICE_NOT_SELECTED")
         if p.poi_id in banned or tags.intersection(p.tags):
             why.append("EXPLICIT_EXCLUSION")
@@ -79,14 +80,14 @@ def check_eligibility(req: PlanRequest) -> tuple[Eligibility, ...]:
                         per_date[day.date] = (bound,)
                     else:
                         why.append(f"{day.date}:NO_FULL_STAY_WINDOW")
-                elif op is not None and op.closed.known and op.closed.value:
+                elif op is not None and (op.closed.known or (req.allow_unknown_opening_hours and op.closed.provisional_hours)) and op.closed.value:
                     why.append(f"{day.date}:CLOSED")
                 elif p.is_festival and (op is None or not op.event_active.known or op.event_active.value is not True):
                     why.append(f"{day.date}:EVENT_UNVERIFIED_OR_INACTIVE")
                 elif (op is None or not op.openings.known or not op.closed.known) and not req.allow_unknown_opening_hours:
                     why.append(f"{day.date}:OPERATING_INFO_UNKNOWN")
                 else:
-                    intervals = op.openings.value if op is not None and op.openings.known else (bound,)
+                    intervals = op.openings.value if op is not None and (op.openings.known or (req.allow_unknown_opening_hours and op.openings.provisional_hours)) else (bound,)
                     if op is None or not op.openings.known or not op.closed.known:
                         why.append(f"{day.date}:OPENING_HOURS_UNVERIFIED")
                     usable = tuple(Window(start_min=max(w.start_min, bound.start_min),

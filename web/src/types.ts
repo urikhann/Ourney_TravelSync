@@ -66,6 +66,7 @@ export type PlanItem = {
 };
 export type PlanningPoint = { label: string; latitude: number; longitude: number };
 export type DailyComposition = {
+  evening_enabled?: boolean;
   breakfast_enabled?: boolean;
   breakfast_require_verified?: boolean;
   meal_overlap_min?: number; meal_timezone?: "Asia/Seoul"; meal_policy_version?: "meal-1.0";
@@ -87,19 +88,20 @@ export type OptimizationInput = {
   locked_items?: { poi_id: string; date: string; start_min?: number | null }[];
 };
 export type Plan = {
-  id: number; letter: string; variant: string; name: string; votes: number; stale: boolean;
+  id: number; letter: string; variant: string; name: string; votes: number; stale: boolean; lock_revision: number;
   stats: { group_fit: number | null; total_cost: number; cost_unknown_count?: number; budget_enforced?: boolean;
+    daily_composition?: DailyComposition | null;
     routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
-  days: { date: string; gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
+  days: { date: string; gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; evening_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {
   plans: Plan[]; my_vote: number | null; voted: number; members: number; chosen_id: number | null;
   holidays: { date: string; name: string }[];
   availability_checked: boolean;
-  setup: { default_composition: DailyComposition; dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[] };
+  setup: { default_composition: DailyComposition; dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[]; configuration?: OptimizationInput | null };
   latest_optimization: { id: number; status: string; error_code: string | null; solver_status: string;
     validation_status: string; configuration: OptimizationInput | null;
     candidate_selection?: { catalogue_count: number; eligible_catalogue_count: number; selected_count: number;
@@ -131,6 +133,7 @@ type SavedPlanProposal = { kind: "switch"; itinerary_id: number; label: string }
 export type ProposalStatus = "PENDING" | "APPLYING" | "APPLIED" | "REJECTED" | "FAILED" | "STALE";
 export type ProposalVotes = { approve: number; reject: number; needed: number; members: number; mine: boolean | null };
 export type AgentInfo = {
+  dataset_version?: string | null;
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
   validation_status?: string; repair_strategy?: string;

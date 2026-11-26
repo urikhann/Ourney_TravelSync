@@ -1,5 +1,9 @@
 # Busan POI snapshot · 25 November 2026
 
+26 November amendment: the 334 preliminary entries are now structured provisional
+schedule records in this same V5. Of these, 88 supply estimated ordinary windows
+and 246 retain unresolved conditions. See the [in-place import report](v5_provisional_schedules_20261126.md).
+
 `busan-enriched-v5-20261125` carries forward the 3,570 POIs, their existing CSV
 columns, features and baseline operating data. The deployment manifest uses the
 existing versioned evidence, review and normalized-hours tables. Source hashes

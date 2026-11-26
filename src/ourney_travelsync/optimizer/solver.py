@@ -7,6 +7,7 @@ from ortools.sat.python import cp_model
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
 from .eligibility import common_bounds, usable_cost
 from .meals import breakfast_slot_windows, breakfast_status, effective_meals
+from ..place_identity import candidate_identity
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     meal_preferences = []
     breakfast_assignments = {}
     optional_breakfast = []
+    optional_evening = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes = [day.start_point, *pois, day.end_point]
         end = len(nodes) - 1
@@ -64,6 +66,13 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         model.add(sum(visits[day.date, pid] for pid in pois) >= 1)
         composition = req.daily_composition
         if composition is not None:
+            evening_ids = [pid for pid, p in pois.items() if p.visit_category == "evening"]
+            locked_evening = {l.poi_id for l in req.locked_items if l.date == day.date and l.poi_id in evening_ids}
+            if composition.evening_enabled:
+                # Automatic choice is optional and capped at one per day. Keep
+                # previously explicit multi-place choices rather than dropping locks.
+                model.add(sum(visits[day.date, pid] for pid in evening_ids) <= max(1, len(locked_evening)))
+                optional_evening.extend(visits[day.date, pid] for pid in evening_ids if pid not in locked_evening)
             cafe_ids = [pid for pid,p in pois.items() if p.visit_category == "cafe"]
             meal_ids = [pid for pid,p in pois.items() if p.visit_category == "meal"]
             activity_ids = [pid for pid,p in pois.items() if p.visit_category == "activity"]
@@ -158,6 +167,12 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         day_arcs[day.date] = (nodes, arcs)
     for pid in pois:
         model.add(sum(visits[day.date, pid] for day in req.days) <= 1)
+    identities = {}
+    for pid, candidate in pois.items():
+        identities.setdefault(candidate_identity(candidate), []).append(pid)
+    for aliases in identities.values():
+        if len(aliases) > 1:
+            model.add(sum(visits[day.date, pid] for day in req.days for pid in aliases) <= 1)
     if req.enforce_cost:
         model.add(sum(total_cost) <= req.budget_total)
     for lock in req.locked_items:
@@ -191,6 +206,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         # One additional breakfast outweighs any possible difference in group utility.
         bonus = 1 + sum(p.group_utility for p in pois.values())
         objectives[0] = ("breakfast_and_group_utility", utility + bonus * sum(optional_breakfast), True, 0.7)
+    if optional_evening:
+        bonus = 1 + sum(p.group_utility for p in pois.values())
+        objectives[0] = ("optional_stops_and_group_utility",
+                         utility + bonus * sum(optional_breakfast + optional_evening), True, 0.7)
     if meal_preferences:
         objectives[-1] = ("travel_minutes", travel, False, 0.05)
         objectives.append(("meal_preference", sum(meal_preferences), False, 0.05))

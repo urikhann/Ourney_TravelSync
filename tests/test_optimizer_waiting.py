@@ -9,7 +9,7 @@ from optimizer_fixtures import DAY, fact, request_data
 from ourney_travelsync.optimizer import api
 from ourney_travelsync.optimizer.contracts import PlanRequest
 from ourney_travelsync.optimizer.validation import validate_final
-from ourney_travelsync.optimizer.waiting import gap_retry_request, waiting_gaps
+from ourney_travelsync.optimizer.waiting import gap_retry_request, improves_gap, waiting_gaps
 from test_optimizer_meals import fixture
 
 
@@ -128,3 +128,43 @@ def test_nearby_filter_uses_both_known_route_legs():
             edge["duration_minutes"] = 31
     raw["gap_policy"] = {"rest_minutes": 60, "reoptimize_minutes": 300}
     assert gap_retry_request(PlanRequest.model_validate(raw), baseline, 1) is None
+
+
+def test_gap_acceptance_preserves_optional_evening_objective_direction():
+    raw = locked_gap(3)
+    req = PlanRequest.model_validate(raw)
+    baseline = api.optimize(locked_gap())
+    raw['gap_policy'] = {'enabled': True}
+    alternative = api.optimize(raw)
+    assert alternative.metrics['waiting_minutes'] < baseline.metrics['waiting_minutes']
+    def optional_objective(result, value):
+        return result.model_copy(update={'phases': tuple(p.model_copy(update={
+            'objective': 'optional_stops_and_group_utility', 'objective_value': value})
+            if p.objective == 'group_utility' else p for p in result.phases)})
+    # Higher optional-stop utility can justify an improvement; lower utility
+    # cannot be traded for a shorter gap, even if later objectives improve.
+    original = optional_objective(baseline, 5000)
+    assert improves_gap(req, original, optional_objective(alternative, 6000))
+    assert not improves_gap(req, original, optional_objective(alternative, 4000))
+
+
+def test_opening_wait_label_requires_an_enforced_known_opening_bound():
+    raw = locked_gap()
+    raw['candidates'][1]['operations'][DAY]['openings'] = fact([dict(start_min=900, end_min=1020)])
+    result = api.optimize(raw)
+    assert result.validation_status == 'PASSED'
+    assert waiting_gaps(PlanRequest.model_validate(raw), result.days)[0]['reason'] == 'opening_time'
+    raw['candidates'][1]['operations'][DAY]['openings']['status'] = 'UNKNOWN'
+    raw['allow_unknown_opening_hours'] = True
+    result = api.optimize(raw)
+    assert result.validation_status == 'PASSED'
+    assert waiting_gaps(PlanRequest.model_validate(raw), result.days)[0]['reason'] == 'free_time'
+
+
+def test_short_unallocated_wait_has_travel_buffer_label():
+    raw = locked_gap()
+    raw['locked_items'][1]['start_min'] = 700
+    result = api.optimize(raw)
+    assert result.validation_status == 'PASSED'
+    gap = waiting_gaps(PlanRequest.model_validate(raw), result.days)[0]
+    assert gap['reason'] == 'travel_buffer' and gap['duration_minutes'] == 10

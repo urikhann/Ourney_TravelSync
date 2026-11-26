@@ -1,9 +1,9 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { CircleCheck, CircleHelp, CircleX, ExternalLink } from "lucide-react";
-import { api } from "../api";
+import { api, message } from "../api";
 import { useFeatures } from "../features";
 import type { Availability, GroupPick, PoiDetail } from "../types";
-import { fmtDate, pct, reasonText, won } from "../ui";
+import { ErrorBox, fmtDate, pct, reasonText, won } from "../ui";
 import { t } from "../i18n";
 import PlaceThumb from "./PlaceThumb";
 import Sheet from "./Sheet";
@@ -40,12 +40,13 @@ export default function PlaceSheet({ poiId, onClose, dates, start, rec, names, v
   const p = poi.data;
   return (
     <Sheet open={!!poiId} onClose={onClose} label={t("Place details")}>
-      {!p ? <div className="muted center">{t("Loading…")}</div> : (
+      {poi.error ? <ErrorBox error={message(poi.error)} /> : !p ? <div className="muted center">{t("Loading…")}</div> : (
         <div className="stack">
           <div className="row">
             <PlaceThumb features={p.features} image={p.image_url} size={54} />
             <div className="grow">
               <div className="sheet-title" style={{ margin: 0 }}>{p.name}</div>
+              <div className="small">{p.category || t("Category not available")}</div>
               <div className="muted small">{[p.area, won(p.avg_cost_krw), "~" + t("{n} min", { n: p.duration_min }), p.indoor == null ? null : p.indoor ? t("indoor") : t("outdoor")].filter(Boolean).join(" · ")}</div>
             </div>
             {rec && <div className="score" style={{ fontSize: 18 }}>{pct(rec.fit)}</div>}

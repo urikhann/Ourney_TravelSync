@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from .contracts import DayPlan, Lock, PlanRequest, Visit
 from .eligibility import usable_cost, usable_duration
 from .validation import validate_final
+from ..place_identity import candidate_identity
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,9 @@ def repair(req: PlanRequest, days: tuple[DayPlan, ...], day, index: int, candida
     locked = {l.poi_id for l in req.locked_items if l.poi_id != candidate_id} | set(protected_ids)
     if target.poi_id in locked:
         return RepairResult(reason="locked_activity_conflict")
-    if candidate_id in {v.poi_id for d in days for v in d.items}:
+    by_id = {p.poi_id: p for p in req.candidates}
+    used = {candidate_identity(by_id[v.poi_id]) for d in days for v in d.items}
+    if candidate_identity(by_id[candidate_id]) in used:
         return RepairResult(reason="duplicate_poi")
     candidate = next(p for p in req.candidates if p.poi_id == candidate_id)
     op = candidate.operations.get(day)

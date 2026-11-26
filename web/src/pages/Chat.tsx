@@ -5,7 +5,7 @@
 // The screen polls every few seconds; the backend keeps the history (GET/POST /trips/{id}/chat).
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle, X } from "lucide-react";
 import { api, message } from "../api";
 import { useMe } from "../auth";
@@ -13,6 +13,7 @@ import type { AgentProposal, ChatMessage, ChatPage, Place, ProposalStatus, Trip 
 import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
+import PlaceSheet from "../components/PlaceSheet";
 import { Avatar } from "../components/Avatar";
 import { locale, t as tr } from "../i18n";
 import "./chat.css";
@@ -29,6 +30,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour:
 export default function Chat() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
+  const activeSends = useIsMutating({ mutationKey: ["chat-send", id] });
   const trip = useQuery({ queryKey: ["trip", id], queryFn: () => api.get<Trip>(`/trips/${id}`) });
   const chat = useQuery({
     queryKey: ["chat", id], queryFn: () => api.get<ChatPage>(`/trips/${id}/chat`),
@@ -37,10 +39,12 @@ export default function Chat() {
   const [text, setText] = useState("");
   const [askAI, setAskAI] = useState(false);  // "ask TravelSync" mode (pill in the box)
   const inputRef = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false); // closes the gap before React renders pending state
   const [pending, setPending] = useState<{ text: string; afterId: number } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   const send = useMutation({
+    mutationKey: ["chat-send", id],
     mutationFn: (b: { text: string; trigger: "MESSAGE" | "MENTION" | "QUICK_ACTION" }) =>
       api.post<{ messages: ChatMessage[] }>(`/trips/${id}/chat`, b),
     onMutate: (b) => {
@@ -48,11 +52,16 @@ export default function Chat() {
       const messages = qc.getQueryData<ChatPage>(["chat", id])?.messages ?? [];
       setPending({ text: b.text.trim().replace(MENTION, `@${AGENT}$2`), afterId: messages[messages.length - 1]?.id ?? 0 });
     },
-    onSettled: () => {
-      setPending(null);
-      return qc.invalidateQueries({ queryKey: ["chat", id] });
+    onSettled: async () => {
+      try {
+        await qc.invalidateQueries({ queryKey: ["chat", id] });
+      } finally {
+        setPending(null);
+        submitting.current = false;
+      }
     },
   });
+  const busy = send.isPending || activeSends > 0;
 
   const msgs = chat.data?.messages ?? [];
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs.length, pending]);
@@ -66,12 +75,28 @@ export default function Chat() {
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     const t = text.trim();
-    if (!t || send.isPending) return;
+    if (!t || busy || submitting.current) return;
     const toAI = askAI || MENTION.test(t);
     const body = askAI ? `@${AGENT} ${t}` : t;
-    send.mutate({ text: body, trigger: toAI ? "MENTION" : "MESSAGE" }, { onSuccess: () => { setText(""); setAskAI(false); } });
+    const draft = { text, askAI };
+    const afterId = msgs[msgs.length - 1]?.id ?? 0;
+    submitting.current = true;
+    setText("");
+    setAskAI(false);
+    send.mutate({ text: body, trigger: toAI ? "MENTION" : "MESSAGE" }, { onError: () => {
+      // A lost response can follow a successful save. Restore only an unsaved
+      // draft, after onSettled has refreshed chat, rather than inviting a resend.
+      const savedText = body.replace(MENTION, `@${AGENT}$2`);
+      const saved = qc.getQueryData<ChatPage>(["chat", id])?.messages.some(m =>
+        m.id > afterId && m.kind === "user" && m.author?.id === me && m.text === savedText);
+      if (!saved) { setText(draft.text); setAskAI(draft.askAI); }
+    } });
   };
-  const ask = (q: string) => send.mutate({ text: `@${AGENT} ${tr(q)}`, trigger: "QUICK_ACTION" });
+  const ask = (q: string) => {
+    if (busy || submitting.current) return;
+    submitting.current = true;
+    send.mutate({ text: `@${AGENT} ${tr(q)}`, trigger: "QUICK_ACTION" });
+  };
   const mention = () => { setAskAI((on) => !on); inputRef.current?.focus(); };
   const type = (v: string) => {
     const m = v.match(MENTION);
@@ -111,31 +136,33 @@ export default function Chat() {
       <div className="chat-dock">
         <div className="chat-quick" role="group" aria-label={tr("Ask {name}", { name: AGENT })}>
           {QUICK.map(({ Icon, label, text: q }) => (
-            <button key={label} type="button" className="chat-chip" disabled={send.isPending} onClick={() => ask(q)}>
+            <button key={label} type="button" className="chat-chip" disabled={busy} onClick={() => ask(q)}>
               <Icon size={14} /> {tr(label)}
             </button>
           ))}
         </div>
-        {suggest && (
+        {suggest && !busy && (
           <button type="button" className="chat-suggest" onClick={() => { setText(""); setAskAI(true); inputRef.current?.focus(); }}>
             <span className="agent-av"><Sparkles size={13} /></span><b>@ai</b> <span className="muted">{tr("Ask {name}", { name: AGENT })}</span>
           </button>
         )}
         <ErrorBox error={send.error ? message(send.error) : null} />
-        <form className={"chat-input" + (asking ? " asking" : "")} onSubmit={submit}>
+        <form className={"chat-input" + (asking ? " asking" : "")} onSubmit={submit} aria-busy={busy}>
           <button type="button" className={"chat-at" + (askAI ? " on" : "")} aria-pressed={askAI}
+            disabled={busy}
             aria-label={tr("Ask {name}", { name: AGENT })} title={tr("Ask {name}", { name: AGENT })} onClick={mention}>
             <AtSign size={17} />
           </button>
-          {askAI && <button type="button" className="mention-pill" onClick={() => setAskAI(false)} aria-label={tr("Stop asking {name}", { name: AGENT })}>
+          {askAI && <button type="button" className="mention-pill" disabled={busy} onClick={() => setAskAI(false)} aria-label={tr("Stop asking {name}", { name: AGENT })}>
             <Sparkles size={12} /> {AGENT} <X size={12} /></button>}
           <input ref={inputRef} value={text} maxLength={2000} onChange={(e) => type(e.target.value)} onKeyDown={keys}
-            placeholder={askAI ? tr("Ask anything about the trip…") : tr("Message the group")} aria-label={tr("Message")} />
-          <button className="chat-send" type="submit" aria-label={tr("Send")} disabled={!text.trim() || send.isPending}>
+            disabled={busy}
+            placeholder={busy ? tr("Waiting for the reply…") : askAI ? tr("Ask anything about the trip…") : tr("Message the group")} aria-label={tr("Message")} />
+          <button className="chat-send" type="submit" aria-label={tr("Send")} disabled={!text.trim() || busy}>
             <SendHorizontal size={17} />
           </button>
         </form>
-        <div className="chat-hint">{asking
+        <div className="chat-hint">{busy ? tr("Please wait for the reply.") : asking
           ? <><Sparkles size={12} /> {tr("{name} will read this message and the last few before it.", { name: AGENT })}</>
           : <><AtSign size={12} /> {tr("Tap @ or start with @ai to ask {name}. Other messages stay between you.", { name: AGENT })}</>}</div>
       </div>
@@ -219,15 +246,21 @@ function agentText(m: ChatMessage): string {
 
 function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const qc = useQueryClient();
+  const activeSends = useIsMutating({ mutationKey: ["chat-send", tripId] });
   const me = useMe();
   const confirm = useMutation({
+    mutationKey: ["chat-send", tripId],
     mutationFn: (yes: boolean) => api.post(`/trips/${tripId}/chat`, { text: `@TravelSync ${tr(yes ? "Yes" : "No")}`, reply_to: m.id }),
-    onSettled: () => { qc.invalidateQueries({ queryKey: ["chat", tripId] }); },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["chat", tripId] }),
   });
   if (me.data?.id !== m.agent?.pending_action?.authorized_user_id) return null;
+  const respond = (yes: boolean) => {
+    if (qc.isMutating({ mutationKey: ["chat-send", tripId] })) return;
+    confirm.mutate(yes);
+  };
   return <div className="proposal-actions">
-    <button className="btn sm" disabled={confirm.isPending} onClick={() => confirm.mutate(true)}>{tr("Confirm search or replanning")}</button>
-    <button className="btn ghost sm" disabled={confirm.isPending} onClick={() => confirm.mutate(false)}>{tr("Cancel")}</button>
+    <button className="btn sm" disabled={confirm.isPending || activeSends > 0} onClick={() => respond(true)}>{tr("Confirm search or replanning")}</button>
+    <button className="btn ghost sm" disabled={confirm.isPending || activeSends > 0} onClick={() => respond(false)}>{tr("Cancel")}</button>
     {confirm.error && <span className="tiny proposal-error">{message(confirm.error)}</span>}
   </div>;
 }
@@ -267,13 +300,14 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
     <div className={"proposal " + status.toLowerCase()}>
       <div className="eyebrow" style={{ color: "var(--purple)" }}>{tr("Suggested change · {date}", { date: p.date })}</div>
       {a.action_type && <div className="small muted">{tr(scopeLabels[a.action_type] ?? "Suggested change")} · {(a.affected_dates ?? [p.date]).join(", ")}</div>}
-      {removed.map((r, index) => <div key={r.poi_id} className="removed">{multipleDates && <span>{p.remove_item_ids[index]?.split("@")[0]} </span>}<span className="num">{r.start}</span> <s>{r.name}</s></div>)}
+      {removed.map((r, index) => <AddedStop key={r.poi_id} poiId={r.poi_id} start={r.start}
+        date={p.remove_item_ids[index]?.split("@")[0] ?? p.date} version={a.dataset_version ?? undefined} removed showDate={multipleDates} fallbackName={r.name} />)}
       {!removed.length && p.remove_item_ids.length > 0 &&
         <div className="small muted">{p.remove_item_ids.length > 1 ? tr("Remove {n} stops", { n: p.remove_item_ids.length }) : tr("Remove 1 stop")}</div>}
-      {p.add.map((x) => <div key={x.poi_id + x.start}>{multipleDates && <span className="tiny muted">{x.date ?? p.date}</span>}<AddedStop poiId={x.poi_id} start={x.start} /></div>)}
+      {p.add.map((x) => <div key={x.poi_id + x.start}>{multipleDates && <span className="tiny muted">{x.date ?? p.date}</span>}<AddedStop poiId={x.poi_id} start={x.start} date={x.date ?? p.date} version={a.dataset_version ?? undefined} /></div>)}
       {a.validation_status === "PASSED" && <div className="tiny muted">{tr("Schedule validated before voting")}</div>}
       {a.affected_activities?.map((x) => <div key={x.date + x.poi_id} className="small muted">
-        {tr("Adjusted activity time")}: {x.date} <AddedStop poiId={x.poi_id}
+        {tr("Adjusted activity time")}: {x.date} <AddedStop poiId={x.poi_id} date={x.date} version={a.dataset_version ?? undefined}
           start={`${Math.floor(x.start_min / 60).toString().padStart(2, "0")}:${(x.start_min % 60).toString().padStart(2, "0")}`} />
       </div>)}
       {status === "PENDING" ? (
@@ -302,9 +336,22 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
   );
 }
 
-function AddedStop({ poiId, start }: { poiId: string; start: string }) {
-  const place = useQuery({ queryKey: ["poi", poiId], queryFn: () => api.get<Place>(`/pois/${poiId}`), staleTime: 60_000 });
-  return <div className="added"><span className="num">{start}</span> <b>{place.data?.name ?? poiId}</b> <span className="muted tiny">{place.data?.area}</span></div>;
+function AddedStop({ poiId, start, date, version, removed, showDate, fallbackName }: {
+  poiId: string; start: string; date: string; version?: string; removed?: boolean; showDate?: boolean; fallbackName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const place = useQuery({ queryKey: ["poi", poiId, version], queryFn: () => api.get<Place>(
+    `/pois/${encodeURIComponent(poiId)}${version ? `?version=${encodeURIComponent(version)}` : ""}`), staleTime: 60_000 });
+  const name = place.data?.name ?? fallbackName ?? poiId;
+  return <div className={removed ? "removed" : "added"}>
+    {showDate && <div className="tiny muted">{date}</div>}
+    <span className="num">{start}</span>{" "}
+    <button type="button" className="proposal-place" onClick={() => setOpen(true)} aria-label={tr("View details for {place}", { place: name })}>
+      {removed ? <s>{name}</s> : <b>{name}</b>} · {tr("View place details")}
+    </button>
+    <div className="muted tiny">{place.data?.category || tr("Category not available")}{place.data?.area ? ` · ${place.data.area}` : ""}</div>
+    <PlaceSheet poiId={open ? poiId : null} onClose={() => setOpen(false)} dates={[date]} start={start} version={version} />
+  </div>;
 }
 
 function Thinking({ question }: { question: string }) {

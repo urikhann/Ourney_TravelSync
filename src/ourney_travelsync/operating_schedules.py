@@ -4,6 +4,10 @@ from datetime import date
 from sqlalchemy import inspect,text,bindparam
 
 def validate_schedule(schedule):
+ if schedule.get('schema_version')=='provisional-hours-1.0':
+  try:from .provisional_schedules import validate_provisional
+  except ImportError:from provisional_schedules import validate_provisional
+  return validate_provisional(schedule)
  if schedule.get('schema_version')!='normalized-hours-1.0':raise ValueError('unsupported schedule schema')
  date.fromisoformat(schedule['effective_from'])
  weekly=schedule['weekly']

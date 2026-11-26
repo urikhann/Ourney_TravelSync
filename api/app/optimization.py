@@ -19,6 +19,7 @@ from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyCom
 
 from ourney_travelsync.planning_categories import visit_role
 from ourney_travelsync.breakfast_metadata import breakfast_metadata, inferred_breakfast_suitability
+from ourney_travelsync.place_identity import visit_identity
 from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
 
 from . import config
@@ -147,6 +148,21 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         if (len(locked_rows) != len(body.locked_items)
                 or any(p.id in banned or banned_tags.intersection(p.tags or []) for p in locked_rows)):
             raise HTTPException(422, "optimizer_invalid_locks")
+        by_id = {p.id: p for p in locked_rows}
+        conflicts = []
+        for day in body.days:
+            roles = {}
+            for lock in body.locked_items:
+                if lock.date == day.date:
+                    p = by_id[lock.poi_id]
+                    role, _ = visit_role({**p.features, "category_name": p.category, "tags": p.tags})
+                    roles.setdefault(role, []).append(p.id)
+            for role, limit in (("cafe", body.daily_composition.max_cafes), ("meal", body.daily_composition.max_meals)):
+                if len(roles.get(role, [])) > limit:
+                    conflicts.append(dict(date=day.date.isoformat(), rule="max_cafes" if role == "cafe" else "max_meals",
+                                          limit=limit, locked_count=len(roles[role]), poi_ids=roles[role]))
+        if conflicts:
+            raise HTTPException(422, {"code": "optimizer_lock_composition_conflict", "conflicts": conflicts})
     if preflight_only and body.duration_overrides:
         found = db.scalars(select(Poi.id).where(Poi.dataset_version == run.dataset_version,
                                                Poi.id.in_(body.duration_overrides))).all()
@@ -178,6 +194,7 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         breakfast_record = {"enriched_metadata": p.enriched_metadata, "category_name": p.category}
         breakfast, breakfast_hours = breakfast_metadata(breakfast_record)
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
+                                    visit_identity=visit_identity(p.name, p.road_address or p.address),
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
                                     personal_scores=scores, relevance=relevance, tags=tuple(p.tags),
@@ -192,6 +209,15 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
     points = {f"{kind}:{d.date}": getattr(d, f"{kind}_point").model_dump(mode="json")
               for d in body.days for kind in ("start", "end")}
     return members, candidates, daily, points, rows, version.mapping_version
+
+
+def with_visit_identities(req, db):
+    """Upgrade old private replay requests using only their pinned catalogue."""
+    rows = db.scalars(select(Poi).where(Poi.dataset_version == req.dataset_version,
+                                       Poi.id.in_([p.poi_id for p in req.candidates]))).all()
+    identities = {p.id: visit_identity(p.name, p.road_address or p.address) for p in rows}
+    return req.model_copy(update={"candidates": tuple(p.model_copy(update={
+        "visit_identity": identities.get(p.poi_id, p.visit_identity)}) for p in req.candidates)})
 
 
 def catalogue_request(run, body, db):

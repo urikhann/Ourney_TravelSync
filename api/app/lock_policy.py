@@ -1,5 +1,6 @@
 """Protection provenance. Votes are not locks; legacy retention needs proof."""
 from zoneinfo import ZoneInfo
+import copy
 
 from sqlalchemy import select
 
@@ -10,7 +11,7 @@ def provenance(db, audit, depth=0):
     if audit is None:
         return {}, set()
     if "lock_provenance" in audit.input:
-        return dict(audit.input["lock_provenance"]), set()
+        return dict(audit.input["lock_provenance"]), set(audit.input.get("temporary_lock_ids", []))
     normalize = lambda lock: {k: v for k, v in lock.items() if v is not None}
     configured = {l["poi_id"]: normalize(l) for l in audit.input.get("configuration", {}).get("locked_items", [])}
     if db is not None and depth < 20:
@@ -61,3 +62,27 @@ def describe(plan, audit, db, now):
                 lock_reason=reason, completed=completed,
                 protection_reason=reason or ("completed_activity" if completed else None))
     return out
+
+
+def planning_configuration(plan, audit, latest, db, now):
+    """Restore form settings while taking locks only from the selected saved plan.
+
+    Failed/private solver attempts are diagnostics, not saved user lock choices.
+    This changes form defaults only; incoming explicit locks are never stripped.
+    """
+    raw = (latest.input.get("configuration") if latest else None) or (audit.input.get("configuration") if audit else None)
+    if raw is None:
+        return None
+    result = copy.deepcopy(raw)
+    if plan is None or audit is None:
+        return result
+    info = describe(plan, audit, db, now)
+    requested = {l["poi_id"]: l for l in audit.input.get("configuration", {}).get("locked_items", [])}
+    locks = []
+    for day in plan.days:
+        for item in day["items"]:
+            if info[f"{day['date']}@{item['start']}"]["locked"]:
+                locks.append(copy.deepcopy(requested.get(item["poi_id"],
+                    dict(poi_id=item["poi_id"], date=day["date"], start_min=item["start_min"]))))
+    result["locked_items"] = locks
+    return result

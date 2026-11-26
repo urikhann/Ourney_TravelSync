@@ -1,26 +1,34 @@
 Optional evening bars and pubs
 
-Branch: feature/evening-bars-pubs
+In Plan > More options, ?Try to include an evening bar or pub? works like optional
+breakfast. It defaults off and automatically chooses a suitable venue; users do
+not need to select a specific bar or day. The normal planning submission persists
+this preference as daily_composition.evening_enabled.
 
-The planning form now offers optional evening choices from the recommendation
-run's pinned dataset. The authenticated endpoint checks group membership and
-current place/tag exclusions; an alcohol exclusion returns no choices. Searching
-and browsing make no route calls and change no saved plan.
+Retrieval retains up to three evening alternatives per day without displacing the
+ordinary meal/activity shortlist, within the existing 60-candidate cap. CP-SAT
+prefers a feasible optional evening stop and allows up to one per day. If none
+fits, it keeps a valid day without an evening stop and the UI explains the omission.
+Existing explicit multi-venue locks remain mandatory and are not silently removed.
 
-Including a choice adds a day-specific must-visit to the form. Rebuilding runs
-the normal candidate, operational-data, route, solver and final-validation flow.
 Bars/pub categories and alcohol tags define a separate evening role, before
 food/cafe classification. They do not count as dinner, cafe or activity variety.
-Unselected evening venues are not shortlisted automatically. Selected venues
-must fit after 18:00, return travel, known closures and group exclusions. E3
-independently checks explicit selection and evening timing. A 60-minute stay is
-an estimate; existing duration overrides remain available.
+Evening visits must start at 18:00 or later and fit the full visit, return travel,
+member availability, known opening intervals/closures and hard exclusions. The
+existing unknown-hours policy and warnings remain unchanged. Independent E3
+validation checks evening consent, timing and the automatic per-day limit.
 
-The packaged V4 catalogue currently contains 20 source-category matches. This
-does not add new places or prove their operating hours. The existing app policy
-allows unknown hours with warnings; known closures remain enforced. The feature
-uses the same policy and never claims that a listed choice is already feasible.
+Driving planning verifies both the preferred path and a path skipping optional
+breakfast/evening visits. A slow or unavailable optional route can therefore be
+omitted while keeping a verified feasible schedule. Solver budgets and provider
+quotas remain in place. Earlier explicit evening locks can still be removed using
+the timeline lock control; turning off the optional preference does not erase them.
 
-The UI does not publish a change until the user rebuilds. Existing must-visit
-controls let the user remove an included evening choice. This branch has not
-been deployed over the running stack.
+The authenticated /evening-choices endpoint remains available for compatibility;
+the planning form no longer requires manual venue selection. No catalogue import,
+live database change or deployment is part of this UI/planning correction.
+
+Local verification: root suite 493 passed (2 skipped); API suite 210 passed
+(2 skipped); recommender service 18 passed; agent service 55 passed. TypeScript,
+Vite and wheel builds passed. See issues_16_29_31_audit.md for issue coverage and
+validation limits. Live-provider behavior was not exhaustively tested.

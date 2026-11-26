@@ -10,11 +10,12 @@ from ourney_travelsync.optimizer.contracts import Lock, PlanRequest, Visit
 from ourney_travelsync.optimizer.repair import rebuild_day
 from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.replacement_intent import resolve_target
+from ourney_travelsync.place_identity import candidate_identity
 
 from . import config, replacements as repair, services, planning_intents
 from .drive_planning import plan_drive, solve_checked
 from .models import OptimizationRun, Poi, RecommendationRun
-from .optimization import GenerateInput, fingerprint, solver_request, state
+from .optimization import GenerateInput, fingerprint, solver_request, state, with_visit_identities
 
 
 def failure(reason, ko, *, details=None):
@@ -45,14 +46,19 @@ def failure(reason, ko, *, details=None):
     if text is None and reason.startswith("agent_"):
         text = ("The assistant service failed before returning a planning result. The saved itinerary is unchanged.",
                 "계획 결과를 받기 전에 도우미 서비스에서 오류가 발생했어요. 저장된 일정은 유지됩니다.")
+    reply = text[bool(ko)] if text else repair.explanation(reason, ko)
+    if any(e.endswith(":CONSECUTIVE_FOOD_DRINK") for e in details or []):
+        context = ("Direct removal would put two food/drink stops in a row. This trip requires an activity between them. ",
+                   "이 장소만 제거하면 음식·음료 일정이 연속돼요. 이 여행은 그 사이에 활동 일정이 필요합니다. ")
+        reply = context[bool(ko)] + reply
     return dict(state="NEEDS_CLARIFICATION" if reason in {"scope_date_required", "no_pending_action", "ambiguous_pending_action",
                 "ambiguous_target_poi", "target_poi_not_found", "unsupported_replacement_constraints", "invalid_pending_action"} else "FAILED",
-        reply=text[bool(ko)] if text else repair.explanation(reason, ko), reason=reason,
+        reply=reply, reason=reason,
         diagnostic_code=reason, validation_errors=details or [], proposal=None, tool_calls=[], language="ko" if ko else "en")
 
 
 def normalized_request(plan, audit, db):
-    req = PlanRequest.model_validate(audit.optimizer_request)
+    req = with_visit_identities(PlanRequest.model_validate(audit.optimizer_request), db)
     protected = repair.protected(plan, audit, db)
     locks = tuple(Lock(poi_id=i["poi_id"], date=d["date"], start_min=i["start_min"])
                   for d in plan.days for i in d["items"] if i["poi_id"] in protected)
@@ -85,20 +91,27 @@ def strict_new_hours(req, existing):
     return req.model_copy(update={"candidates": tuple(candidates)})
 
 
-async def scoped_solve(db, trip, message, plan, audit, req, original, action, protected, rows):
+async def scoped_solve(db, trip, message, plan, audit, req, original, action, protected, rows,
+                       *, retained_ids=None, routing_attempts=None):
     scope = action["action_type"]
     repair.log.info("planning_action request=%s trip=%s scope=%s stage=start", message.id, trip.id, scope)
-    dates = {action["date"]} if scope == "replan_day" else {d["date"] for d in plan.days}
+    dates = {action["date"]} if scope in {"replan_day", "remove_poi"} else {d["date"] for d in plan.days}
     if None in dates or not dates <= {d["date"] for d in plan.days}:
         raise HTTPException(409, "scope_date_required")
     preserved = {v.poi_id for d in original if d.date.isoformat() not in dates for v in d.items}
     raw = copy.deepcopy(audit.input["configuration"])
     raw["days"] = [d for d in raw["days"] if d["date"] in dates]
     raw["locked_items"] = [l.model_dump(mode="json") for l in req.locked_items if l.date.isoformat() in dates]
+    if retained_ids is not None:
+        # Solver-only retention constraints: removal cannot add or drop other POIs.
+        # Genuine protection remains in req and in the persisted lock provenance.
+        fixed = {l["poi_id"]: l for l in raw["locked_items"]}
+        raw["locked_items"] = [fixed.get(pid, dict(poi_id=pid, date=action["date"])) for pid in sorted(retained_ids)]
     raw["daily_composition"]["meal_overrides"] = [m for m in raw["daily_composition"].get("meal_overrides", []) if m["date"] in dates]
     body = GenerateInput.model_validate(raw)
     candidates = tuple(p.model_copy(update={"allowed_dates": tuple(d.date for d in req.days if d.date.isoformat() in dates and
-                       (p.allowed_dates is None or d.date in p.allowed_dates))}) for p in req.candidates if p.poi_id not in preserved)
+                       (p.allowed_dates is None or d.date in p.allowed_dates))}) for p in req.candidates
+                       if p.poi_id not in preserved and (retained_ids is None or p.poi_id in retained_ids))
     context = copy.deepcopy(audit.planning_data["request"])
     ids = {p.poi_id for p in candidates}
     context["days"] = [d for d in context["days"] if d["date"] in dates]
@@ -106,7 +119,8 @@ async def scoped_solve(db, trip, message, plan, audit, req, original, action, pr
     context["day_candidate_ids"] = {d: [p.poi_id for p in candidates if date.fromisoformat(d) in p.allowed_dates] for d in dates}
     context["points"] = {k: v for k, v in context["points"].items() if any(k.endswith(d) for d in dates)}
     work = OptimizationRun(trip_id=trip.id, recommendation_run_id=audit.recommendation_run_id,
-        requested_by=message.author_id, status="VALIDATING", input={"action_type": scope, "chat_message_id": message.id, "base_run_id": audit.id})
+        requested_by=message.author_id, status="VALIDATING", input={"action_type": scope, "chat_message_id": message.id,
+            "base_run_id": audit.id, **({"retained_ids": sorted(retained_ids)} if retained_ids is not None else {})})
     db.add(work)
     db.flush()
     context["run_id"] = f"{audit.recommendation_run_id}:{work.id}"
@@ -114,10 +128,16 @@ async def scoped_solve(db, trip, message, plan, audit, req, original, action, pr
     prepared = req.members, candidates, context["days"], context["points"], {p.id: p for p in rows if p.id in ids}, req.mapping_version
     run = db.get(RecommendationRun, audit.recommendation_run_id)
     existing = {v.poi_id for d in original for v in d.items}
-    transform = lambda r: strict_new_hours(r, existing)
+    def transform(r):
+        r = strict_new_hours(r, existing)
+        if retained_ids is not None:
+            r = r.model_copy(update={"preferred_start_minutes": {v.poi_id: v.start_min for d in original
+                if d.date.isoformat() in dates for v in d.items if v.poi_id in retained_ids}})
+        return r
     try:
         if body.transport_mode == "drive":
-            updated, _, result, evidence = await plan_drive(run, body, prepared, context, work, db, request_transform=transform)
+            updated, _, result, evidence = await plan_drive(run, body, prepared, context, work, db,
+                request_transform=transform, initial_attempts=routing_attempts)
         else:
             evidence = await services.planning_data(context)
             updated = transform(solver_request(run, work.id, body, prepared, context, evidence))
@@ -182,6 +202,7 @@ async def execute(db, trip, message, plan, audit, action):
         return failure("no_unlocked_activities", ko)
     original = repair.plans(plan.days)
     rows = db.scalars(select(Poi).where(Poi.dataset_version == req.dataset_version)).all()
+    repair_errors = []
     try:
         async with asyncio.timeout(config.PLANNING_ACTION_SECONDS):
             if scope.startswith("replan_"):
@@ -205,7 +226,8 @@ async def execute(db, trip, message, plan, audit, action):
                     req, evidence = await repair.refresh(req, audit, used-{pid}, [(day.date, left, right)])
                     changed = rebuild_day(req, day, [(v, v.start_min) for v in day.items if v.poi_id != pid])
                 else:
-                    matches = [p for p in req.candidates if p.poi_id not in used and any(
+                    used_identities = {candidate_identity(p) for p in req.candidates if p.poi_id in used}
+                    matches = [p for p in req.candidates if candidate_identity(p) not in used_identities and any(
                         action.get("target_name", "").casefold() == n.casefold() for n in
                         next(([r.name, r.name_ko] for r in rows if r.id == p.poi_id), []) if n)]
                     if len(matches) != 1:
@@ -244,6 +266,14 @@ async def execute(db, trip, message, plan, audit, action):
                 affected = {day_string}
             checked = validate_final(req, days)
             repair.log.info("planning_action request=%s scope=%s stage=e3 passed=%s errors=%s", message.id, scope, checked.passed, checked.errors)
+            if scope == "remove_poi" and not checked.passed and all(
+                    e.endswith(":CONSECUTIVE_FOOD_DRINK") for e in checked.errors):
+                repair_errors = list(checked.errors)
+                retained = {v.poi_id for v in day.items if v.poi_id != pid}
+                req, days, evidence, affected = await scoped_solve(db, trip, message, plan, audit, req, original,
+                    {**action, "date": day_string}, protected, rows, retained_ids=retained,
+                    routing_attempts=evidence.get("routing_attempts"))
+                checked = validate_final(req, days)
             if not checked.passed:
                 return failure("final_validation_failed", ko, details=list(checked.errors))
             old = {v.poi_id: (d.date.isoformat(), v) for d in original for v in d.items}
@@ -261,9 +291,9 @@ async def execute(db, trip, message, plan, audit, action):
                 action_type=scope, affected_dates=sorted(affected), affected_activities=changes, draft_id=draft.id,
                 validation_status="PASSED", repair_strategy=scope, tool_calls=[], language="ko" if ko else "en")
     except TimeoutError:
-        return failure("planning_action_timeout", ko)
+        return failure("planning_action_timeout", ko, details=repair_errors)
     except HTTPException as exc:
-        return failure(str(exc.detail), ko)
+        return failure(str(exc.detail), ko, details=repair_errors)
     except (ValueError, KeyError, TypeError) as exc:
         repair.log.warning("planning_action_invalid_response scope=%s type=%s", scope, type(exc).__name__)
-        return failure("final_validation_failed", ko)
+        return failure("final_validation_failed", ko, details=repair_errors)
