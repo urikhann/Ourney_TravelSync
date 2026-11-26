@@ -132,7 +132,26 @@ type SavedPlanProposal = { kind: "switch"; itinerary_id: number; label: string }
 // Group approval of a suggestion (issue #19). A majority of members decides.
 export type ProposalStatus = "PENDING" | "APPLYING" | "APPLIED" | "REJECTED" | "FAILED" | "STALE";
 export type ProposalVotes = { approve: number; reject: number; needed: number; members: number; mine: boolean | null };
+export type ProposalStopDetail = {
+  poi_id: string; date: string; start_min: number; end_min: number; duration_minutes: number; duration_status: string;
+  place: { id: string; name: string; category: string | null; description: string | null;
+    description_source_url: string | null; image_url: string | null; address: string | null;
+    latitude: number | null; longitude: number | null; features: Category[]; map_url: string | null; metadata_available: boolean };
+  hours: { status: string; windows: { start_min: number; end_min: number }[]; fits_visit: boolean | null; closed: boolean | null; checked_at: string | null };
+  cost_per_person: { value: number | null; status: string; source: string | null; checked_at: string | null };
+  recommendation_score: { value: number; semantics: "normalized_preference" | "relative_relevance" | "unspecified"; rank: number } | null;
+  recommendation_reasons: { code: string; text: string }[];
+};
+export type ProposalMeasures = { travel_minutes: number; itinerary_minutes: number; visit_minutes: number; waiting_minutes: number; stops: number };
+export type ProposalDetails = {
+  schema_version: "proposal-details-1.0"; dataset_version: string; snapshot_created_at: string | null;
+  original: ProposalStopDetail[]; proposed: ProposalStopDetail[];
+  adjusted: { poi_id: string; name: string; date: string; before_start_min: number; after_start_min: number; before_end_min: number; after_end_min: number; stop: ProposalStopDetail }[];
+  impact: { before: ProposalMeasures; after: ProposalMeasures; change: ProposalMeasures;
+    days: { date: string; before: ProposalMeasures; after: ProposalMeasures; change: ProposalMeasures }[] } | null;
+};
 export type AgentInfo = {
+  proposal_details?: ProposalDetails | null;
   dataset_version?: string | null;
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;

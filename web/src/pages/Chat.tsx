@@ -14,6 +14,7 @@ import { ErrorBox, Loading } from "../ui";
 import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
+import ProposalDetails from "../components/ProposalDetails";
 import { Avatar } from "../components/Avatar";
 import { locale, t as tr } from "../i18n";
 import "./chat.css";
@@ -300,13 +301,16 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
     <div className={"proposal " + status.toLowerCase()}>
       <div className="eyebrow" style={{ color: "var(--purple)" }}>{tr("Suggested change · {date}", { date: p.date })}</div>
       {a.action_type && <div className="small muted">{tr(scopeLabels[a.action_type] ?? "Suggested change")} · {(a.affected_dates ?? [p.date]).join(", ")}</div>}
+      {a.proposal_details ? <ProposalDetails details={a.proposal_details} /> : <>
+      <div className="muted tiny">{tr("Detailed snapshot unavailable for this older proposal.")}</div>
       {removed.map((r, index) => <AddedStop key={r.poi_id} poiId={r.poi_id} start={r.start}
         date={p.remove_item_ids[index]?.split("@")[0] ?? p.date} version={a.dataset_version ?? undefined} removed showDate={multipleDates} fallbackName={r.name} />)}
       {!removed.length && p.remove_item_ids.length > 0 &&
         <div className="small muted">{p.remove_item_ids.length > 1 ? tr("Remove {n} stops", { n: p.remove_item_ids.length }) : tr("Remove 1 stop")}</div>}
       {p.add.map((x) => <div key={x.poi_id + x.start}>{multipleDates && <span className="tiny muted">{x.date ?? p.date}</span>}<AddedStop poiId={x.poi_id} start={x.start} date={x.date ?? p.date} version={a.dataset_version ?? undefined} /></div>)}
+      </>}
       {a.validation_status === "PASSED" && <div className="tiny muted">{tr("Schedule validated before voting")}</div>}
-      {a.affected_activities?.map((x) => <div key={x.date + x.poi_id} className="small muted">
+      {!a.proposal_details && a.affected_activities?.map((x) => <div key={x.date + x.poi_id} className="small muted">
         {tr("Adjusted activity time")}: {x.date} <AddedStop poiId={x.poi_id} date={x.date} version={a.dataset_version ?? undefined}
           start={`${Math.floor(x.start_min / 60).toString().padStart(2, "0")}:${(x.start_min % 60).toString().padStart(2, "0")}`} />
       </div>)}

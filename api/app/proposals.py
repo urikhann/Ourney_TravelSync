@@ -89,9 +89,13 @@ def agent_views(db: Session, trip: Trip, rows: list[ChatMessage], user_id: str) 
         return {}
     votes = list(db.scalars(select(ProposalVote).where(ProposalVote.message_id.in_(ids))))
     _, audit = published_plan(db, trip.id)
-    source_ids = {m.agent.get("plan_run_id") for m in rows if m.id in ids}
-    versions = {a.id: a.optimizer_request.get("dataset_version") for a in db.scalars(
-        select(OptimizationRun).where(OptimizationRun.trip_id == trip.id, OptimizationRun.id.in_(source_ids)))}
+    source_ids = {m.agent.get(key) for m in rows if m.id in ids for key in ("plan_run_id", "draft_id")
+                  if type(m.agent.get(key)) is int}
+    audits = {a.id: a for a in db.scalars(select(OptimizationRun).where(
+        OptimizationRun.trip_id == trip.id, OptimizationRun.id.in_(source_ids)))}
+    versions = {aid: a.optimizer_request.get("dataset_version") for aid, a in audits.items()}
+    from .proposal_details import detail_views
+    details = detail_views(db, trip.id, rows, audits)
     members = len(trip.members)
     out = {}
     for m in rows:
@@ -101,7 +105,8 @@ def agent_views(db: Session, trip: Trip, rows: list[ChatMessage], user_id: str) 
         status = m.agent.get("proposal_status", PENDING)
         if status == PENDING and (not m.agent.get("draft_id") or m.agent.get("plan_run_id") != (audit.id if audit else None)):
             status = STALE  # the plan changed (or this suggestion predates voting)
-        out[m.id] = {**m.agent, "dataset_version": versions.get(m.agent.get("plan_run_id")), "proposal_status": status, "votes": {
+        out[m.id] = {**m.agent, "dataset_version": versions.get(m.agent.get("plan_run_id")),
+            "proposal_details": details.get(m.id), "proposal_status": status, "votes": {
             "approve": sum(v.approve for v in mine), "reject": sum(not v.approve for v in mine),
             "needed": needed(members), "members": members,
             "mine": next((v.approve for v in mine if v.user_id == user_id), None)}}
