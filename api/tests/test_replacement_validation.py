@@ -219,13 +219,34 @@ def test_tc022_multiday_publication_preserves_unaffected_day(planning_adapter, m
     from .test_optimizer_integration import ready, generate, configuration
     from copy import deepcopy
     monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 5)
+    # This checks publication isolation, so provide a guaranteed feasible swap.
+    # An unrestricted two-day optimum can use every day-one activity, leaving
+    # only meals or an overlong festival as alternatives on Linux.
+    activities = {"2026-11-06": {"bmuseum", "gwangalli", "shinsegae"},
+                  "2026-11-07": {"gukje", "yacht", "cinema"}}
+    meals = {"2026-11-06": "stew", "2026-11-07": "milmyeon"}
+    def publication_routes(request, response):
+        endpoints = set(request["points"])
+        response["edges"] = [e for e in response["edges"]
+            if {e["origin"], e["destination"]} <= activities[e["date"]] | {meals[e["date"]]} | endpoints]
+        return response
+    planning_adapter.transform = publication_routes
     h, tid, _ = ready(individual_method="feature_mean", days=("2026-11-06", "2026-11-07"))
-    response = generate(h, tid, configuration(days=("2026-11-06", "2026-11-07")))
+    body = configuration(days=("2026-11-06", "2026-11-07"))
+    body["duration_overrides"] = {pid: 60 for ids in activities.values() for pid in ids}
+    for day in body["days"]:
+        day["end_min"] = 810  # two activities plus lunch fit; a third activity does not
+    response = generate(h, tid, body)
     assert response.status_code == 200, response.text
     plan = response.json()["plans"][0]
     with SessionLocal() as db:
         unaffected = deepcopy(db.get(Itinerary, plan["id"]).days[1])
-    _, _, proposal = swap_for(tid, plan)
+    used = {i["poi_id"] for d in plan["days"] for i in d["items"]}
+    spare = activities["2026-11-06"] - used
+    assert len(spare) == 1, plan
+    target = next(i for i in plan["days"][0]["items"] if i["poi_id"] in activities["2026-11-06"])
+    proposal = {"date": "2026-11-06", "remove_item_ids": [f"2026-11-06@{target['start']}"],
+                "add": [{"poi_id": spare.pop(), "start": target["start"]}]}
     msg = ask(h, tid, proposal)
     assert msg["agent"].get("validation_status") == "PASSED", msg
     voted = vote(h, tid, msg["id"])
