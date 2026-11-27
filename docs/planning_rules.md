@@ -38,8 +38,9 @@ optimizer clients retain travel minimization by default.
 
 The app does not enforce a budget. It displays the known-cost subtotal and the
 number of visits with missing fees. Unknown fees are not marked free.
-Walking/transit, weather, accessibility assistance, reservations, and adjustable
-pace are not supported planning features.
+Walking/transit, weather forecasts, accessibility assistance, reservations, and
+adjustable pace are not supported planning features. Chat can request estimated
+indoor alternatives or less walking through the existing replanning workflow.
 
 Saved plans retain their captured rules. Rebuild an older plan to apply the
 current policy; the itinerary view identifies plans without opening-hours checks.

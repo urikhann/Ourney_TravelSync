@@ -105,7 +105,7 @@ Raw descriptions and operating text do not become verified solver constraints.
 Legacy `poi_hours` and `poi_exceptions` are keyed by place ID. Normalized imports
 add dataset-scoped schedules with effective dates and preserved split windows.
 See [schedule import](normalized_operating_hours.md) and
-[planning policy](agreed_planning_implementation_20261117.md).
+[planning policy](planning_rules.md).
 
 ## Reproducible verification
 

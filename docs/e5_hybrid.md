@@ -116,7 +116,7 @@ Legacy TF-IDF remains selectable for GFAR/average, with no cosine misery veto.
 
 Itinerary feasibility is checked separately by the optimizer and the API's
 independent E3 validation. Scoring does not establish route or operating availability.
-See [planning rules](agreed_planning_implementation_20261117.md).
+See [planning rules](planning_rules.md).
 
 ## API, CLI, persistence and display
 

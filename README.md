@@ -14,7 +14,21 @@ See [optimizer app setup](docs/optimizer_app_integration.md).
 Chat replacements are [validated before voting](docs/localized_itinerary_repair.md),
 using fixed-slot/local/day-only repair and atomic approval of the stored draft.
 
-## Install and run
+## Run the application
+
+Development is complete. Start with the [application guide](docs/application_guide.md)
+for accounts, group preferences, itinerary generation, maps and chat proposals.
+Use [Docker setup](DOCKER.md) for local services or [production deployment](deploy/DEPLOY.md)
+for hosting. Fresh setup requires explicit dataset installation and activation.
+The default Compose release uses V4; V5 is an explicit selection. The standalone
+Python loader defaults to V3. See [dataset snapshots](docs/dataset_snapshots.md).
+
+The app supports driving itineraries, optional breakfast/evening stops, protected
+visits and group-approved changes. Known hours constrain visits; unknown or
+provisional hours retain warnings. Budget enforcement is outside the app's scope.
+Full setup, configuration and architecture guides are indexed in [docs](docs/README.md).
+
+## Install the Python package
 
 Use Python 3.13 and `uv`. From the repository root:
 
@@ -81,7 +95,9 @@ src/ourney_travelsync/
     viewer.py         optional viewer implementation
 apps/data_viewer.py   thin Streamlit entry point
 database/            schema, explicit migrations, mapping and contracts
-notebooks/compare_recommenders.ipynb
+api/                  authentication, trips, recommendations and planning API
+web/                  React application
+services/             recommender, optimizer, planning-data, agent and mocks
 scripts/              thin wrappers, diagnostics and wheel verification
 tests/                default offline suite
 integration_tests/    opt-in disposable PostgreSQL checks
@@ -91,7 +107,7 @@ docs/                 configuration and architecture guides
 
 ## Data and recommendation behavior
 
-The authoritative Git-tracked CSV is
+The standalone Python loader and CLI default CSV is
 `src/ourney_travelsync/data/travelsync_poi_metadata_enriched_v3.csv`: **3,570 records, 72
 columns, 3,570 unique place IDs**. SHA256:
 `3e35a4722b71d788d63c9ac1e4b5060c1df931a54cec739d7475389f404ec5e9`.
@@ -125,7 +141,6 @@ Its score is selection gain, not mean satisfaction. Compare algorithms using
 `evaluation.evaluate_satisfaction` only with suitable feature-rating proxies;
 do not interpret its output on hybrid scores as satisfaction. Empty
 lists have undefined satisfaction. The notebook demonstrates this comparison.
-AGREE is unimplemented; see `docs/agree_design.md`.
 
 The pipeline normalizes the full catalogue, then filters explicit eligible/excluded
 IDs before candidate selection and aggregation. Database runs
@@ -184,8 +199,8 @@ checks, explicitly export `TRAVELSYNC_TEST_DATABASE_URL` for a disposable databa
 then run `uv run --extra postgres pytest -q integration_tests`. This creates and
 drops a uniquely named test schema. Never point it at a shared database.
 CI runs minimal and optional-dependency suites, installed-wheel checks, and
-disposable PostgreSQL tests. See [package architecture](docs/cleanup_report.md)
-and [optimizer tests](docs/optimizer_verification.md).
+disposable PostgreSQL tests. See [package architecture](docs/architecture.md)
+and [test commands](docs/optimizer_verification.md).
 
 Rule labels, tied category scores and narrow example profiles limit evaluation.
 Source-composition diagnostics do not measure recommendation quality or fairness.

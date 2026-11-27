@@ -122,22 +122,11 @@ Chat supports indoor alternatives and less walking. Budget optimization, cheaper
 suggestions and cost filtering are excluded. Agent tools omit price fields. Opening
 hours checks keep the itinerary's pinned dataset; unknown hours remain unknown.
 
-The default Gemini provider/model configuration is unchanged. Gemini failures keep the rules
-fallback, but new tool summaries distinguish HTTP 404 (model unavailable to this
-API account), 429 (quota/rate limit), and 503 (provider overload). Logs include the
-attempted model and sanitized reason, without raw provider payloads or API keys.
-Old chat messages keep their original saved summaries.
+Provider failures retain sanitized reason codes for model unavailability,
+quota/rate limits, overload and timeouts. Raw provider payloads and keys are not
+logged. Existing chat messages retain their saved summaries.
 
-A direct provider diagnostic on 21 November 2026 confirmed the configured primary
-model exists and the key can list models. The primary returned 503/high demand
-and also timed out in subsequent checks; `gemini-3.5-flash-lite` answered the same
-tool-calling probe, while `gemini-2.5-flash` returned HTTP 404 with the provider
-stating it is unavailable to new users. This explains a concrete failing fallback
-path, but the exact error behind an already-saved generic `ClientError` cannot be
-recovered from that summary alone. Provider/model selection is deferred to a
-separate branch. No local-model integration or model download was added.
-
-Rebuild the agent to use the cleaned tools and error messages:
+Rebuild the agent after source or provider configuration changes:
 
 ```powershell
 docker compose up -d --build agent

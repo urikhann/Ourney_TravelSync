@@ -5,12 +5,6 @@ starts, the order of visits, and where it returns. Numbered markers match the
 ordered place list. Selecting either reveals the saved visit time and category;
 the existing place sheet provides further details.
 
-This was selected for presentation payoff because the plan already supports
-recommendations, constrained scheduling, localized repairs and group voting, but
-the Plan screen previously required the audience to reconstruct the geography
-from a text timeline. A map makes that result visible without changing those
-algorithms or adding another LLM, routing provider or API key.
-
 ## Using the feature
 
 1. Open a saved itinerary in **Plan** and select a day.
@@ -22,9 +16,6 @@ algorithms or adding another LLM, routing provider or API key.
    to explore. Nearby markers can overlap at a wide zoom; zoom in or use the list.
 5. Select another day or plan to see its own saved positions and schedule.
 
-For a short presentation, show the generated plan geographically, inspect one
-stop, and switch days. Then use the existing chat proposal and approval flow;
-return to the selected plan and reopen its map to show the approved result.
 Opening or interacting with a map never casts a vote or changes the itinerary.
 
 ## Data boundaries
@@ -50,14 +41,6 @@ Opening or interacting with a map never casts a vote or changes the itinerary.
 
 ## Verification
 
-- `cd web && npm test`: ordered visits and original indices, saved endpoints,
-  inclusion of return travel, missing/invalid positions, no invented shortcuts,
-  day changes, empty days and coincident positions.
-- `pytest api/tests/test_itinerary_map.py`: saved endpoints remain attached to the
-  displayed plan after a newer failed attempt; read-only behavior, unchanged votes
-  and replay data, missing legacy endpoints and public-field whitelisting.
-- TypeScript/Vite production build and the full API suite validate integration.
-- Local headless Edge checks use synthetic UI fixtures for desktop/mobile layouts,
-  day changes, marker/list selection, detail callbacks, English/Korean text, actual
-  tile loading and blocked-tile fallback. They do not establish live trip/provider
-  behavior or physical-device performance. Local preview fixtures are not shipped.
+`web/tests/dayRoute.test.cjs` checks visit order, endpoints, return travel and
+missing coordinates. `api/tests/test_itinerary_map.py` checks saved-plan binding,
+public fields and read-only behavior. See [test commands](optimizer_verification.md).

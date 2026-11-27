@@ -1,7 +1,5 @@
 Routing quota policy
 
-Branch: codex/routing-quota-guard
-
 Separate configurable account quotas replace the combined 200/day cap:
   Endpoint                      Configured quota    Reserve    Usable daily
   Multi-destination (batch)      1,000               10%        900

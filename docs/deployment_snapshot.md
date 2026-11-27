@@ -1,6 +1,6 @@
 # Reproducible enriched deployment
 
-To select the November 25 V5 release, use the [V5 snapshot and import record](poi_enrichment_import_20261125.md).
+To select the November 25 V5 release, use the [snapshot catalogue](dataset_snapshots.md).
 The default configuration documented below selects V4.
 
 E5 hybrid is the accepted recommender, with the existing GFAR integration.
@@ -140,35 +140,9 @@ CSV defaults never substitute for a supplied pinned snapshot. Cache identity cov
 the complete scoring inputs and text, not only the dataset name. The regression
 suite checks database/CSV identity equality and all 74 schedules across seven days.
 
-## Validation on 21 November 2026
+## Artifact integrity and verification
 
-Executed checks: 100 focused core/service tests and 88 API tests passed (one API
-live optimizer test skipped). All 13 dedicated deployment tests passed, including actual
-E5 through an opt-in local cache check. Localhost HTTP verification started the real
-API, recommender and planning-data processes against a disposable SQLite database:
-explicit fresh setup succeeded, an API recommendation persisted actual E5 hybrid
-scoring with matching cache identity, and API restart preserved both diagnostics
-and that historical run. The in-process planning reader matched all 518 schedule/date
-combinations. These are local checks with synthetic preferences, not external-provider
-verification. Logs and smoke output are under `output/deployment-*-tests*.txt` and
-`output/deployment-live-verification.json`. Routine regression tests use
-isolated SQLite and synthetic provider/embedding fixtures. The opt-in command below
-uses the actual local E5 cache without replacing embeddings; it exercises the
-production recommender with the freshly initialized database catalogue and verifies
-non-null semantic scores, effective hybrid method and exact cache identity.
-
-```powershell
-$env:TRAVELSYNC_REAL_E5_INTEGRATION='1'
-$env:TRAVELSYNC_E5_CACHE='output/e5-cache'
-.\.venv\Scripts\python.exe -m pytest tests/test_deployment_consistency.py -q -p no:cacheprovider
-Remove-Item Env:TRAVELSYNC_REAL_E5_INTEGRATION
-```
-
-No Docker/container or disposable PostgreSQL verification was available in this
-session. No external routing provider, new model download, venue-hour accuracy or
-recommendation-quality evaluation is established by these tests. Shared application
-data was not changed; no push, merge or remote deployment was performed.
-
+See [test commands](optimizer_verification.md) for offline and opt-in integration checks.
 
 Snapshot artifact hashes are over the exact packaged bytes. `.gitattributes`
 marks the V4 and operating CSVs as `-text`, preserving their original CRLF bytes

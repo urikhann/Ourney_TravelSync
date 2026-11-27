@@ -27,45 +27,7 @@ otherwise the current itinerary remains unchanged. A validated draft still needs
 the existing group vote. The request is a minimization objective, not a guarantee
 of a globally optimal result within the search and routing budgets.
 
-Follow-up to [validated itinerary repair](localized_itinerary_repair.md), implemented
-on `improvements` after commit `1ec3fae`. No deployment, database activation or
-production data modification was performed.
-
-## Findings: confirmed code defects versus incident hypotheses
-
-Confirmed from the repository and deterministic regressions:
-
-1. **Confirmation had no durable meaning.** `ask_agent` sent a bare `Yes` back to
-   the model. Recent message text was its only link to a preceding question; no
-   pending action recorded target, scope, user authorization, version or expiry.
-2. **Legacy repair could manufacture locks.** The old approval implementation's
-   `keep` attempt put every retained activity into `GenerateInput.locked_items`.
-   `_generate` then rendered every optimizer lock as `locked: true`. A stop added
-   by subsequent gap filling could remain unlocked, giving the observed shape of
-   many locked visits and one flexible visit. This path is reproducible from the
-   old source. It is not proof of this particular trip's provenance.
-3. **The UI hid application failures.** `AgentBubble` displayed the same generic
-   “can't answer right now” sentence for every `FAILED` response, discarding the
-   backend's actual explanation. Successful search/hours badges therefore did not
-   tell the user whether subsequent routing, solving or E3 had failed.
-4. **Gemini ignored its remaining budget.** `GeminiProvider.complete(timeout)`
-   accepted a remaining-time argument but used its fixed 20-second client timeout.
-   The shared 40-second turn budget includes primary-provider retries, backup
-   calls and tool execution. The adapter could start a request longer than the
-   remaining allowance after successful read tools.
-5. **Protection lacked provenance.** The UI called all locked visits “Reserved”.
-   Ordinary approval itself does not write locks: plan voting updates `Vote`;
-   proposal application selects/publishes a version. Initial generation should
-   mark only requested locks. Completed activities need protection but must not
-   be relabeled as user-imposed permanent locks.
-
-The exact historical failure after `@TravelSync Yes.` remains **unconfirmed**.
-The trip ID, correlated server logs, saved audit IDs and deployed revision were
-not supplied. A usable local Docker CLI/runtime was not available at the standard
-Windows path, and no live database investigation was performed. The possible
-remaining-budget timeout, a provider failure on the final answer, routing/data
-failure, infeasible solve, invalid response or persistence error cannot be selected
-as the incident's cause from the badges alone. No production POI facts were invented.
+See [validated itinerary repair](localized_itinerary_repair.md).
 
 ## Execution trace after the read tools
 
@@ -77,9 +39,9 @@ modified itinerary. `TripData.validate` may also check hours again.
 The API then receives the suggestion, resolves its scheduled occurrence, retrieves
 operational/routing evidence, applies E1/E2 and localized repair, and runs complete
 E3 before storing a draft. Chat serialization and transaction commit happen after
-that. The frontend formerly replaced a failure explanation at the last step.
+that.
 
-The corrected confirmation path bypasses the model service entirely:
+The confirmation path bypasses the model service entirely:
 
 ```text
 Persisted question + explicit affirmative / negative
@@ -195,9 +157,8 @@ exception type. Failed scoped optimization attempts retain private audit status 
 reason. Provider payloads, SQL parameters and preference vectors are not logged.
 Exact historical provider timing cannot be reconstructed from old generic badges.
 
-Rebuild the API and agent for these changes. If the earlier repair commit has not
-been deployed, also rebuild the optimizer. Build the production web image or let
-development Vite reload the frontend sources:
+Rebuild API, agent and optimizer together when updating shared planning code.
+For a production frontend, rebuild its image too:
 
 ```powershell
 docker compose up -d --build api agent optimizer
@@ -205,101 +166,14 @@ docker compose up -d --build api agent optimizer
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build web
 ```
 
-## Verification and reproduction
+## Verification and limits
 
-Regression coverage includes English/Korean confirmation, cancellation, missing
-context, multiple pending actions, another user's attempted confirmation, expiry,
-stale itinerary/constraints, concurrent consumption, owner authorization, confirmation
-claim failure, no voting bypass, full/unlocked/day scopes, add/remove, retained legacy
-locks, reservations, ordinary approved visits, solver failure after operational
-verification and missing final model prose. Driving tests use the real selected-route
-repair path with synthetic route responses; day tests preserve the other date's
-stored content. API tests use disposable SQLite and the real E2/E3/CP-SAT.
+Regression tests cover English/Korean confirmation, cancellation, authorization,
+expiry, stale inputs, concurrent consumption, planning scopes, protected visits,
+rollback and provider failure. See [test commands](optimizer_verification.md).
 
-Recorded results (the focused run overlaps the full API run; counts are not additive):
-
-| Check | Actual result |
-|---|---|
-| Full API rerun | **186 passed, 2 skipped**, 9 warnings; 326.59 s |
-| Final affected API modules after the last corrections | **72 passed**, 1 warning; 182.73 s |
-| Agent service, including new confirmation/prose/deadline cases | **55 passed**, 1 warning; 2.89 s |
-| Root offline suite | **466 passed, 2 skipped, 1 failed**, 21 passing subtests; 72.57 s |
-| TypeScript and Vite production build | Passed; final Vite build 3.01 s |
-| Staged/working patch whitespace check | `git diff --check` passed, with existing line-ending warnings |
-
-API skips are the opt-in benchmark and live optimizer test. The root failure is
-`tests/test_agreed_planning_rules.py::test_travel_objective_can_be_disabled_but_return_still_must_fit`:
-its expected objective list omits the existing `waiting_minutes` phase. The same
-failure was reproduced from untouched baseline source in the preceding repair
-work. It was not hidden by changing constraints or expected solver phases.
-
-The first full API attempt found two regressions: unresolved targets were incorrectly
-classified as FAILED, and an older started-activity test compared a dynamic completion
-display marker. The state classification was fixed. The test now checks the unchanged
-stored itinerary, while completion remains a time-dependent view. The subsequent
-full API and final affected-module runs passed.
-
-## Changed files
-
-New implementation modules:
-
-- `api/app/conversation.py`: typed action hints, trusted pending envelopes and atomic confirmation claims.
-- `api/app/planning_intents.py`: exact confirmations and distinct planning scopes.
-- `api/app/lock_policy.py`: protection provenance and conservative legacy classification.
-- `api/app/planning_actions.py`: scoped operations reusing existing repair, solver, E3 and draft persistence.
-
-Updated implementation:
-
-- `api/app/routes/chat.py`, `api/app/config.py`, `.env.example`: action routing,
-  group-checked question references, persistence failures, service diagnostics and bounds.
-- `api/app/replacements.py`, `api/app/proposals.py`: shared persistence/application
-  across scopes, lock provenance, multi-date summaries and existing vote transactions.
-- `api/app/drive_planning.py`: optional request transformation for scoped eligibility;
-  default generation behavior is unchanged.
-- `api/app/routes/itineraries.py`: authoritative protection metadata and explicit-lock labels.
-- `services/agent/brain.py`, `services/agent/providers.py`, `services/agent/tools.py`:
-  structured questions, missing-prose fallback, remaining-budget handling and authoritative protection context.
-- `web/src/pages/Chat.tsx`, `web/src/pages/Plan.tsx`, `web/src/types.ts`, `web/src/i18n.ko.ts`:
-  actual failure text, authorized confirmation controls, scoped/multi-date proposals and accurate protection labels.
-
-Tests/documentation:
-
-- Added `api/tests/test_conversation_actions.py`, `api/tests/test_planning_intents.py`,
-  `services/agent/test_confirmation_output.py`.
-- Updated `api/tests/test_replacement_validation.py` to compare saved content when
-  time-dependent completion metadata changes.
-- Added this report and linked it from `docs/localized_itinerary_repair.md`,
-  `docs/optimizer_app_integration.md`, `services/agent/README.md`.
-
-Concurrent provisional-schedule/data-import work remains separate and was preserved.
-No push or deployment was performed; commit history records the local implementation.
-
-```powershell
-.venv/Scripts/python.exe -m pytest api/tests -q
-.venv/Scripts/python.exe -m pytest tests -q
-Push-Location services/agent
-../../.venv/Scripts/python.exe -m pytest -q
-Pop-Location
-```
-
-For manual testing, use a disposable future-dated trip with a published itinerary.
-Send `@TravelSync replan from scratch again.` as the trip owner. Without protection,
-expect a whole-trip draft or a scoped failure reason. With explicit protection,
-expect an unlocked-only confirmation question. Answer via its button, `@TravelSync
-Yes.` or `@TravelSync 네`. Confirm that no votes or plan changes occur until a
-separate majority approves the validated proposal. Reject/expire/change the plan
-during confirmation and verify that the old action cannot run. Use the regression
-fixtures for injected optimizer/provider/database failures rather than editing live
-operational data.
-
-Remaining limits: search uses the pinned bounded candidate pool and existing route
-providers; add/remove use conservative gap reconstruction rather than a new optimizer.
-Unrecognized new conditions require clarification. Legacy protection without sufficient
-audit evidence remains protected. No live LLM, routing provider, PostgreSQL concurrency
-or browser interaction was exercised in this follow-up; UI type/build checks and
-deterministic transport fixtures are distinct from live validation. Previous latency
-benchmarks describe commit `1ec3fae`, not these new broad planning scopes.
-Old free-text questions that predate structured pending state cannot be safely
-backfilled from prose; their follow-up requires a fresh explicit request. User-defined
-new dates/conditions outside the supported scope grammar require clarification rather
-than automatic changes to the trip's hard constraints.
+Search uses the pinned bounded candidate pool and configured route providers.
+Unknown conditions require clarification. Legacy protection without sufficient
+audit evidence remains protected. Old free-text questions without structured
+pending state require a fresh explicit request. Confirmation prepares a draft;
+a separate group vote is required to apply it.

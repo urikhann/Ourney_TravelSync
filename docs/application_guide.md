@@ -17,6 +17,9 @@
    itinerary and its votes.
 7. Review the stops, unknown-hours warnings, cost subtotal, and solver status,
    then vote on the saved plan.
+8. Open **Your day at a glance ? View map** to explore saved visits. Use chat
+   for a validated replacement or replanning proposal, review its place details,
+   and obtain the separate group approval before applying it.
 
 ## How the components work
 
@@ -36,9 +39,10 @@
 - Availability entry confirms dates within the shared daily window; it does not
   collect each member's hourly schedule.
 - Driving is the supported route mode. Missing route data stops planning.
-- Known hours and closures are enforced; unknown hours require confirmation.
-- Visit durations are estimates unless overridden. Budget limits, weather, and
-  accessibility assistance are not exposed as supported planning features.
+- Known hours and closures are enforced; unknown hours retain warnings.
+- Visit durations are estimates unless overridden. Budget limits and
+  accessibility assistance are not exposed as supported planning features. Chat shortcuts can request estimated indoor or lower-walking
+  alternatives; they do not obtain a weather forecast.
 - Costs show only supplied fees and fares. Hybrid relevance and GFAR gains are
   not measured satisfaction or acceptance probabilities.
 - Email delivery requires SMTP configuration. Without it, codes appear in local logs.

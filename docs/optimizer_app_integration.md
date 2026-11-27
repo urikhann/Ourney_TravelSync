@@ -172,7 +172,7 @@ App requests enforce known opening intervals and closures, allow unknown hours
 with warnings, and disable budget and travel-minimization objectives. Duration
 estimates and overrides are resolved consistently for retrieval and scheduling.
 The UI reports unknown hours, estimated stays, and the known-cost subtotal.
-See [planning rules](agreed_planning_implementation_20261117.md).
+See [planning rules](planning_rules.md).
 
 The API converts only declared 1–5 scores with `(value - 1) / 4`. Relative
 relevance remains on its captured scale. GFAR relevance and rank-derived group
