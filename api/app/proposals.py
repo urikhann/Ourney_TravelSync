@@ -106,7 +106,8 @@ def agent_views(db: Session, trip: Trip, rows: list[ChatMessage], user_id: str) 
         if status == PENDING:
             from .replacements import itinerary_changed, plans, unchanged_answer
             base, draft = audits.get(m.agent.get("plan_run_id")), audits.get(m.agent.get("draft_id"))
-            if (base and draft and draft.input.get("replacement", {}).get("base_run_id") == base.id
+            binding = draft.input.get("replacement") if draft else None
+            if (base and draft and isinstance(binding, dict) and binding.get("base_run_id") == base.id
                     and base.response.get("days") and draft.response.get("days")):
                 try:
                     unchanged = not itinerary_changed(plans(base.response["days"]), plans(draft.response["days"]))
