@@ -324,7 +324,13 @@ async def plan_drive(run, body, prepared, context, audit, db, *, request_transfo
         last_result = verified, response, result, operational
         if result.validation_status == "PASSED":
             count = sum(optional_visit(item) for day in result.days for item in day.items)
-            if count > best_optional_count:
+            better = count > best_optional_count
+            if base.day_preference and best_result is not None:
+                from ourney_travelsync.optimizer.comfort import day_burden
+                burden = sum(day_burden(verified, d, base.day_preference) for d in result.days)
+                previous = sum(day_burden(best_result[0], d, base.day_preference) for d in best_result[2].days)
+                better = (burden, -count) < (previous, -best_optional_count)
+            if best_result is None or better:
                 best_result, best_optional_count = last_result, count
             draft_count = sum(optional_visit(item) for day in draft.days for item in day.items)
             if fallback_composition is None or count >= draft_count:

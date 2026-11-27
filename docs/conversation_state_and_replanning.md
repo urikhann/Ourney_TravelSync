@@ -1,5 +1,32 @@
 # Conversational confirmation and planning scopes
 
+An unchanged planning result is informational: no voting draft is stored and the
+reply explains that the search returned the same itinerary. The comparison uses
+places, visit order, schedule and travel details rather than aggregate totals or
+evidence metadata. Existing pending drafts with identical original and proposed
+schedules also display this explanation and cannot accept votes.
+
+## Weather and walking shortcuts
+
+The rain and less-walking shortcuts request `replan_day` directly, without a model
+call or a single-place replacement. “Today” is resolved in Asia/Seoul; when that
+date is absent from the published itinerary, the response asks for a date.
+The existing owner permission for day replanning applies.
+
+Rain puts estimated outdoor visit minutes first in the solver's objective order.
+Saved indoor metadata identifies sheltered visits; unknown indoor status is
+conservatively counted as outdoor. Less walking puts estimated visit walking
+burden (duration times saved walking level) plus route walking minutes first.
+Unknown walking levels use the highest burden. These metadata estimates do not
+certify indoor conditions or measured walking within a place.
+
+All editable visits on the date can change. Protected visits, other dates, meal
+requirements, availability and final validation remain enforced. The bounded
+search must produce a strictly lower day burden before a draft is offered;
+otherwise the current itinerary remains unchanged. A validated draft still needs
+the existing group vote. The request is a minimization objective, not a guarantee
+of a globally optimal result within the search and routing budgets.
+
 Follow-up to [validated itinerary repair](localized_itinerary_repair.md), implemented
 on `improvements` after commit `1ec3fae`. No deployment, database activation or
 production data modification was performed.

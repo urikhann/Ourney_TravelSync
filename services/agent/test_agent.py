@@ -220,6 +220,17 @@ def test_budget_request_does_not_propose_cost_optimization():
     assert "cheaper" not in out["reply"] and "budget" not in out["reply"]
 
 
+@pytest.mark.parametrize("text,expected", [
+    ("@TravelSync Why were these places picked for our group?", ["group preference fit", "least-served", "2 cafés", "11:30", "warning", "45 min", "Kakao", "accessibility", "search limits"]),
+    ("@TravelSync 이 장소들은 왜 우리 그룹에 추천됐나요?", ["그룹 선호", "구성원", "카페 최대 2곳", "11:30", "경고", "45분", "카카오", "접근성", "검색"]),
+])
+def test_why_plan_fallback_explains_goals_and_rules(text, expected):
+    out = brain.rules_turn(req(text), tools.TripData(7))
+    assert out["proposal"] is None and not out["needs_clarification"]
+    assert all(phrase in out["reply"] for phrase in expected)
+    assert "no specific" not in out["reply"]
+
+
 def test_provider_error_reports_status_without_leaking_response(monkeypatch):
     from google.genai import errors
     secret = "private-key-and-prompt-must-not-appear"

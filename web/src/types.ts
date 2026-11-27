@@ -94,7 +94,8 @@ export type Plan = {
     routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
-  days: { date: string; gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; evening_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
+  days: { date: string; map_endpoints?: { start: PlanningPoint | null; end: PlanningPoint | null };
+    gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; evening_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {

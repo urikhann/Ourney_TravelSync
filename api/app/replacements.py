@@ -42,6 +42,24 @@ def protected(plan, audit=None, db=None):
     return {i["poi_id"] for d in plan.days for i in d["items"] if info[f"{d['date']}@{i['start']}"]["protection_reason"]}
 
 
+def itinerary_changed(before, after):
+    """Compare the ordered schedule and travel, excluding evidence/cost metadata."""
+    def signature(days):
+        return [(d.date, d.start_point, d.end_point, d.start_min, d.end_arrival_min,
+                 d.return_travel_minutes, d.walk_minutes,
+                 [(v.poi_id, v.arrival_min, v.start_min, v.departure_min,
+                   v.travel_minutes, v.stay_minutes) for v in d.items])
+                for d in sorted(days, key=lambda d: d.date)]
+    return signature(before) != signature(after)
+
+
+def unchanged_answer(korean):
+    return dict(state="SUCCEEDED", reason="no_itinerary_changes", proposal=None, tool_calls=[],
+        language="ko" if korean else "en", reply=(
+            "현재 조건에서 기존 일정과 다른 검증된 변경안을 찾지 못했어요. 장소와 시간은 그대로이며 투표할 변경 사항이 없습니다." if korean else
+            "The planning search did not find a different validated itinerary under the current constraints. The places and schedule stay unchanged, so there is nothing to vote on."))
+
+
 def persist_draft(db, trip, message, plan, audit, req, days, configuration, before, meta, evidence):
     """One private persistence gate for every planning scope."""
     from .proposals import published_plan
@@ -56,6 +74,8 @@ def persist_draft(db, trip, message, plan, audit, req, days, configuration, befo
     _, latest = published_plan(db, trip.id)
     if state(db, trip.id) != before or not latest or latest.id != audit.id or fingerprint(plan.days) != base_hash:
         raise HTTPException(409, "stale_proposal")
+    if not itinerary_changed(plans(plan.days), days):
+        raise HTTPException(409, "no_itinerary_changes")
     from .lock_policy import describe
     info = describe(plan, audit, db, current_time())
     explicit = {v["poi_id"]: info[f"{d['date']}@{v['start']}"]["lock_reason"]
@@ -318,6 +338,8 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
         log.warning("replacement invalid evidence request=%s", request_id)
     finally:
         log.info("replacement request=%s elapsed=%.3f rejections=%s", request_id, time.monotonic()-started, rejections)
+    if reason == "no_itinerary_changes":
+        return unchanged_answer(ko)
     return {**answer, "reply": explanation(reason, ko), "reason": reason,
             "state": "NEEDS_CLARIFICATION" if reason in ("ambiguous_target_poi", "target_poi_not_found", "unsupported_replacement_constraints") else "FAILED"}
 

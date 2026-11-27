@@ -1,5 +1,6 @@
 """Offline full-catalogue retrieval and app planning integration checks."""
 from copy import deepcopy
+import pytest
 from fastapi.testclient import TestClient
 from .conftest import real_rec
 from .test_optimizer_integration import ready, generate, audits, c
@@ -96,7 +97,12 @@ def test_app_uses_catalogue_and_keeps_bypasses_and_recommendations(planning_adap
         assert db.get(RecommendationRun, rec["run_id"]).response == before
 
 
-def test_displayed_list_size_does_not_limit_planning(planning_adapter):
+@pytest.mark.parametrize("seed", [0, 4])
+def test_displayed_list_size_does_not_limit_planning(compact_planning_adapter, monkeypatch, seed):
+    # This checks retrieval independence, not large-graph solver performance.
+    # Keep the full catalogue/shortlist but use the existing compact route fixture
+    # so shared-runner CPU load cannot consume the first feasible-solution budget.
+    monkeypatch.setattr(real_rec, "trip_seed", lambda _: seed)
     headers, tid, rec = ready(individual_method="feature_mean")
     with SessionLocal() as db:
         run = db.get(RecommendationRun, rec["run_id"])
@@ -105,7 +111,12 @@ def test_displayed_list_size_does_not_limit_planning(planning_adapter):
         db.commit()
     result = generate(headers, tid)
     assert result.status_code == 200, result.text
-    assert audits(tid)[0].input["candidate_retrieval"]["planning_candidate_selection"]["catalogue_count"] == 28
+    audit = audits(tid)[0]
+    selection = audit.input["candidate_retrieval"]["planning_candidate_selection"]
+    assert selection["catalogue_count"] == 28
+    assert len(audit.optimizer_request["candidates"]) == selection["selected_count"]
+    assert len(audit.optimizer_request["candidates"]) > len(rec["group"])
+    assert result.json()["plans"][0]["stats"]["validation_status"] == "PASSED"
 
 
 def test_app_composition_reserves_restaurants_and_validates_published_day(planning_adapter):

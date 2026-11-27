@@ -137,13 +137,15 @@ def test_serializer_marks_missing_facts_and_preserves_relative_score_semantics(p
     assert available['place']['image_url'] == fake.image_url and available['place']['address'] == fake.address
 
 
-@pytest.mark.parametrize('broken', ['missing_binding', 'invalid_request', 'invalid_days'])
+@pytest.mark.parametrize('broken', ['missing_binding', 'invalid_binding', 'invalid_request', 'invalid_days'])
 def test_incomplete_legacy_snapshots_preserve_chat_without_details(broken, planning_adapter, replacement_fixture_clock):
     heads, tid, _, msg = proposal()
     with SessionLocal() as db:
         draft = db.get(OptimizationRun, msg['agent']['draft_id'])
         if broken == 'missing_binding':
             draft.input = {**draft.input, 'replacement': None}
+        elif broken == 'invalid_binding':
+            draft.input = {**draft.input, 'replacement': 'legacy'}
         elif broken == 'invalid_request':
             draft.optimizer_request = {}
         else:

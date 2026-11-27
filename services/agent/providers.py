@@ -65,7 +65,7 @@ class GeminiProvider:
         thinking = (types.ThinkingConfig(thinking_budget=0) if self.model.startswith("gemini-2.5")
                     else types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW))
         self.config = types.GenerateContentConfig(
-            system_instruction=system, temperature=0.2,
+            system_instruction=system, temperature=0.2, max_output_tokens=8192,
             thinking_config=thinking if self.think else None,
             tools=[types.Tool(function_declarations=[types.FunctionDeclaration(**t) for t in tools])],
             tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="ANY")),
@@ -82,6 +82,9 @@ class GeminiProvider:
             timeout=max(1, min(20_000, int(timeout*1000))),
             retry_options=types.HttpRetryOptions(attempts=1))})
         resp = self.client.models.generate_content(model=self.model, contents=self.contents, config=bounded)
+        if any(getattr(candidate.finish_reason, "value", candidate.finish_reason) == "MAX_TOKENS"
+               for candidate in (getattr(resp, "candidates", None) or [])):
+            raise ProviderError()  # Never show a partial text or tool-call reply.
         calls = [ToolCall(str(i), fc.name, dict(fc.args or {})) for i, fc in enumerate(resp.function_calls or [])]
         if calls:
             self.contents.append(resp.candidates[0].content)
@@ -148,7 +151,7 @@ class GroqProvider:
             raise ProviderError(401)
         payload = {"model": self.model, "messages": self.messages, "tools": self.tools,
                    "tool_choice": "required", "parallel_tool_calls": False,
-                   "temperature": 0.2, "max_completion_tokens": 2048, "stream": False,
+                   "temperature": 0.2, "max_completion_tokens": 8192, "stream": False,
                    "reasoning_effort": "low"}
         post = self.client.post if self.client is not None else httpx.post
         try:

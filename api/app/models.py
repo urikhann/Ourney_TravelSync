@@ -8,7 +8,7 @@ import secrets
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String,
+from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text,
                         UniqueConstraint, ForeignKeyConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -298,7 +298,7 @@ class ChatMessage(Base):
     trip_id: Mapped[str] = mapped_column(ForeignKey("trips.id", ondelete="CASCADE"), index=True)
     author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     kind: Mapped[str] = mapped_column(String(10), default="user")
-    text: Mapped[str] = mapped_column(String(2000))
+    text: Mapped[str] = mapped_column(Text)
     agent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reply_to: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the member message an agent reply answers
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

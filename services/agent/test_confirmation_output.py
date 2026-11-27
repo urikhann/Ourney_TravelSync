@@ -1,5 +1,6 @@
 """Structured confirmation metadata and deterministic final prose fallback."""
 import brain
+import pytest
 import trial_models
 from test_providers import fixture_data, provider_environment, provider_for, response, wire_call, swap
 
@@ -19,6 +20,21 @@ def test_gemini_request_respects_remaining_budget():
     provider.complete(1.25)
     provider.complete(60)
     assert seen == [1250, 20000]
+
+
+def test_gemini_token_truncated_text_is_not_displayed():
+    from providers import GeminiProvider, ProviderError
+    from google.genai import types
+    from types import SimpleNamespace
+    class Models:
+        def generate_content(self, **kwargs):
+            return SimpleNamespace(candidates=[SimpleNamespace(finish_reason=types.FinishReason.MAX_TOKENS)],
+                                   function_calls=[], text="Incomplete **Group", usage_metadata=None)
+    provider = GeminiProvider("synthetic-model", client=SimpleNamespace(models=Models()))
+    provider.config = types.GenerateContentConfig()
+    provider.contents = []
+    with pytest.raises(ProviderError):
+        provider.complete(5)
 
 
 def test_confirmation_question_has_structured_operation(fixture_data):

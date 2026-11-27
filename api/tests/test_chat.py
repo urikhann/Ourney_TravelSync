@@ -46,6 +46,21 @@ def test_plain_messages_are_shared_and_never_sent_to_the_agent():
     assert [m["author"]["name"] for m in msgs] == ["Cora", "Dan"] and all(m["kind"] == "user" for m in msgs)
 
 
+def test_long_agent_reply_survives_save_and_reload(monkeypatch):
+    a, b = signup("LongReplyA"), signup("LongReplyB")
+    tid = trip_with(a, b)
+    long_reply = "## Planning rules\n\n" + "- **Group fit:** 그룹 선호를 반영합니다.\n" * 180 + "\nComplete explanation."
+    async def answer(payload):
+        return dict(reply=long_reply, proposal=None, tool_calls=[])
+    monkeypatch.setattr(services, "agent_turn", answer)
+    response = c.post(f"/trips/{tid}/chat", headers=a, json={"text": "@TravelSync Why this plan?"})
+    assert response.status_code == 201, response.text
+    reply = response.json()["messages"][-1]
+    assert len(reply["text"]) > 2000 and reply["text"] == long_reply
+    saved = c.get(f"/trips/{tid}/chat", headers=a).json()["messages"][-1]
+    assert saved["text"] == long_reply and saved["agent"]["reply"] == long_reply
+
+
 def test_mention_gets_an_agent_reply_with_context():
     a, b = signup("Eve"), signup("Finn")
     tid = trip_with(a, b)

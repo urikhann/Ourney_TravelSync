@@ -131,6 +131,16 @@ def test_full_replan_unlocked_is_not_single_swap(planning_adapter, replacement_f
         raise AssertionError("No model explanation is required after a validated draft")
     monkeypatch.setattr(services, "agent_turn", forbidden)
     answer = post(h, tid, "@TravelSync replan from scratch again.")
+    with SessionLocal() as db:
+        work = db.scalar(select(OptimizationRun).where(OptimizationRun.trip_id == tid,
+            OptimizationRun.status == "PREVIEWED").order_by(OptimizationRun.id.desc()))
+        assert work.input["action_type"] == "replan_all"
+        assert work.response["validation_status"] == "PASSED"
+    if answer["agent"].get("reason") == "no_itinerary_changes":
+        assert answer["agent"]["proposal"] is None and answer["agent"]["state"] == "SUCCEEDED"
+        assert current_plan(h, tid) == original
+        assert vote(h, tid, answer["id"]).status_code == 404
+        return
     assert answer["agent"].get("validation_status") == "PASSED", answer
     assert answer["agent"]["action_type"] == "replan_all"
     assert current_plan(h, tid) == original
@@ -276,6 +286,16 @@ def test_driving_replan_reuses_verified_selected_routes(planning_adapter, replac
     monkeypatch.setattr(config, "OPTIMIZER_SEARCH_SECONDS", 10)
     (h,), tid, original = planned_trip(1, transport_mode="drive")
     answer = post(h, tid, "@TravelSync replan all")
+    with SessionLocal() as db:
+        work = db.scalar(select(OptimizationRun).where(OptimizationRun.trip_id == tid,
+            OptimizationRun.status == "PREVIEWED").order_by(OptimizationRun.id.desc()))
+        assert work.response["validation_status"] == "PASSED"
+        assert work.optimizer_request["edges"]
+        assert all(e["status"] == "KNOWN" for e in work.optimizer_request["edges"])
+    if answer["agent"].get("reason") == "no_itinerary_changes":
+        assert answer["agent"]["proposal"] is None and current_plan(h, tid) == original
+        assert vote(h, tid, answer["id"]).status_code == 404
+        return
     assert answer["agent"].get("validation_status") == "PASSED", answer
     assert vote(h, tid, answer["id"]).json()["messages"][0]["agent"]["proposal_status"] == "APPLIED"
 

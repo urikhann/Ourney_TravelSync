@@ -51,9 +51,11 @@ class ChatIn(BaseModel):
 
 
 def message_dict(m: ChatMessage, names: dict[str, str], views: dict[int, dict] | None = None) -> dict:
-    return {"id": m.id, "kind": m.kind, "text": m.text, "reply_to": m.reply_to,
+    agent = (views or {}).get(m.id, m.agent)
+    text = agent["reply"] if agent and agent.get("reason") == "no_itinerary_changes" else m.text
+    return {"id": m.id, "kind": m.kind, "text": text, "reply_to": m.reply_to,
             "author": None if m.kind == "agent" else {"id": m.author_id, "name": names.get(m.author_id or "", "Former member")},
-            "agent": (views or {}).get(m.id, m.agent), "created_at": m.created_at.isoformat()}
+            "agent": agent, "created_at": m.created_at.isoformat()}
 
 
 def messages_out(db: Session, trip: Trip, rows: list[ChatMessage], user: User) -> list[dict]:
@@ -198,7 +200,10 @@ async def _vote_on_proposal(message_id, body, trip, user, db):
                     .with_for_update())
     if not msg or msg.kind != "agent" or not (msg.agent or {}).get("proposal"):
         raise HTTPException(404, "proposal_not_found")
-    status = proposals.agent_views(db, trip, [msg], user.id)[msg.id]["proposal_status"]
+    view = proposals.agent_views(db, trip, [msg], user.id)[msg.id]
+    if view.get("reason") == "no_itinerary_changes":
+        raise HTTPException(409, "no_itinerary_changes")
+    status = view["proposal_status"]
     if status == proposals.STALE and msg.agent.get("proposal_status", proposals.PENDING) == proposals.PENDING:
         msg.agent = {**msg.agent, "proposal_status": proposals.STALE}
         db.commit()

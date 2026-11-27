@@ -114,6 +114,16 @@ def test_malformed_or_mixed_completion_is_failure(fixture_data, body):
                          trial_models.TrialData(fixture_data, {}), provider_for([body]))
 
 
+def test_long_answer_keeps_full_markdown_and_has_room_for_completion(fixture_data):
+    seen = []
+    reply = "## Planning rules\n\n" + "- **Group fit:** Fits the group.\n" * 180 + "\nComplete explanation."
+    provider = provider_for([response([wire_call("answer", {"reply": reply})])], seen=seen)
+    out = brain.model_turn(trial_models.trial_request(fixture_data["cases"][0], "en"),
+                           trial_models.TrialData(fixture_data, {}), provider)
+    assert len(out["reply"]) > 2000 and out["reply"] == reply
+    assert seen[0]["max_completion_tokens"] == 8192
+
+
 @pytest.mark.parametrize("failure", [401, 404, 429, 503, httpx.ReadTimeout("secret-provider-payload")])
 def test_provider_failure_falls_back_safely(fixture_data, monkeypatch, failure):
     monkeypatch.setattr(brain, "TripData", lambda _: trial_models.TrialData(fixture_data, {}))
