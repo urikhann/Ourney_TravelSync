@@ -218,11 +218,17 @@ def _load_operating(dataset_version: str, poi_ids: list[str], days: list[date]) 
             elif pid in normalized and day_windows(normalized[pid], d) is not None:
                 record = normalized[pid]
                 normalized_windows = day_windows(record, d)
-                source_ref = f"normalized-hours:{record['batch_id']}:{pid}"
+                provisional = record['schedule'].get('schema_version') == 'provisional-hours-1.0'
+                fact_status = 'ESTIMATED' if provisional else 'KNOWN'
+                source_ref = f"{'provisional-hours' if provisional else 'normalized-hours'}:{record['batch_id']}:{pid}"
                 opening_fact = _fact([{"start_min": start, "end_min": end} for start, end in normalized_windows],
-                                     status="KNOWN", source=source_ref, verified_at=record["observed_at"])
-                closed_fact = _fact(not bool(normalized_windows), status="KNOWN", source=source_ref,
-                                    verified_at=record["observed_at"])
+                                     status=fact_status, source=source_ref, verified_at=record["observed_at"],
+                                     rule_version="provisional-hours-1.0" if provisional else None)
+                closed_fact = _fact(not bool(normalized_windows), status=fact_status, source=source_ref,
+                                    verified_at=record["observed_at"],
+                                    rule_version="provisional-hours-1.0" if provisional else None)
+            elif pid in normalized and normalized[pid]["schedule"].get("schema_version") == "provisional-hours-1.0":
+                pass  # Unresolved provisional rules must not fall back to stale weekly facts.
             elif known_hours:
                 dow = (d.weekday() + 1) % 7  # project: Sunday=0
                 rows = hours.get(pid, {}).get(dow, [])

@@ -7,6 +7,7 @@ from ortools.sat.python import cp_model
 from .contracts import DayPlan, Eligibility, Phase, PlanRequest, Visit
 from .eligibility import common_bounds, usable_cost
 from .meals import breakfast_slot_windows, breakfast_status, effective_meals
+from ..place_identity import candidate_identity
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
     meal_preferences = []
     breakfast_assignments = {}
     optional_breakfast = []
+    optional_evening = []
     for day in sorted(req.days, key=lambda d: d.date):
         nodes = [day.start_point, *pois, day.end_point]
         end = len(nodes) - 1
@@ -48,6 +50,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             total_cost.append(len(req.members) * (pois[pid].cost_per_person.value if usable_cost(pois[pid].cost_per_person) else 0) * y)
             starts[i] = model.new_int_var(day.start_min, day.end_min, f"time_{day.date}_{pid}")
             times[day.date, pid] = starts[i]
+            for k, rest in enumerate(day.breaks):
+                before = model.new_bool_var(f"before_break_{day.date}_{pid}_{k}")
+                model.add(starts[i] + pois[pid].duration_min.value <= rest.start_min).only_enforce_if([y, before])
+                model.add(starts[i] >= rest.end_min).only_enforce_if([y, before.Not()])
             circuit.append((i, i, y.Not()))
             windows = eligible[pid].windows.get(day.date, ())
             choices = []
@@ -60,6 +66,13 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         model.add(sum(visits[day.date, pid] for pid in pois) >= 1)
         composition = req.daily_composition
         if composition is not None:
+            evening_ids = [pid for pid, p in pois.items() if p.visit_category == "evening"]
+            locked_evening = {l.poi_id for l in req.locked_items if l.date == day.date and l.poi_id in evening_ids}
+            if composition.evening_enabled:
+                # Automatic choice is optional and capped at one per day. Keep
+                # previously explicit multi-place choices rather than dropping locks.
+                model.add(sum(visits[day.date, pid] for pid in evening_ids) <= max(1, len(locked_evening)))
+                optional_evening.extend(visits[day.date, pid] for pid in evening_ids if pid not in locked_evening)
             cafe_ids = [pid for pid,p in pois.items() if p.visit_category == "cafe"]
             meal_ids = [pid for pid,p in pois.items() if p.visit_category == "meal"]
             activity_ids = [pid for pid,p in pois.items() if p.visit_category == "activity"]
@@ -144,12 +157,22 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                 total_cost.append(edge.group_fare * a)
                 stay = 0 if i == 0 else pois[nodes[i]].duration_min.value
                 model.add(starts[j] >= starts[i] + stay + edge.duration_minutes).only_enforce_if(a)
+                for k, rest in enumerate(day.breaks):
+                    before = model.new_bool_var(f"travel_before_break_{day.date}_{i}_{j}_{k}")
+                    model.add(starts[i] + stay + edge.duration_minutes <= rest.start_min).only_enforce_if([a, before])
+                    model.add(starts[i] + stay >= rest.end_min).only_enforce_if([a, before.Not()])
         model.add_circuit(circuit)
         if req.max_total_walk_minutes is not None:
             model.add(sum(a * e.walk_minutes for a, e in arcs.values()) <= req.max_total_walk_minutes)
         day_arcs[day.date] = (nodes, arcs)
     for pid in pois:
         model.add(sum(visits[day.date, pid] for day in req.days) <= 1)
+    identities = {}
+    for pid, candidate in pois.items():
+        identities.setdefault(candidate_identity(candidate), []).append(pid)
+    for aliases in identities.values():
+        if len(aliases) > 1:
+            model.add(sum(visits[day.date, pid] for day in req.days for pid in aliases) <= 1)
     if req.enforce_cost:
         model.add(sum(total_cost) <= req.budget_total)
     for lock in req.locked_items:
@@ -158,6 +181,15 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         model.add(visits[lock.date, lock.poi_id] == 1)
         if lock.start_min is not None:
             model.add(times[lock.date, lock.poi_id] == lock.start_min)
+    if req.gap_target:
+        target = req.gap_target
+        choices = [visits[target.date, pid] for pid in target.candidate_ids if pid in pois]
+        model.add(sum(choices) >= 1)
+        for pid in target.candidate_ids:
+            if pid in pois:
+                chosen = visits[target.date, pid]
+                model.add(times[target.date, pid] >= target.start_min).only_enforce_if(chosen)
+                model.add(times[target.date, pid] + pois[pid].duration_min.value <= target.end_min).only_enforce_if(chosen)
     utility = sum(pois[pid].group_utility * y for (_, pid), y in visits.items())
     minimum = model.new_int_var(0, len(pois) * 10000, "minimum_member_relevance")
     model.add_min_equality(minimum, [sum(round(pois[pid].relevance[m.member_id] * 10000) * y
@@ -174,6 +206,10 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         # One additional breakfast outweighs any possible difference in group utility.
         bonus = 1 + sum(p.group_utility for p in pois.values())
         objectives[0] = ("breakfast_and_group_utility", utility + bonus * sum(optional_breakfast), True, 0.7)
+    if optional_evening:
+        bonus = 1 + sum(p.group_utility for p in pois.values())
+        objectives[0] = ("optional_stops_and_group_utility",
+                         utility + bonus * sum(optional_breakfast + optional_evening), True, 0.7)
     if meal_preferences:
         objectives[-1] = ("travel_minutes", travel, False, 0.05)
         objectives.append(("meal_preference", sum(meal_preferences), False, 0.05))
@@ -187,7 +223,27 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
                        for _, arcs in day_arcs.values() for a, e in arcs.values())
         objectives = [(n, e, m, f * .8) for n, e, m, f in objectives]
         objectives.insert(2, ("haversine_distance_m", distance, False, .2))
+    objectives = [(n, e, m, f * .85) for n, e, m, f in objectives]
+    objectives.append(("waiting_minutes", 0, False, .15))
+    if req.preferred_start_minutes:
+        # Replacement-only soft objective. Hard locks and feasibility stay
+        # unchanged; normal generation has no preferred starts and is identical.
+        deviations = []
+        for (day, pid), preferred_time in ((key, req.preferred_start_minutes[key[1]])
+                                          for key in visits if key[1] in req.preferred_start_minutes):
+            delta = model.new_int_var(0, 1440, f"schedule_delta_{day}_{pid}")
+            active = model.new_int_var(0, 1440, f"schedule_deviation_{day}_{pid}")
+            model.add_abs_equality(delta, times[day, pid] - preferred_time)
+            model.add(active == delta).only_enforce_if(visits[day, pid])
+            model.add(active == 0).only_enforce_if(visits[day, pid].Not())
+            deviations.append(active)
+        objectives = [(n, e, m, f*.4) for n, e, m, f in objectives]
+        objectives.insert(0, ("schedule_deviation_minutes", sum(deviations), False, .6))
     for name, expression, maximize, fraction in objectives:
+        if name == "waiting_minutes":
+            # Add these variables only for the final phase so they cannot
+            # enlarge the search for the earlier prioritized objectives.
+            expression = _waiting_objective(model, req, visits, times, day_arcs, pois)
         allocated = min(req.search_seconds * fraction, max(0, deadline - monotonic()))
         if allocated <= 0:
             all_optimal = False
@@ -231,6 +287,28 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
         return RawSolution("UNKNOWN", phases=tuple(phases))
     return RawSolution("OPTIMAL" if all_optimal and len(phases) == len(objectives) else "FEASIBLE",
                        incumbent, tuple(phases))
+
+
+def _waiting_objective(model, req, visits, times, day_arcs, pois):
+    waiting = []
+    for day in req.days:
+        nodes, arcs = day_arcs[day.date]
+        by_poi = {}
+        for pid in pois:
+            wait = model.new_int_var(0, 1440, f"wait_{day.date}_{pid}")
+            model.add(wait == 0).only_enforce_if(visits[day.date, pid].Not())
+            by_poi[pid] = wait
+            waiting.append(wait)
+        for (i, j), (arc, edge) in arcs.items():
+            if j == len(nodes) - 1:
+                continue
+            wait = by_poi[nodes[j]]
+            if i == 0:
+                model.add(wait == 0).only_enforce_if(arc)
+            else:
+                model.add(wait == times[day.date, nodes[j]] - times[day.date, nodes[i]]
+                          - pois[nodes[i]].duration_min.value - edge.duration_minutes).only_enforce_if(arc)
+    return sum(waiting)
 
 
 def _extract(req, solver, pois, day_arcs, times, breakfast_assignments):

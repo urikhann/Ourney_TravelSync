@@ -120,8 +120,8 @@ def test_preferred_time_breaks_ties_without_changing_original_objectives(time):
     result=optimize(req)
     assert result.validation_status=="PASSED"
     assert any(v.start_min==time for v in result.days[0].items)
-    assert [p.objective for p in result.phases]==["group_utility","minimum_relevance","travel_minutes","meal_preference"]
-    assert result.phases[-1].objective_value==0
+    assert [p.objective for p in result.phases]==["group_utility","minimum_relevance","travel_minutes","meal_preference","waiting_minutes"]
+    assert next(p for p in result.phases if p.objective == "meal_preference").objective_value==0
 
 
 def test_override_changes_only_its_day_and_meal_and_preserves_original():

@@ -48,6 +48,26 @@
 .proposal { margin-top: 8px; padding: 12px; border-radius: 16px; background: var(--surface, #fff); border: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 6px; }
 .proposal .added { font-size: 13.5px; }
+.proposal-place { text-align: left; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; padding: 6px 0; }
+.proposal-place:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.proposal-detail-list { display: grid; gap: 8px; min-width: 0; }
+.proposal-poi-card { border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.proposal-poi-card.proposed { border-left-color: var(--green); }
+.proposal-poi-card.adjusted { border-left-color: var(--amber); }
+.proposal-poi-card summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 9px; }
+.proposal-poi-card summary::-webkit-details-marker { display: none; }
+.proposal-poi-card summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.proposal-poi-card[open] > summary .proposal-expand { transform: rotate(180deg); }
+.proposal-expand-hint { color: var(--blue); }
+.proposal-poi-card[open] .proposal-expand-hint { display: none; }
+.proposal-poi-body { padding: 0 10px 10px; }
+.proposal-poi-body p { margin: 6px 0; }
+.proposal-facts { margin: 10px 0; font-size: 12px; }
+.proposal-facts dt { margin-top: 8px; font-weight: 700; }
+.proposal-facts dd { margin: 2px 0 0; }
+.proposal-impact { display: grid; gap: 6px; padding: 9px; border-radius: 10px; background: var(--fill); }
+.proposal-impact p { margin: 0; }
+.proposal-reasons { margin: 5px 0; padding-left: 18px; }
 .proposal .num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--purple, #7c3aed); }
 .proposal-actions { display: flex; gap: 8px; margin-top: 4px; }
 .proposal-actions .btn { flex: 1; gap: 6px; }
@@ -74,6 +94,9 @@
 .chat-input { display: flex; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; background: var(--surface, #fff);
   border: 1.5px solid var(--line); transition: border-color .15s; }
 .chat-input.asking { border-color: var(--purple, #7c3aed); }
+.chat-input[aria-busy="true"] { background: var(--fill, #f1f3f7); }
+.chat-input input:disabled { cursor: wait; }
+.chat-at:disabled, .mention-pill:disabled { opacity: .45; cursor: default; }
 .chat-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 14px var(--body, inherit); padding: 6px 4px; }
 .chat-at, .chat-send { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; }
 .chat-at { background: var(--purple-50, #f3ecff); color: var(--purple, #7c3aed); }

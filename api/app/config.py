@@ -63,3 +63,16 @@ KAKAO_REST_API_KEY = _env("KAKAO_REST_API_KEY")
 
 # Controls availability-check endpoints and holiday display. Optimizer hours policy is separate.
 FEATURE_AVAILABILITY = _env("FEATURE_AVAILABILITY", "false").lower() in ("1", "true", "yes")
+
+# Bounded chat replacement search, separate from full-plan generation.
+REPLACEMENT_CANDIDATE_LIMIT = min(20, max(1, int(_env("REPLACEMENT_CANDIDATE_LIMIT", "8"))))
+REPLACEMENT_REPAIR_RADIUS = min(3, max(0, int(_env("REPLACEMENT_REPAIR_RADIUS", "1"))))
+REPLACEMENT_SHIFT_MINUTES = min(120, max(0, int(_env("REPLACEMENT_SHIFT_MINUTES", "30"))))
+REPLACEMENT_SOLVER_SECONDS = min(30.0, max(0.0, float(_env("REPLACEMENT_SOLVER_SECONDS", "2"))))
+REPLACEMENT_TOTAL_SECONDS = max(1.0, float(_env("REPLACEMENT_TOTAL_SECONDS", "20")))
+REPLACEMENT_VALID_SECONDS = max(1.0, float(_env("REPLACEMENT_VALID_SECONDS", "600")))
+REPLACEMENT_DISTANCE_WEIGHT = max(0.0, float(_env("REPLACEMENT_DISTANCE_WEIGHT", "0.15")))
+REPLACEMENT_FAIRNESS_WEIGHT = max(0.0, float(_env("REPLACEMENT_FAIRNESS_WEIGHT", "0.7")))
+REPLACEMENT_RELEVANCE_WEIGHT = max(0.0, float(_env("REPLACEMENT_RELEVANCE_WEIGHT", "0.3")))
+PENDING_ACTION_VALID_SECONDS = max(1.0, float(_env("PENDING_ACTION_VALID_SECONDS", "300")))
+PLANNING_ACTION_SECONDS = max(1.0, float(_env("PLANNING_ACTION_SECONDS", "60")))

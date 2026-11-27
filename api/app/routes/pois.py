@@ -44,11 +44,20 @@ def get_poi(poi_id: str, version: str | None = None, user: User = Depends(curren
         hours = []
         for d in WEEK:
             windows = normalized["schedule"]["weekly"][str(d)]
+            if windows is None:
+                hours.append({"day": DAYS[d], "open": None, "close": None, "status": "UNKNOWN"})
+                continue
             hours.extend([{"day": DAYS[d], "open": hhmm(start), "close": hhmm(end)} for start, end in windows]
                          or [{"day": DAYS[d], "open": None, "close": None}])
-        effective_status = {**effective_status, "hours": "KNOWN", "closed_days": "KNOWN",
+        effective_status = {**effective_status, "hours": "ESTIMATED" if normalized["schedule"].get("schema_version") == "provisional-hours-1.0" else "KNOWN",
+                            "closed_days": "ESTIMATED" if normalized["schedule"].get("schema_version") == "provisional-hours-1.0" else "KNOWN",
                             "hours_batch": normalized["batch_id"]}
-    return {**place_dict(p), "field_status": effective_status, "name_ko": p.name_ko, "city": p.city, "address": p.road_address or p.address,
+    if normalized and normalized["schedule"].get("schema_version") == "provisional-hours-1.0":
+        effective_status = {**effective_status, "hours_review_required": True}
+        if day_windows(normalized, datetime.now(ZoneInfo("Asia/Seoul")).date()) is None:
+            hours = []
+            effective_status = {**effective_status, "hours": "UNKNOWN", "closed_days": "UNKNOWN"}
+    return {**place_dict(p), "provisional_schedule": normalized["schedule"] if normalized and normalized["schedule"].get("schema_version") == "provisional-hours-1.0" else None, "field_status": effective_status, "name_ko": p.name_ko, "city": p.city, "address": p.road_address or p.address,
             "phone": p.phone or None, "tags": p.tags, "feature_rules": p.feature_rules, "source": p.source,
             "dataset_version": p.dataset_version, "closed_on_public_holidays": p.closed_on_public_holidays,
             "hours": hours}

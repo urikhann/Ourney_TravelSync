@@ -15,6 +15,13 @@ from .test_flow import signup, FEATURES
 c = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def stable_optimizer_seed(monkeypatch):
+    # Keep constraint/transport checks independent of random trip UUIDs. Tests
+    # exercising a particular seed can override this before making a request.
+    monkeypatch.setattr(real_rec, "trip_seed", lambda _: 0)
+
+
 def configuration(days=("2026-11-06",)):
     point = dict(label="Explicit fixture endpoint", latitude=35.15, longitude=129.1)
     return dict(days=[dict(date=d, start_min=540, end_min=1080, start_point=point, end_point=point) for d in days],
@@ -222,7 +229,8 @@ def test_adapter_auth_is_header_only(monkeypatch, planning_adapter):
             return await original.handle_async_request(request)
     monkeypatch.setattr(config, "PLANNING_DATA_TOKEN", "synthetic-auth-fixture")
     monkeypatch.setitem(services.TEST_TRANSPORTS, config.PLANNING_DATA_URL, HeaderTransport())
-    assert generate(h, tid).status_code == 200
+    response = generate(h, tid)
+    assert response.status_code == 200, response.text
     assert seen == ["Bearer synthetic-auth-fixture"]
     assert "synthetic-auth-fixture" not in str(audits(tid)[0].planning_data)
 

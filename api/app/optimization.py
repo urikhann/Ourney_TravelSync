@@ -14,11 +14,12 @@ from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyComposition, Edge, Fact, Lock, Member,
+from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyComposition, Day, Edge, Fact, GapPolicy, Lock, Member,
                                                   NonNegative, Operation, PlanRequest, Window)
 
 from ourney_travelsync.planning_categories import visit_role
 from ourney_travelsync.breakfast_metadata import breakfast_metadata, inferred_breakfast_suitability
+from ourney_travelsync.place_identity import visit_identity
 from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
 
 from . import config
@@ -39,9 +40,11 @@ class DailyInput(Window):
     date: date
     start_point: Point
     end_point: Point
+    breaks: tuple[Window, ...] = ()
 
 
 class GenerateInput(Contract):
+    gap_policy: GapPolicy = Field(default_factory=GapPolicy)
     daily_composition: DailyComposition = Field(default_factory=lambda: DailyComposition(meal_overlap_min=60))
     days: Annotated[tuple[DailyInput, ...], Field(min_length=1, max_length=3)]
     budget_total: NonNegative = 0  # Compatibility field; app planning does not enforce a budget.
@@ -59,6 +62,9 @@ class GenerateInput(Contract):
     def valid_meals(self):
         from ourney_travelsync.optimizer.meals import validate_meal_overrides
         validate_meal_overrides(self.days, self.daily_composition)
+        for day in self.days:
+            Day(date=day.date, start_min=day.start_min, end_min=day.end_min,
+                start_point="start", end_point="end", breaks=day.breaks)
         return self
 
 
@@ -142,6 +148,21 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         if (len(locked_rows) != len(body.locked_items)
                 or any(p.id in banned or banned_tags.intersection(p.tags or []) for p in locked_rows)):
             raise HTTPException(422, "optimizer_invalid_locks")
+        by_id = {p.id: p for p in locked_rows}
+        conflicts = []
+        for day in body.days:
+            roles = {}
+            for lock in body.locked_items:
+                if lock.date == day.date:
+                    p = by_id[lock.poi_id]
+                    role, _ = visit_role({**p.features, "category_name": p.category, "tags": p.tags})
+                    roles.setdefault(role, []).append(p.id)
+            for role, limit in (("cafe", body.daily_composition.max_cafes), ("meal", body.daily_composition.max_meals)):
+                if len(roles.get(role, [])) > limit:
+                    conflicts.append(dict(date=day.date.isoformat(), rule="max_cafes" if role == "cafe" else "max_meals",
+                                          limit=limit, locked_count=len(roles[role]), poi_ids=roles[role]))
+        if conflicts:
+            raise HTTPException(422, {"code": "optimizer_lock_composition_conflict", "conflicts": conflicts})
     if preflight_only and body.duration_overrides:
         found = db.scalars(select(Poi.id).where(Poi.dataset_version == run.dataset_version,
                                                Poi.id.in_(body.duration_overrides))).all()
@@ -173,6 +194,7 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
         breakfast_record = {"enriched_metadata": p.enriched_metadata, "category_name": p.category}
         breakfast, breakfast_hours = breakfast_metadata(breakfast_record)
         candidates.append(Candidate(poi_id=p.id, dataset_version=run.dataset_version,
+                                    visit_identity=visit_identity(p.name, p.road_address or p.address),
                                     group_rank=row["group_rank"], group_utility=row["group_utility"],
                                     selection_gain=row.get("selection_gain"), mean_score=sum(scores.values()) / len(scores),
                                     personal_scores=scores, relevance=relevance, tags=tuple(p.tags),
@@ -182,10 +204,20 @@ def prepare(trip: Trip, run: RecommendationRun, body: GenerateInput, db: Session
                                     breakfast_offering=breakfast, breakfast_hours=breakfast_hours,
                                     visit_category=role, activity_category=category))
     daily = [dict(date=d.date.isoformat(), start_min=d.start_min, end_min=d.end_min,
-                  start_point=f"start:{d.date}", end_point=f"end:{d.date}") for d in sorted(body.days, key=lambda d: d.date)]
+                  start_point=f"start:{d.date}", end_point=f"end:{d.date}",
+                  breaks=[w.model_dump() for w in d.breaks]) for d in sorted(body.days, key=lambda d: d.date)]
     points = {f"{kind}:{d.date}": getattr(d, f"{kind}_point").model_dump(mode="json")
               for d in body.days for kind in ("start", "end")}
     return members, candidates, daily, points, rows, version.mapping_version
+
+
+def with_visit_identities(req, db):
+    """Upgrade old private replay requests using only their pinned catalogue."""
+    rows = db.scalars(select(Poi).where(Poi.dataset_version == req.dataset_version,
+                                       Poi.id.in_([p.poi_id for p in req.candidates]))).all()
+    identities = {p.id: visit_identity(p.name, p.road_address or p.address) for p in rows}
+    return req.model_copy(update={"candidates": tuple(p.model_copy(update={
+        "visit_identity": identities.get(p.poi_id, p.visit_identity)}) for p in req.candidates)})
 
 
 def catalogue_request(run, body, db):
@@ -251,6 +283,7 @@ def solver_request(run, audit_id, body, prepared, request, response):
                    transport_mode=body.transport_mode, days=daily, members=[m.model_dump(mode="json") for m in members],
                    candidates=[p.model_dump(mode="json") for p in enriched], edges=[e.model_dump(mode="json") for e in data.edges],
                    daily_composition=body.daily_composition.model_dump(mode="json"),
+                   gap_policy=body.gap_policy.model_dump(mode="json"),
                    budget_total=body.budget_total, enforce_cost=False, enforce_opening_hours=True,
                    allow_unknown_opening_hours=True, optimize_travel=False,
                    max_leg_minutes=body.max_leg_minutes,

@@ -8,7 +8,7 @@ import numpy as np
 from ..common import GroupInput
 from ..features import FEATURE_NAMES
 from ..geography import haversine_km as km
-from ..planning_categories import visit_role
+from ..planning_categories import EVENING_START_MIN, visit_role
 
 POLICY = "catalogue-day-clusters-v1"
 
@@ -48,7 +48,8 @@ def select_days(data, records, days, locks=(), composition=None):
     # A full directed matrix grows quadratically; retain role alternatives in a
     # bounded first pass rather than spending routing quota on forty stops/day.
     limit = min(max(12, min(40, int(os.getenv("PLANNING_DAY_CANDIDATE_LIMIT", "16")))), 60 // len(days))
-    optional_limit = min(limit + 3, 60 // len(days))
+    evening_enabled = bool(composition and composition.get("evening_enabled"))
+    optional_limit = min(limit + 3 + (3 if evening_enabled else 0), 60 // len(days))
     previous, selected, by_day, diagnostics = set(), set(), {}, {}
     roles = [visit_role(records[pid]) for pid in data.poi_ids]
     coordinates = [(records[pid]["latitude"], records[pid]["longitude"]) for pid in data.poi_ids]
@@ -60,8 +61,9 @@ def select_days(data, records, days, locks=(), composition=None):
         pool, detour = [], {}
         for j, pid in enumerate(data.poi_ids):
             r = records[pid]
-            # Nightlife is opt-in for a particular day, never an automatic meal.
-            if roles[j][0] == "evening" and not any(l["poi_id"] == pid and l["date"] == d["date"] for l in locks):
+            # Nightlife requires an optional preference or an explicit place lock.
+            if (roles[j][0] == "evening" and not (evening_enabled and d["end_min"] > EVENING_START_MIN)
+                    and not any(l["poi_id"] == pid and l["date"] == d["date"] for l in locks)):
                 continue
             duration = r.get("duration_min")
             status = (r.get("field_status") or {}).get("duration")
@@ -74,6 +76,10 @@ def select_days(data, records, days, locks=(), composition=None):
         locked = [ids[l["poi_id"]] for l in locks if l["date"] == d["date"]]
         if len(locked) > limit or any(j not in pool for j in locked):
             raise ValueError("locked visit does not fit day retrieval")
+        # Keep automatic evening choices outside the ordinary shortlist so they
+        # cannot displace alternatives needed for mandatory meals/activities.
+        optional_evening = [j for j in pool if roles[j][0] == "evening" and j not in locked]
+        pool = [j for j in pool if j not in optional_evening]
         chosen = list(locked)
         # Select a cluster anchor near the route corridor with strong group fit.
         base = lambda j: float(quality[j]) - .35 * detour[j] - (.12 if j in previous else 0)
@@ -160,13 +166,20 @@ def select_days(data, records, days, locks=(), composition=None):
         # an alternative needed for a hard constraint. Stay within 60 overall.
         previous.update(chosen)
         for j in optional_breakfast:
-            if len(chosen) >= optional_limit:
+            if len(chosen) >= min(limit + 3, 60 // len(days)):
                 break
             if j not in chosen:
                 chosen.append(j)
                 for f in preferred:
                     if data.poi_features[j, f]:
                         counts[f] += 1
+        for j in sorted(optional_evening, key=lambda j: (value(j), -j), reverse=True)[:3]:
+            if len(chosen) >= optional_limit:
+                break
+            chosen.append(j)
+            for f in preferred:
+                if data.poi_features[j, f]:
+                    counts[f] += 1
         by_day[d["date"]] = [data.poi_ids[j] for j in chosen]
         diagnostics[d["date"]] = {"screened_pool": len(pool), "selected": len(chosen),
             "requested_activities": [FEATURE_NAMES[f] for f in preferred],

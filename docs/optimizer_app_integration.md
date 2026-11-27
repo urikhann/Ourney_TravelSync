@@ -158,6 +158,16 @@ private DB records; there is no public endpoint returning the raw audit.
 
 ## Planning policy and validation
 
+See [confirmation and scope routing](conversation_state_and_replanning.md) for
+persisted follow-up actions, day/all/unlocked re-planning and legacy lock provenance.
+Ordinary group approval does not make activities permanently locked.
+
+Chat single-place replacements now use a separate [validated local repair workflow](localized_itinerary_repair.md).
+A private E3-checked draft must exist before voting. Approval rechecks and applies
+the exact saved schedule without full optimization, retaining the original version.
+Replacement candidates require positively verified hours, while retained visits keep
+the general planning policy below.
+
 App requests enforce known opening intervals and closures, allow unknown hours
 with warnings, and disable budget and travel-minimization objectives. Duration
 estimates and overrides are resolved consistently for retrieval and scheduling.

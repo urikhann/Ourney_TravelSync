@@ -17,7 +17,7 @@ def test_success_keeps_snapshot_and_e3_metrics():
     res = api.optimize(data)
     assert res.validation_status == "PASSED"
     assert res.solver_status == "OPTIMAL"
-    assert len(res.phases) == 3
+    assert len(res.phases) == 4
     assert res.metrics["allocated_search_seconds"] <= 2
     assert res.metrics["group_utility"] == 2700
     assert res.input_snapshot.dataset_version == "synthetic-v1"
@@ -139,7 +139,7 @@ def test_tertiary_objective_reduces_travel_with_prior_values_fixed():
             edge["duration_minutes"] = 20
     res = api.optimize(data)
     assert [v.poi_id for v in res.days[0].items] == ["A"]
-    assert [p.objective_value for p in res.phases] == [1000, 2000, 40]
+    assert [p.objective_value for p in res.phases] == [1000, 2000, 40, 0]
 
 
 @pytest.mark.parametrize("size", [1, 10])
@@ -159,5 +159,6 @@ def test_single_run_thirty_second_cap_is_shared_by_all_objectives():
     data = request_data(1)
     data["search_seconds"] = 30
     res = api.optimize(data)
-    assert [p.allocated_seconds for p in res.phases] == [21, 6, 3]
+    assert [p.objective for p in res.phases] == ["group_utility", "minimum_relevance", "travel_minutes", "waiting_minutes"]
+    assert sum(p.allocated_seconds for p in res.phases) == pytest.approx(24)
     assert res.metrics["allocated_search_seconds"] <= 30

@@ -69,3 +69,4 @@ dist/
 # local caches (E5 embeddings, Vite)
 services/recommender/output/
 web/.vite/
+/.tmp/

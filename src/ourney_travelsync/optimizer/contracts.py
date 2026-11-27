@@ -28,6 +28,12 @@ class Fact(Contract, Generic[T]):
     user_upper_bound: bool = False
 
     @property
+    def provisional_hours(self) -> bool:
+        return (self.status == 'ESTIMATED' and self.value is not None and bool(self.source)
+                and self.source.startswith('provisional-hours:') and self.verified_at is not None
+                and self.rule_version == 'provisional-hours-1.0')
+
+    @property
     def known(self) -> bool:
         return (self.value is not None and self.status == "KNOWN"
                 and bool(self.source) and self.verified_at is not None)
@@ -73,6 +79,7 @@ class MealOverride(Contract):
 class DailyComposition(Contract):
     breakfast_enabled: bool = False
     breakfast_require_verified: bool = False
+    evening_enabled: bool = False
     max_cafes: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
     # Accepted for old clients; named requirements now determine the minimum.
     min_meals: Annotated[int, Field(strict=True, ge=0, le=3)] = Field(default=0, deprecated=True)
@@ -108,6 +115,16 @@ class Day(Window):
     date: date
     start_point: Annotated[str, Field(min_length=1)]
     end_point: Annotated[str, Field(min_length=1)]
+    breaks: tuple[Window, ...] = ()
+
+    @model_validator(mode="after")
+    def valid_breaks(self):
+        ordered = sorted(self.breaks, key=lambda w: w.start_min)
+        if any(w.start_min < self.start_min or w.end_min > self.end_min for w in ordered):
+            raise ValueError("break must lie within the day")
+        if any(a.end_min > b.start_min for a, b in zip(ordered, ordered[1:])):
+            raise ValueError("breaks must not overlap")
+        return self
 
 
 class Operation(Contract):
@@ -127,6 +144,7 @@ class Member(Contract):
 
 class Candidate(Contract):
     poi_id: Annotated[str, Field(min_length=1)]
+    visit_identity: Annotated[str, Field(min_length=1, max_length=160)] | None = None
     dataset_version: Annotated[str, Field(min_length=1)]
     group_rank: Annotated[int, Field(strict=True, ge=1)]
     group_utility: Annotated[int, Field(strict=True, ge=0, le=1000)]
@@ -180,6 +198,25 @@ class Lock(Contract):
     start_min: Minute | None = None
 
 
+class GapPolicy(Contract):
+    enabled: bool = True
+    buffer_minutes: Minute = 30
+    rest_minutes: Minute = 60
+    reoptimize_minutes: Minute = 120
+    nearby_leg_minutes: Minute = 30
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if not 0 < self.buffer_minutes <= self.rest_minutes <= self.reoptimize_minutes:
+            raise ValueError("gap thresholds must be positive and ordered")
+        return self
+
+
+class GapTarget(Window):
+    date: date
+    candidate_ids: Annotated[tuple[str, ...], Field(min_length=1)]
+
+
 class PlanRequest(Contract):
     schema_version: Literal["optimizer-1.0"] = "optimizer-1.0"
     run_id: Annotated[str, Field(min_length=1)]
@@ -205,6 +242,9 @@ class PlanRequest(Contract):
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     locked_items: tuple[Lock, ...] = ()
+    preferred_start_minutes: Annotated[dict[str, Minute], Field(max_length=60)] = Field(default_factory=dict)
+    gap_policy: GapPolicy = Field(default_factory=GapPolicy)
+    gap_target: GapTarget | None = None
     search_seconds: Annotated[float, Field(ge=0, le=30, allow_inf_nan=False)] = 30
     seed: Annotated[int, Field(strict=True, ge=0, le=2**31-1)] = 0
 
@@ -219,6 +259,8 @@ class PlanRequest(Contract):
         unique([(e.date, e.origin, e.destination) for e in self.edges], "edge")
         unique([l.poi_id for l in self.locked_items], "lock")
         ids = {p.poi_id for p in self.candidates}
+        if not set(self.preferred_start_minutes) <= ids:
+            raise ValueError("preferred start references unknown POI")
         dates = {d.date for d in self.days}
         members = {m.member_id for m in self.members}
         if any(d.start_point in ids or d.end_point in ids for d in self.days):
@@ -234,6 +276,8 @@ class PlanRequest(Contract):
                 raise ValueError("mean_score mismatch")
         if any(l.poi_id not in ids or l.date not in dates for l in self.locked_items):
             raise ValueError("lock references unknown POI/date")
+        if self.gap_target and (self.gap_target.date not in dates or not set(self.gap_target.candidate_ids) <= ids):
+            raise ValueError("gap target references unknown POI/date")
         if any(e.date not in dates for e in self.edges):
             raise ValueError("edge references unknown date")
         if any(e.status == "ESTIMATED" and (not self.provisional or not e.draft_usable) for e in self.edges):
@@ -279,7 +323,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "breakfast_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m"]
+    objective: Literal["group_utility", "breakfast_and_group_utility", "optional_stops_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

@@ -53,17 +53,20 @@ export type Recommendations = {
 };
 
 export type PlanItem = {
+  arrival_min?: number; start_min?: number;
   breakfast_status?: "verified" | "inferred" | null;
   duration_source?: string; duration_estimated?: boolean;
   visit_category?: "cafe" | "meal" | "activity" | "evening";
   activity_category?: string;
   poi_id: string; start: string; end: string; locked: boolean; moved_from: string | null;
+  lock_reason?: string | null; completed?: boolean;
   availability: { available: boolean | null; close?: string | null } | null; // null when the checker is off; available null = hours unknown
   place: Place | null; mean_score: number | null;
   arrival: string; travel_minutes: number; stay_minutes: number; visit_cost: number;
 };
 export type PlanningPoint = { label: string; latitude: number; longitude: number };
 export type DailyComposition = {
+  evening_enabled?: boolean;
   breakfast_enabled?: boolean;
   breakfast_require_verified?: boolean;
   meal_overlap_min?: number; meal_timezone?: "Asia/Seoul"; meal_policy_version?: "meal-1.0";
@@ -75,28 +78,30 @@ export type DailyComposition = {
   meal_windows: { name: "breakfast" | "lunch" | "dinner"; start_min: number; end_min: number }[];
 };
 export type OptimizationInput = {
+  gap_policy?: { enabled?: boolean; buffer_minutes?: number; rest_minutes?: number; reoptimize_minutes?: number; nearby_leg_minutes?: number };
   duration_overrides?: Record<string, number>;
   daily_composition?: DailyComposition;
-  days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint }[];
+  days: { date: string; start_min: number; end_min: number; start_point: PlanningPoint; end_point: PlanningPoint; breaks?: { start_min: number; end_min: number }[] }[];
   budget_total: number; transport_mode: "walk" | "drive" | "transit";
   max_leg_minutes?: number | null; max_total_walk_minutes?: number | null;
   required_access?: string[];
   locked_items?: { poi_id: string; date: string; start_min?: number | null }[];
 };
 export type Plan = {
-  id: number; letter: string; variant: string; name: string; votes: number; stale: boolean;
+  id: number; letter: string; variant: string; name: string; votes: number; stale: boolean; lock_revision: number;
   stats: { group_fit: number | null; total_cost: number; cost_unknown_count?: number; budget_enforced?: boolean;
+    daily_composition?: DailyComposition | null;
     routing_warnings?: string[];
     opening_hours_enforced?: boolean; walking_km_per_day: number | null;
     solver_status: string; validation_status: string; optimization_run_id: number; dataset_version: string; routing_version: string };
-  days: { date: string; breakfast_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
+  days: { date: string; gaps?: { before_poi_id: string; start_min: number; end_min: number; duration_minutes: number; reason: string }[]; breakfast_omitted?: boolean; evening_omitted?: boolean; items: PlanItem[]; start: string; start_label: string; end_label: string;
     end_arrival: string; return_travel_minutes: number }[];
 };
 export type PlansView = {
   plans: Plan[]; my_vote: number | null; voted: number; members: number; chosen_id: number | null;
   holidays: { date: string; name: string }[];
   availability_checked: boolean;
-  setup: { default_composition: DailyComposition; dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[] };
+  setup: { default_composition: DailyComposition; dates: string[]; is_owner: boolean; recommendations_ready: boolean; planning_data_configured: boolean; points: Place[]; configuration?: OptimizationInput | null };
   latest_optimization: { id: number; status: string; error_code: string | null; solver_status: string;
     validation_status: string; configuration: OptimizationInput | null;
     candidate_selection?: { catalogue_count: number; eligible_catalogue_count: number; selected_count: number;
@@ -122,14 +127,38 @@ export type Tastes = {
 
 // Trip chat (GET/POST /trips/{id}/chat). Agent replies follow contracts/agent.response.json.
 export type AgentState = "PENDING" | "RUNNING" | "SUCCEEDED" | "NEEDS_CLARIFICATION" | "FAILED" | "CANCELLED";
-export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string }[] };
+export type AgentProposal = { date: string; remove_item_ids: string[]; add: { poi_id: string; start: string; date?: string }[] };
 type SavedPlanProposal = { kind: "switch"; itinerary_id: number; label: string } | { kind: "regenerate" };
 // Group approval of a suggestion (issue #19). A majority of members decides.
 export type ProposalStatus = "PENDING" | "APPLYING" | "APPLIED" | "REJECTED" | "FAILED" | "STALE";
 export type ProposalVotes = { approve: number; reject: number; needed: number; members: number; mine: boolean | null };
+export type ProposalStopDetail = {
+  poi_id: string; date: string; start_min: number; end_min: number; duration_minutes: number; duration_status: string;
+  place: { id: string; name: string; category: string | null; description: string | null;
+    description_source_url: string | null; image_url: string | null; address: string | null;
+    latitude: number | null; longitude: number | null; features: Category[]; map_url: string | null; metadata_available: boolean };
+  hours: { status: string; windows: { start_min: number; end_min: number }[]; fits_visit: boolean | null; closed: boolean | null; checked_at: string | null };
+  cost_per_person: { value: number | null; status: string; source: string | null; checked_at: string | null };
+  recommendation_score: { value: number; semantics: "normalized_preference" | "relative_relevance" | "unspecified"; rank: number } | null;
+  recommendation_reasons: { code: string; text: string }[];
+};
+export type ProposalMeasures = { travel_minutes: number; itinerary_minutes: number; visit_minutes: number; waiting_minutes: number; stops: number };
+export type ProposalDetails = {
+  schema_version: "proposal-details-1.0"; dataset_version: string; snapshot_created_at: string | null;
+  original: ProposalStopDetail[]; proposed: ProposalStopDetail[];
+  adjusted: { poi_id: string; name: string; date: string; before_start_min: number; after_start_min: number; before_end_min: number; after_end_min: number; stop: ProposalStopDetail }[];
+  impact: { before: ProposalMeasures; after: ProposalMeasures; change: ProposalMeasures;
+    days: { date: string; before: ProposalMeasures; after: ProposalMeasures; change: ProposalMeasures }[] } | null;
+};
 export type AgentInfo = {
+  proposal_details?: ProposalDetails | null;
+  dataset_version?: string | null;
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;
   proposal_status?: ProposalStatus; votes?: ProposalVotes;
+  validation_status?: string; repair_strategy?: string;
+  action_type?: string; affected_dates?: string[];
+  pending_action?: { id: string; status: string; question_message_id: number | null; authorized_user_id: string; expires_at: string };
+  affected_activities?: { date: string; poi_id: string; start_min: number; departure_min: number }[];
   removed?: { poi_id: string; start: string; name: string }[];
   result?: { status: ProposalStatus; reason?: string; start?: string | null; mode?: "keep" | "rebuild";
     approve?: number; members?: number; date?: string; added?: string[] };

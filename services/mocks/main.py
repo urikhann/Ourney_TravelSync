@@ -124,8 +124,11 @@ def check_one(poi_id: str, day: date, start: str, duration: int, version: str | 
         return {**base, "available": False, "reason": f"Closed on public holidays ({holiday.name})", "open": None,
                 "close": None, "next_available": next_open()}
     normalized_windows = day_windows(normalized, day) if normalized else None
+    provisional = bool(normalized and normalized["schedule"].get("schema_version") == "provisional-hours-1.0")
+    if not exc and provisional and normalized_windows is None:
+        return {**base, "available": None, "confidence": 0.0, "reason": "Provisional hours contain unresolved conditions; review required", "open": None, "close": None, "next_available": None}
     if not exc and normalized_windows is not None:
-        fact = {**base, "source": f"normalized-hours:{normalized['batch_id']}",
+        fact = {**base, "confidence": 0.3 if provisional else base["confidence"], "source": f"{'provisional-hours' if provisional else 'normalized-hours'}:{normalized['batch_id']}",
                 "last_updated": normalized["observed_at"]}
         if not normalized_windows:
             return {**fact, "available": False, "reason": "Closed on this weekday", "open": None,
@@ -133,7 +136,7 @@ def check_one(poi_id: str, day: date, start: str, duration: int, version: str | 
         start_min = _min(start)
         for begin, end in normalized_windows:
             if duration == 0 or begin <= start_min and start_min + duration + BUFFER_MIN <= end:
-                return {**fact, "available": True, "reason": None, "open": hhmm(begin), "close": hhmm(end),
+                return {**fact, "available": True, "reason": "Provisional schedule; review required" if provisional else None, "open": hhmm(begin), "close": hhmm(end),
                         "next_available": None}
         return {**fact, "available": False, "reason": "Visit crosses a closure or break", "open": None,
                 "close": None, "next_available": None}

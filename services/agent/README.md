@@ -102,6 +102,22 @@ python -m pytest -q
 
 ## Product scope and provider errors
 
+Planning confirmations now persist in the API's chat JSON, scoped to the user,
+question and itinerary version. Short affirmative/negative replies are handled
+without another model call. Every confirmation question emitted by the model must
+include `pending_action`; the backend creates and validates the trusted envelope.
+See [conversation and re-planning](../../docs/conversation_state_and_replanning.md).
+Gemini now applies the remaining turn budget to each SDK request, retaining the
+20-second cap and one attempt. A candidate with missing final prose is handed to
+backend validation using a deterministic sentence; it is not certified by the LLM.
+
+Named replacement requests use the API's shared deterministic intent parser and
+[pre-vote repair gate](../../docs/localized_itinerary_repair.md). Model/rule output is
+only a suggestion until that backend gate stores an E3-validated draft. Approval
+applies the exact stored schedule without another optimizer call. Unknown or provisional
+replacement hours cannot qualify for voting. Ambiguous targets require clarification.
+Build the agent image from repository-root context (Compose is already configured).
+
 Chat supports indoor alternatives and less walking. Budget optimization, cheaper-plan
 suggestions and cost filtering are excluded. Agent tools omit price fields. Opening
 hours checks keep the itinerary's pinned dataset; unknown hours remain unknown.

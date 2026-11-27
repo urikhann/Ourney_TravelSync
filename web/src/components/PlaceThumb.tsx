@@ -24,11 +24,13 @@ export const gradient = (features?: string[] | null) => {
 };
 
 /** The place photo when the data has one (about 12% of places), otherwise the feature icon. */
-export default function PlaceThumb({ features, image, size = 50 }: { features?: string[] | null; image?: string | null; size?: number }) {
+export default function PlaceThumb({ features, image, size = 50, onImageError }: {
+  features?: string[] | null; image?: string | null; size?: number; onImageError?: () => void;
+}) {
   const [broken, setBroken] = useState(false);
   const { Icon } = placeLook(features);
   if (image && !broken) {
-    return <img className="thumb" src={image} alt="" loading="lazy" onError={() => setBroken(true)}
+    return <img className="thumb" src={image} alt="" loading="lazy" onError={() => { setBroken(true); onImageError?.(); }}
       style={{ width: size, height: size, objectFit: "cover" }} />;
   }
   return <div className="thumb" style={{ width: size, height: size, background: gradient(features) }}><Icon size={Math.round(size * 0.42)} /></div>;

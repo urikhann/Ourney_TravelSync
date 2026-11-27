@@ -49,7 +49,7 @@ function PlaceButton({ icon, label, value, onClick }: { icon: React.ReactNode; l
 
 export default function OptimizationForm({ tripId, view }: { tripId: string; view: PlansView }) {
   const qc = useQueryClient();
-  const prior = view.latest_optimization?.configuration;
+  const prior = view.setup.configuration ?? view.latest_optimization?.configuration;
   const points = view.setup.points;
   const composition = prior?.daily_composition ?? view.setup.default_composition;
   const dates = view.setup.dates;
@@ -76,12 +76,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const [duration, setDuration] = useState("");
   const [leg, setLeg] = useState(prior?.max_leg_minutes == null ? "" : String(prior.max_leg_minutes));
   const [walk, setWalk] = useState(prior?.max_total_walk_minutes == null ? "" : String(prior.max_total_walk_minutes));
-  const [eveningSearch, setEveningSearch] = useState("");
-  const [eveningDay, setEveningDay] = useState(dates[0] ?? "");
-  const evening = useQuery({ queryKey: ["evening-choices", tripId, eveningSearch],
-    queryFn: () => api.get<{ id: string; name: string; category: string; hours_verified: boolean }[]>(
-      `/trips/${tripId}/evening-choices?q=${encodeURIComponent(eveningSearch)}`),
-    enabled: view.setup.is_owner && view.setup.recommendations_ready });
+  const [evening, setEvening] = useState(composition.evening_enabled ?? false);
   const searchQuery = useQuery({ queryKey: ["planning-places", tripId, search],
     queryFn: () => api.get<{ id: string; name: string; duration_min?: number }[]>(`/trips/${tripId}/planning-places?q=${encodeURIComponent(search)}`),
     enabled: view.setup.is_owner && view.setup.recommendations_ready && search.trim().length >= 2 });
@@ -113,13 +108,15 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     if (problems.length) return;
     generate.mutate({
       budget_total: 0, transport_mode: "drive",
+      gap_policy: prior?.gap_policy,
       max_leg_minutes: leg === "" ? null : Number(leg), max_total_walk_minutes: walk === "" ? null : Number(walk),
-      daily_composition: { ...composition, breakfast_enabled: breakfast,
+      daily_composition: { ...composition, breakfast_enabled: breakfast, evening_enabled: evening,
         meal_windows: breakfast ? composition.meal_windows : composition.meal_windows.filter(w => w.name !== "breakfast"),
         meal_overrides: breakfast ? composition.meal_overrides : composition.meal_overrides?.filter(w => w.name !== "breakfast") }, duration_overrides: durations,
       required_access: prior?.required_access ?? [], locked_items: locks,
       days: rows.map((r) => ({ date: r.date, start_min: minute(r.start), end_min: r.end === "00:00" ? 1440 : minute(r.end),
-        start_point: r.from!, end_point: sameEnd ? r.from! : r.to! })),
+        start_point: r.from!, end_point: sameEnd ? r.from! : r.to!,
+        breaks: prior?.days.find(d => d.date === r.date)?.breaks })),
     });
   };
 
@@ -172,6 +169,11 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
           <span className="track" aria-hidden="true" /> {t("Try to include breakfast")}
         </label>
         {breakfast && <p className="muted small">{t("Breakfast is optional. The planner uses menu or category clues and opening hours. Serving times may need confirmation.")}</p>}
+        <label className="pf-switch" style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={evening} onChange={(e) => setEvening(e.target.checked)} />
+          <span className="track" aria-hidden="true" /> {t("Try to include an evening bar or pub")}
+        </label>
+        {evening && <p className="muted small">{t("Optional: the planner picks up to one bar or pub per day after 18:00 when it fits. Group exclusions still apply; this does not replace dinner.")}</p>}
         <div className="pf-label" style={{ marginTop: 12 }}>{t("Must-visit places")}</div>
         <div className="loc-search small-search">
           <input value={search} onChange={(e) => setSearch(e.target.value)} maxLength={120} placeholder={t("Search all places (2+ letters)")} aria-label={t("Search places")} />
@@ -212,28 +214,6 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
           <label className="field grow">{t("Max drive per leg (min)")}<input type="number" min="0" max="1440" step="1" value={leg} placeholder={t("No limit")} onChange={(e) => setLeg(e.target.value)} /></label>
           <label className="field grow">{t("Max walking per day (min)")}<input type="number" min="0" max="1440" step="1" value={walk} placeholder={t("No limit")} onChange={(e) => setWalk(e.target.value)} /></label>
         </div>
-      </details>
-
-      <details className="pf-more">
-        <summary>{t("Optional evening bars and pubs")}</summary>
-        <p className="small">{t("Choose a place and day, then rebuild. Evening stops start at 18:00 or later and do not count as dinner.")}</p>
-        <label className="field">{t("Search evening places")}<input maxLength={120} value={eveningSearch} onChange={(e) => setEveningSearch(e.target.value)} /></label>
-        <label className="field">{t("Evening date")}<select value={eveningDay} onChange={(e) => setEveningDay(e.target.value)}>
-          {dates.map((date) => <option key={date} value={date}>{fmtDate(date)}</option>)}
-        </select></label>
-        <ErrorBox error={evening.error ? message(evening.error) : null} />
-        {evening.isLoading && <p className="small">{t("Loading evening choices…")}</p>}
-        {evening.data?.length === 0 && <p className="small">{t("No matching evening places are available under your group's exclusions.")}</p>}
-        {evening.data?.map((p) => {
-          const selected = locks.some((l) => l.poi_id === p.id);
-          return <div key={p.id} className="row" style={{ justifyContent: "space-between", margin: "8px 0" }}>
-            <span className="small">{p.name}<br /><span className="muted tiny">{t(p.hours_verified ? "Saved hours available; checked when rebuilding" : "Hours unverified — confirm before visiting")}</span></span>
-            <button type="button" className="chip white" disabled={selected || !eveningDay || locks.length >= 60} onClick={() => {
-              setLocks([...locks, { poi_id: p.id, date: eveningDay }]);
-              setNames((old) => ({ ...old, [p.id]: p.name }));
-            }}>{t(selected ? "Selected" : "Include")}</button>
-          </div>;
-        })}
       </details>
 
       <details className="pf-more">

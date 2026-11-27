@@ -2,7 +2,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from ourney_travelsync.optimizer.validation import validate_final
 from ourney_travelsync.optimizer.eligibility import usable_cost
 from ourney_travelsync.visit_durations import default_duration
 from ourney_travelsync.planning_categories import is_evening_venue
+from ..lock_policy import describe as protection_description, planning_configuration
 
 router = APIRouter(tags=["itineraries"])
 
@@ -36,11 +37,13 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     # Old greedy mock rows lack a private E3 publication audit and stay hidden.
     its = db.scalars(select(Itinerary).join(OptimizationRun, OptimizationRun.itinerary_id == Itinerary.id)
                      .where(Itinerary.trip_id == trip.id, OptimizationRun.status == "PASSED",
-                            Itinerary.variant == "optimized").order_by(Itinerary.id)).all()
+                            Itinerary.variant == "optimized").order_by(Itinerary.id.desc())).all()
     votes = db.scalars(select(Vote).where(Vote.trip_id == trip.id)).all()
     votes = [v for v in votes if v.itinerary_id in {it.id for it in its}]
     saved = {a.itinerary_id: a for a in db.scalars(select(OptimizationRun).where(
         OptimizationRun.trip_id == trip.id, OptimizationRun.itinerary_id.in_([it.id for it in its])))}
+    from ..replacements import current_time
+    protection = {it.id: protection_description(it, saved[it.id], db, current_time()) for it in its}
     current = state(db, trip.id)
     current.pop("recommendation_run_id")  # an independent comparison run does not change member constraints
     run = db.get(RecommendationRun, its[0].run_id) if its else None
@@ -64,6 +67,9 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
     my_vote = next((v.itinerary_id for v in votes if v.user_id == user.id), None)
     latest = db.scalar(select(OptimizationRun).where(OptimizationRun.trip_id == trip.id)
                        .order_by(OptimizationRun.id.desc()))
+    from ..proposals import published_plan
+    selected_plan, selected_audit = published_plan(db, trip.id)
+    form_configuration = planning_configuration(selected_plan, selected_audit, latest, db, current_time())
     rec = db.scalar(select(RecommendationRun).where(RecommendationRun.trip_id == trip.id)
                     .order_by(RecommendationRun.id.desc()))
     point_ids = {r["poi_id"] for r in rec.response.get("group", [])} if rec else set()
@@ -74,8 +80,8 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
         "plans": [{
             "id": it.id, "letter": it.letter, "variant": it.variant, "name": NAMES.get(it.variant, it.variant),
             "stale": {k: v for k, v in saved[it.id].input["state"].items() if k != "recommendation_run_id"} != current,
-            "stats": it.stats, "votes": count[it.id],
-            "days": [{**d, "items": [{**i, "place": places.get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
+            "stats": it.stats, "lock_revision": it.stats.get("lock_revision", 0), "votes": count[it.id],
+            "days": [{**d, "items": [{**i, **protection[it.id][f"{d['date']}@{i['start']}"], "place": places.get(i["poi_id"]), "mean_score": fit_by_plan[it.id].get(i["poi_id"])}
                                                    for i in d["items"]]} for d in it.days],
         } for it in its],
         "my_vote": my_vote, "voted": len(votes), "members": members, "chosen_id": chosen,
@@ -84,6 +90,7 @@ def plans_view(trip: Trip, user: User, db: Session) -> dict:
         "setup": {"dates": trip_dates(trip), "default_composition": DailyComposition(meal_overlap_min=60).model_dump(mode="json"), "is_owner": trip.created_by == user.id,
                   "planning_data_configured": bool(config.PLANNING_DATA_URL),
                   "recommendations_ready": bool(rec and rec.method == "gfar" and rec.response.get("relevance_version")),
+                  "configuration": form_configuration,
                   "points": list(points.values())},
         "latest_optimization": ({"id": latest.id, "status": latest.status, "error_code": latest.error_code,
                                  "solver_status": latest.response.get("solver_status", "NOT_RUN"),
@@ -271,14 +278,18 @@ async def _generate(body, trip, user, db, *, preview=False):
         requested_days = {day.date: day for day in req.days}
         for d in result.days:
             raw = d.model_dump(mode="json")
+            raw["gaps"] = [g for g in checked.metrics["waiting_gaps"] if g["date"] == d.date.isoformat()]
             if req.daily_composition is not None:
                 meals = effective_meals(requested_days[d.date], req.daily_composition)
                 raw["breakfast_omitted"] = (any(m.name == "breakfast" and not m.require_verified for m in meals)
                                             and not any(v.breakfast_status for v in d.items))
+                raw["evening_omitted"] = (req.daily_composition.evening_enabled
+                                          and not any(candidate_by_id[v.poi_id].visit_category == "evening" for v in d.items))
             raw.update(start_label=prepared[3][d.start_point]["label"], end_label=prepared[3][d.end_point]["label"],
                        start=hhmm(d.start_min), end_arrival=hhmm(d.end_arrival_min))
             raw["items"] = [{**v.model_dump(mode="json"), "start": hhmm(v.start_min), "end": hhmm(v.departure_min),
-                             "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked, "moved_from": None,
+                             "arrival": hhmm(v.arrival_min), "locked": v.poi_id in locked,
+                             "lock_reason": "explicit_lock" if v.poi_id in locked else None, "moved_from": None,
                              "visit_category": candidate_by_id[v.poi_id].visit_category,
                              "activity_category": candidate_by_id[v.poi_id].activity_category,
                              "duration_source": candidate_by_id[v.poi_id].duration_min.source,
@@ -297,6 +308,7 @@ async def _generate(body, trip, user, db, *, preview=False):
                                 "daily_composition": req.daily_composition.model_dump(mode="json") if req.daily_composition else None,
                                 "budget_total": req.budget_total, "transport_mode": req.transport_mode,
                                 "travel_minutes": checked.metrics["travel_minutes"],
+                                "waiting_minutes": checked.metrics["waiting_minutes"],
                                 "walking_km_per_day": None, "solver_status": result.solver_status,
                                 "validation_status": "PASSED", "optimization_run_id": audit_id,
                                 "dataset_version": req.dataset_version, "routing_version": req.routing_version,
@@ -321,6 +333,69 @@ def hhmm(minutes: int) -> str:
 
 @router.get("/trips/{trip_id}/itineraries")
 def list_plans(trip: Trip = Depends(member_trip), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return plans_view(trip, user, db)
+
+
+class PlaceLockInput(BaseModel):
+    item_id: str
+    locked: bool
+    expected_revision: int
+
+
+@router.post("/trips/{trip_id}/itineraries/{itinerary_id}/lock")
+def set_place_lock(itinerary_id: int, body: PlaceLockInput, trip: Trip = Depends(member_trip),
+                   user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Edit protection metadata only; the saved schedule and group votes stay intact."""
+    from copy import deepcopy
+    from ..lock_policy import provenance
+    from ..replacements import current_time
+    if trip.created_by != user.id:
+        raise HTTPException(403, "owner_required")
+    # Serialize edits and reject a stale tab instead of overwriting another edit.
+    db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
+    it = db.scalar(select(Itinerary).where(Itinerary.id == itinerary_id,
+                                           Itinerary.trip_id == trip.id).with_for_update())
+    audit = db.scalar(select(OptimizationRun).where(OptimizationRun.itinerary_id == itinerary_id,
+                                                   OptimizationRun.status == "PASSED"))
+    if not it or not audit or it.variant != "optimized":
+        raise HTTPException(404, "plan_not_found")
+    if body.expected_revision != it.stats.get("lock_revision", 0):
+        raise HTTPException(409, "place_lock_changed")
+    now = current_time()
+    protections = protection_description(it, audit, db, now)
+    protection = protections.get(body.item_id)
+    if protection is None:
+        raise HTTPException(404, "plan_item_not_found")
+    if protection["completed"] or protection["lock_reason"] == "confirmed_reservation":
+        raise HTTPException(409, "place_lock_protected")
+    if protection["locked"] == body.locked:
+        return plans_view(trip, user, db)
+    explicit, temporary = provenance(db, audit)
+    days = deepcopy(it.days)
+    target_day, target = next((d, i) for d in days for i in d["items"]
+                              if f"{d['date']}@{i['start']}" == body.item_id)
+    pid = target["poi_id"]
+    if body.locked:
+        explicit[pid] = "explicit_lock"
+    else:
+        explicit.pop(pid, None)
+    temporary.discard(pid)
+    target.update(locked=body.locked, lock_reason="explicit_lock" if body.locked else None)
+    metadata = deepcopy(audit.input)
+    metadata["lock_provenance"] = explicit
+    metadata["temporary_lock_ids"] = sorted(temporary)
+    locks = [l for l in metadata.get("configuration", {}).get("locked_items", []) if l["poi_id"] != pid]
+    if body.locked:
+        locks.append(dict(poi_id=pid, date=target_day["date"], start_min=target["start_min"]))
+    metadata.setdefault("configuration", {})["locked_items"] = locks
+    metadata.setdefault("lock_edits", []).append(dict(item_id=body.item_id, locked=body.locked,
+                                                     user_id=user.id, created_at=now.isoformat()))
+    audit.input = metadata
+    # Changing the protection metadata also changes the plan fingerprint, so pending
+    # confirmations and proposal drafts made under the old protection become stale.
+    it.days = days
+    it.stats = {**it.stats, "lock_revision": body.expected_revision + 1}
+    db.commit()
     return plans_view(trip, user, db)
 
 

@@ -10,9 +10,10 @@ from .eligibility import check_eligibility, common_bounds
 from .solver import solve_prepared
 from .validation import validate_final
 from .meals import effective_meals
+from .waiting import gap_retry_request, improves_gap
 
 
-def optimize(request: PlanRequest | dict) -> PlanResponse:
+def _optimize_once(request: PlanRequest | dict) -> PlanResponse:
     # Serialize/reparse to take ownership of the nested snapshot and reject
     # unchecked model_copy values. No callers' inputs are mutated.
     req = PlanRequest.model_validate(request.model_dump(mode="json") if isinstance(request, PlanRequest) else request)
@@ -49,6 +50,36 @@ def optimize(request: PlanRequest | dict) -> PlanResponse:
     return PlanResponse(**base, validation_status="PASSED", days=result.days, metrics=metrics)
 
 
+def optimize(request: PlanRequest | dict) -> PlanResponse:
+    req = PlanRequest.model_validate(request.model_dump(mode="json") if isinstance(request, PlanRequest) else request)
+    if not req.gap_policy.enabled or req.provisional or req.gap_target:
+        return _optimize_once(req)
+    deadline = monotonic() + req.search_seconds
+    first = _optimize_once(req.model_copy(update={"search_seconds": req.search_seconds * .8}))
+    if first.validation_status != "PASSED":
+        return first.model_copy(update={"input_snapshot": req})
+    results = [first]
+    selected = first
+    remaining = max(0, min(req.search_seconds * .2, deadline - monotonic()))
+    if remaining > 0:
+        retry = gap_retry_request(req, first, remaining)
+        if retry is not None:
+            alternative = _optimize_once(retry)
+            results.append(alternative)
+            if improves_gap(req, first, alternative) and validate_final(req, alternative.days).passed:
+                selected = alternative
+    attempts = tuple(Attempt(input_snapshot=r.input_snapshot, solver_status=r.solver_status,
+                             validation_status=r.validation_status, error_code=r.error_code,
+                             eligibility=r.eligibility, phases=r.phases) for r in results)
+    metrics = {**selected.metrics, "gap_fill_attempted": len(results) > 1,
+               "gap_fill_applied": selected is not first,
+               "search_seconds": sum(p.wall_seconds for r in results for p in r.phases),
+               "allocated_search_seconds": sum(p.allocated_seconds for r in results for p in r.phases)}
+    snapshot = json.dumps(req.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    metrics["snapshot_sha256"] = hashlib.sha256(snapshot.encode()).hexdigest()
+    return selected.model_copy(update={"input_snapshot": req, "attempts": attempts, "metrics": metrics})
+
+
 def optimize_run(request: PlanRunRequest | dict) -> PlanResponse:
     """One optional pre-enriched expansion within the SAME total search budget.
 
@@ -66,17 +97,20 @@ def optimize_run(request: PlanRunRequest | dict) -> PlanResponse:
     selected = first
     if (run.expanded is not None and first.error_code in
             {"INSUFFICIENT_CANDIDATES", "NO_FEASIBLE_ITINERARY", "SEARCH_TIMEOUT"}):
-        allocated = sum(p.allocated_seconds for p in first.phases)
+        allocated = first.metrics.get("allocated_search_seconds", sum(p.allocated_seconds for p in first.phases))
         remaining = max(0, min(cap - allocated, deadline - monotonic()))
         if remaining > 0:
             selected = optimize(run.expanded.model_copy(update={"search_seconds": remaining}))
             results.append(selected)
         else:
             selected = first.model_copy(update={"solver_status": "UNKNOWN", "error_code": "SEARCH_TIMEOUT"})
-    attempts = tuple(Attempt(input_snapshot=r.input_snapshot, solver_status=r.solver_status,
-                             validation_status=r.validation_status, error_code=r.error_code,
-                             eligibility=r.eligibility, phases=r.phases) for r in results)
+    attempts = []
+    for result in results:
+        attempts.extend(result.attempts or (Attempt(
+            input_snapshot=result.input_snapshot, solver_status=result.solver_status,
+            validation_status=result.validation_status, error_code=result.error_code,
+            eligibility=result.eligibility, phases=result.phases),))
     metrics = {**selected.metrics, "run_search_cap_seconds": cap,
-               "run_allocated_search_seconds": sum(p.allocated_seconds for r in results for p in r.phases),
-               "run_search_seconds": sum(p.wall_seconds for r in results for p in r.phases)}
-    return selected.model_copy(update={"attempts": attempts, "metrics": metrics})
+               "run_allocated_search_seconds": sum(p.allocated_seconds for a in attempts for p in a.phases),
+               "run_search_seconds": sum(p.wall_seconds for a in attempts for p in a.phases)}
+    return selected.model_copy(update={"attempts": tuple(attempts), "metrics": metrics})

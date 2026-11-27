@@ -41,6 +41,11 @@ Rules:
 - indoor_guess is inferred from the category; say "probably indoor", not "definitely".
 - If opening hours are unknown (available = null), say they should check before going. Never call that "closed".
 - If the request is unclear or impossible, ask one short question instead of guessing.
+- A request to replan all/day/unlocked activities has that exact scope; never reinterpret it as one swap.
+  The backend routes planning scopes. Approved visits are editable unless protection explicitly says otherwise.
+- When asking a yes/no question about a planning operation, include pending_action with its action_type,
+  target_item_id (for replacing/removing), date if needed, and constraints. Confirmation starts planning,
+  never approves an itinerary change; a separate group vote is always required.
 - Reply in the language of the LAST message (the "asks:" line), Korean or English. Keep it to 1-3 short sentences.
 - The current plan is already given below the chat; call get_plan only if you need it again.
 - For "why this plan/place/time?" questions, explain the relevant saved facts without proposing edits.
@@ -78,6 +83,11 @@ TOOLS = [
                  "poi_id": {"type": "string"}, "start": {"type": "string"}}}}}}}}},
 ]
 SUMMARY = {"get_plan": "Read the plan", "find_places": "Searched places", "check_hours": "Checked opening hours"}
+TOOLS[-1]["parameters_json_schema"]["properties"]["pending_action"] = {
+    "type": "object", "required": ["action_type"], "properties": {
+        "action_type": {"type": "string", "enum": ["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all"]},
+        "target_item_id": {"type": "string"}, "target_name": {"type": "string"}, "date": {"type": "string"},
+        "constraints": {"type": "object", "properties": {"category": {"type": "string"}}}}}
 
 
 def strict_tools() -> list[dict]:
@@ -184,7 +194,7 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                 raise TimeoutError("Model took too long")
             args = fc.args
             if fc.name == "answer":
-                if strict and not args.get("reply", "").strip():
+                if strict and not args.get("reply", "").strip() and not args.get("proposal"):
                     raise ProviderError()
                 if strict and args.get("proposal"):
                     proposal = args["proposal"]
@@ -192,12 +202,26 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                     replacement = proposal["add"][0]
                     if proposal["remove_item_ids"] != [f"{proposal['date']}@{replacement['start']}"]:
                         raise ProviderError()
-                out = finish(data, args.get("reply", ""), args.get("proposal"), calls, bool(args.get("needs_clarification")))
+                reply = args.get("reply", "").strip()
+                if not reply and args.get("proposal"):
+                    ko = any("가" <= ch <= "힣" for ch in req["message"]["text"])
+                    reply = ("대체 후보를 찾았어요. 투표 전에 백엔드에서 전체 일정을 검증할게요." if ko else
+                             "A replacement candidate is ready for backend schedule validation before voting.")
+                out = finish(data, reply, args.get("proposal"), calls, bool(args.get("needs_clarification")))
                 metrics.update(completed_answer=True, proposal_submitted=bool(args.get("proposal")),
                                proposal_rejected=bool(args.get("proposal")) and out["proposal"] is None)
+                if args.get("pending_action"):
+                    if args.get("proposal"):
+                        raise ProviderError()  # asking to search cannot also request a group vote
+                    out["pending_action"] = args["pending_action"]
+                    out["needs_clarification"] = True
                 return out
             out = run_tool(data, fc.name, args)
-            calls.append({"name": fc.name, "summary": SUMMARY.get(fc.name, fc.name)})
+            summary = SUMMARY.get(fc.name, fc.name)
+            if fc.name == "check_hours":
+                summary = ("Opening hours verified" if out.get("available") is True else
+                           "Place closed at requested time" if out.get("available") is False else "Opening hours unknown")
+            calls.append({"name": fc.name, "summary": summary})
             results.append((fc, out))
         provider.add_results(results)
     if strict:
@@ -235,6 +259,43 @@ def rules_turn(req: dict, data: TripData) -> dict:
     ko = any("\uac00" <= ch <= "\ud7a3" for ch in t)  # a Korean message gets a Korean reply
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
+    try:
+        from ourney_travelsync.replacement_intent import extract_replacement, resolve_target
+    except ModuleNotFoundError:  # standalone image or service-only CI install
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).with_name("replacement_intent.py")
+        if not path.exists():
+            path = Path(__file__).resolve().parents[2] / "src/ourney_travelsync/replacement_intent.py"
+        spec = importlib.util.spec_from_file_location("replacement_intent", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        extract_replacement, resolve_target = module.extract_replacement, module.resolve_target
+    intent = extract_replacement(req["message"]["text"])
+    if intent:
+        if intent["replacement_constraints"].get("needs_clarification"):
+            return finish(data, _say(ko, "Which additional conditions are mandatory?", "반드시 지켜야 할 추가 조건을 알려 주세요."), None, calls, True)
+        plan = data.get_plan()["plan"] or []
+        names = {item["poi_id"]: [item.get("name", ""), item.get("name_ko", "")]
+                 for day in plan for item in day["items"]}
+        target, error = resolve_target(intent, plan, names)
+        if error:
+            return finish(data, _say(ko, "Which scheduled place do you mean? Please give its date and time.",
+                                     "어느 일정의 장소인가요? 날짜와 시간을 알려 주세요."), None, calls, True)
+        item = target["item"]
+        if item.get("locked"):
+            return finish(data, _say(ko, "That activity is locked.", "잠긴 일정은 바꿀 수 없어요."), None, calls)
+        kind = intent["replacement_constraints"].get("category")
+        found = data.find_places(kind="food" if kind == "meal" else kind, limit=8)["places"]
+        for candidate in found:
+            hours = data.check_hours(candidate["poi_id"], target["date"], item["start"], candidate.get("duration_min") or 90)
+            if hours["available"] is True:
+                return finish(data, _say(ko, "The backend will check a replacement against the full schedule before voting.",
+                                         "투표 전에 백엔드에서 대체 장소와 전체 일정의 조건을 확인할게요."),
+                              {"date": target["date"], "remove_item_ids": [item["item_id"]],
+                               "add": [{"poi_id": candidate["poi_id"], "start": item["start"]}]}, calls)
+        return finish(data, _say(ko, "No replacement with verified opening hours was found; the plan is unchanged.",
+                                 "운영시간이 확인된 대체 장소를 찾지 못했어요. 기존 일정은 유지됩니다."), None, calls)
     if want is None:
         return finish(data, _say(ko, "I can help with rain (indoor places) or less walking.",
                                  "비 오는 날 실내 장소 찾기나 덜 걷는 일정으로 바꾸는 것을 도와드릴 수 있어요."), None, calls, True)
@@ -316,6 +377,7 @@ def provider_failure_summary(error: Exception) -> str:
 
 def turn(req: dict, client=None) -> dict:
     data = TripData(req.get("itinerary_id"))
+    data.protection = req.get("protection", {})
     settings = provider_settings()
     provider = settings["provider"]
     if provider != "rules" and (client is not None or settings["enabled"] or settings["gemini_backup"]
@@ -341,7 +403,8 @@ def turn(req: dict, client=None) -> dict:
         except Exception as e:  # Use rules when the model request fails.
             out = rules_turn(req, data)
             summary = provider_failure_summary(e)
-            log.warning("agent fallback to rules: %s", summary)
+            log.warning("agent fallback to rules: code=%s %s",
+                        "llm_request_timeout" if isinstance(e, TimeoutError) else "provider_error", summary)
             out["tool_calls"].insert(0, {"name": "gemini_error" if provider == "gemini" else "provider_error", "summary": summary})
             return out
     return rules_turn(req, data)
