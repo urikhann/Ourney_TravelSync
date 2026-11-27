@@ -16,7 +16,7 @@ App requests enforce known opening intervals and closures, allowing unknown
 hours with warnings. Budget limits are disabled; source costs remain available
 for the known-cost subtotal. Festival validity, member availability, exclusions,
 durations, and required route evidence still constrain planning. Direct optimizer
-clients use strict defaults. See [planning rules](agreed_planning_implementation_20261117.md).
+clients use strict defaults. See [planning rules](planning_rules.md).
 
 ## Daily composition for new app plans
 

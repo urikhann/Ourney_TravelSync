@@ -60,10 +60,30 @@ def test_contract_shape_and_scale(method):
 
 def test_same_order_as_the_package():
     users = {m["user_id"]: m["ratings"] for m in EXAMPLE["members"]}
-    for method, model in [("gfar", None), ("awm", AverageWithoutMisery(2.5))]:
+    for method, model in [("gfar", None), ("awm", AverageWithoutMisery())]:
         body = client.post("/recommend", json=req(method, tie_seed=0, individual_method='feature_mean')).json()
         direct = recommend_group(main.places(), users, top_k=30, tie_seed=0, recommender=model, individual_method='feature_mean')
         assert [g["poi_id"] for g in body["group"]] == [x.poi_id for x in direct]
+
+
+def test_default_awm_accepts_two_and_still_prefers_higher_scores():
+    r = req("awm", individual_method="feature_mean")
+    for member in r["members"]:
+        member["ratings"] = dict.fromkeys(FEATURE_NAMES, 3)
+        member["ratings"].update(food=1, history=2, nature=4)
+    r["poi_snapshot"] = [dict(place_id=pid, dataset_version=r["dataset_version"], latitude=35.1, longitude=129.1,
+        **{f: int(f == feature) for f in FEATURE_NAMES})
+        for pid, feature in [("below", "food"), ("boundary", "history"), ("preferred", "nature")]]
+    response = client.post("/recommend", json=r)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [g["poi_id"] for g in body["group"]] == ["preferred", "boundary"]
+    assert body["group"][1]["mean_score"] == 2.0
+    assert any(x["poi_id"] == "below" and x["rule"] == "misery" for x in body["removed"])
+    r["options"]["awm_threshold"] = 2.5
+    overridden = client.post("/recommend", json=r)
+    assert overridden.status_code == 200, overridden.text
+    assert [g["poi_id"] for g in overridden.json()["group"]] == ["preferred"]
 
 
 def test_member_exclusions_are_removed_for_everyone():

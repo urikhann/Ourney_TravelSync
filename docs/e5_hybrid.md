@@ -108,7 +108,7 @@ mean on the declared relevance scale. GFAR gain and existing rank-derived
 `group_utility` remain distinct. No user profile or embedding is averaged before
 scoring. No fairness/satisfaction claim is derived from hybrid values.
 
-Service/CLI AWM comparison requests route to feature mean, threshold 2.5 on 1–5;
+Service/CLI AWM comparison requests route to feature mean, threshold 2.0 on 1–5;
 explicit TF-IDF AWM and thresholds outside [1,5] are rejected. Direct Python and
 captured DB AWM calls reject non-feature scorers instead of silently rerouting.
 Plain average comparisons also use feature mean when hybrid was requested.
@@ -116,7 +116,7 @@ Legacy TF-IDF remains selectable for GFAR/average, with no cosine misery veto.
 
 Itinerary feasibility is checked separately by the optimizer and the API's
 independent E3 validation. Scoring does not establish route or operating availability.
-See [planning rules](agreed_planning_implementation_20261117.md).
+See [planning rules](planning_rules.md).
 
 ## API, CLI, persistence and display
 

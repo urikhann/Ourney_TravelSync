@@ -39,7 +39,7 @@ _DEPLOYMENT, _CSV = configured()
 DATASET_VERSION = _DEPLOYMENT["dataset_version"]
 PLACES_CSV = str(_CSV)          # None = the CSV inside the package
 GFAR_DEPTH = int(os.getenv("GFAR_DEPTH", "20"))         # Borda depth of each member's list (package default)
-AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.5"))  # package default, 1-5 scale
+AWM_THRESHOLD = float(os.getenv("AWM_THRESHOLD", "2.0"))  # package default, 1-5 scale
 MODEL_VERSION = f"ourney-travelsync-{pkg_version('ourney-travelsync')}"
 
 LOVE = {"food": "love local food", "cafe": "love cafés", "nature": "love nature & views", "history": "love history",

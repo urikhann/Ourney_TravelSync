@@ -14,6 +14,13 @@ def test_awm_hand_calculated_veto_and_mean():
     assert AverageWithoutMisery(1).recommend(group(), top_k=2) == [Recommendation('a', 3.), Recommendation('b', 3.)]
 
 
+def test_awm_default_allows_two_but_rejects_below_two():
+    data = GroupInput(('u1', 'u2'), ('low', 'boundary', 'preferred'), np.full((2, 10), 3.),
+                      np.eye(10)[:3], np.array([[1.99, 2., 4.], [5., 2., 4.]]))
+    assert AverageWithoutMisery().recommend(data) == [Recommendation('preferred', 4.), Recommendation('boundary', 2.)]
+    assert AverageWithoutMisery(2.5).recommend(data) == [Recommendation('preferred', 4.)]
+
+
 def test_gfar_hand_calculated_coverage():
     # Borda: u1=[2/3,1/3,0], u2=[0,1/3,2/3]. Initial gains tie.
     # a first by input order, then c: 2/3, then b: 2/9.

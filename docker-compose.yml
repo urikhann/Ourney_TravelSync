@@ -29,6 +29,7 @@ services:
       TRAVELSYNC_E5_CACHE: /e5-cache
       TRAVELSYNC_E5_MODEL_CACHE: /e5-models
       TRAVELSYNC_E5_REGENERATE: "0"
+      AWM_THRESHOLD: ${AWM_THRESHOLD:-2.0}
       PLANNING_DAY_CANDIDATE_LIMIT: ${PLANNING_DAY_CANDIDATE_LIMIT:-16}
     ports: ["8002:8002"]
     volumes: ["./src/ourney_travelsync/data:/data:ro", "./output/e5-cache:/e5-cache", "./output/e5-models:/e5-models"]

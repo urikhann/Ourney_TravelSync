@@ -17,7 +17,7 @@ import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import ProposalDetails from "../components/ProposalDetails";
 import { Avatar } from "../components/Avatar";
-import { locale, t as tr } from "../i18n";
+import { lang, locale, systemText, t as tr } from "../i18n";
 import "./chat.css";
 
 const AGENT = "TravelSync";
@@ -47,8 +47,8 @@ export default function Chat() {
 
   const send = useMutation({
     mutationKey: ["chat-send", id],
-    mutationFn: (b: { text: string; trigger: "MESSAGE" | "MENTION" | "QUICK_ACTION" }) =>
-      api.post<{ messages: ChatMessage[] }>(`/trips/${id}/chat`, b),
+    mutationFn: (b: { text: string; trigger: "MESSAGE" | "MENTION" | "QUICK_ACTION"; reply_to?: number }) =>
+      api.post<{ messages: ChatMessage[] }>(`/trips/${id}/chat`, { ...b, language: lang() }),
     onMutate: (b) => {
       if (b.trigger === "MESSAGE") return;
       const messages = qc.getQueryData<ChatPage>(["chat", id])?.messages ?? [];
@@ -99,6 +99,11 @@ export default function Chat() {
     submitting.current = true;
     send.mutate({ text: `@${AGENT} ${tr(q)}`, trigger: "QUICK_ACTION" });
   };
+  const chooseDate = (questionId: number, date: string) => {
+    if (busy || submitting.current) return;
+    submitting.current = true;
+    send.mutate({ text: `@${AGENT} ${date}`, trigger: "QUICK_ACTION", reply_to: questionId });
+  };
   const mention = () => { setAskAI((on) => !on); inputRef.current?.focus(); };
   const type = (v: string) => {
     const m = v.match(MENTION);
@@ -120,7 +125,8 @@ export default function Chat() {
               const prev = msgs[i - 1];
               const grouped = prev && prev.kind === m.kind && prev.author?.id === m.author?.id;
               return m.kind === "agent"
-                ? <AgentBubble key={m.id} m={m} tripId={id} />
+                ? <AgentBubble key={m.id} m={m} tripId={id} busy={busy}
+                    chooseDate={m.agent?.date_selection?.authorized_user_id === me ? chooseDate : undefined} />
                 : <UserBubble key={m.id} m={m} mine={m.author?.id === me} grouped={!!grouped} color={colorIndex[m.author?.id ?? ""] ?? 0} />;
             })}
             {pending && (
@@ -198,7 +204,9 @@ function UserBubble({ m, mine, grouped, color }: { m: ChatMessage; mine: boolean
   );
 }
 
-function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
+function AgentBubble({ m, tripId, busy, chooseDate }: {
+  m: ChatMessage; tripId: string; busy: boolean; chooseDate?: (questionId: number, date: string) => void;
+}) {
   const a = m.agent;
   const failed = a?.state === "FAILED";
   const proposal = a?.proposal;
@@ -212,7 +220,13 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
         <div className="msg-name">{AGENT} <span className="ai-tag">AI</span></div>
         <div className={"bubble" + (failed ? " failed" : "")}>
           <div className="agent-markdown"><ReactMarkdown skipHtml>{agentText(m) || tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT })}</ReactMarkdown></div>
-          {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">{tr("Reply with @ai to answer.")}</div>}
+          {a?.date_selection?.status === "PENDING" && chooseDate && (
+            <div className="chat-date-choices" role="group" aria-label={tr("Choose a date")}>
+              {a.date_selection.dates.map((date, i) => <button key={date} type="button" className="chat-chip"
+                disabled={busy} onClick={() => chooseDate(m.id, date)}>{tr("Day {n}", { n: i + 1 })} · {date}</button>)}
+            </div>
+          )}
+          {a?.state === "NEEDS_CLARIFICATION" && !a.date_selection && <div className="agent-note">{tr("Reply with @ai to answer.")}</div>}
           {failed && a?.error && <div className="agent-note">{tr("Error: {code}", { code: a.error })}</div>}
         </div>
         {!!a?.tool_calls.length && (
@@ -231,9 +245,11 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
 /** Group-vote result notes are written by the server in English; show them in the reader's language. */
 function agentText(m: ChatMessage): string {
   const r = m.agent?.result;
-  if (m.agent?.event !== "proposal_result" || !r || r.approve == null) return m.text;
+  if (m.agent?.event !== "proposal_result" || !r || r.approve == null)
+    return m.agent?.reply_localized?.[lang()] ?? systemText(m.text);
   if (r.status === "APPLIED") {
-    if (m.agent?.action_type && m.agent.action_type !== "replace_poi") return m.text;
+    if (m.agent?.action_type && m.agent.action_type !== "replace_poi")
+      return tr("The group approved, so I updated the plan with the validated changes for the requested scope. Check the Plan tab.");
     const when = r.start ? tr(" at {time}", { time: r.start }) : "";
     return tr("✅ {a} of {n} approved, so I updated the plan: {names} is now on {date}{when}.", {
       a: r.approve, n: r.members ?? 0, names: (r.added ?? []).join(", "), date: r.date ?? "", when }) + " "
@@ -242,7 +258,7 @@ function agentText(m: ChatMessage): string {
   }
   if (r.status === "REJECTED") return tr("The group rejected this suggestion, so the plan stays the same.");
   if (r.status === "STALE") return tr("This suggestion is out of date because the plan changed. Ask me again for a new one.");
-  if (m.text) return m.text;
+  if (m.text) return systemText(m.text);
   return tr("The group approved, but I couldn't fit this change into a valid plan ({reason}). The plan is unchanged.", { reason: r.reason ?? "" });
 }
 
@@ -252,7 +268,7 @@ function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const me = useMe();
   const confirm = useMutation({
     mutationKey: ["chat-send", tripId],
-    mutationFn: (yes: boolean) => api.post(`/trips/${tripId}/chat`, { text: `@TravelSync ${tr(yes ? "Yes" : "No")}`, reply_to: m.id }),
+    mutationFn: (yes: boolean) => api.post(`/trips/${tripId}/chat`, { text: `@TravelSync ${tr(yes ? "Yes" : "No")}`, reply_to: m.id, language: lang() }),
     onSettled: () => qc.invalidateQueries({ queryKey: ["chat", tripId] }),
   });
   if (me.data?.id !== m.agent?.pending_action?.authorized_user_id) return null;
@@ -270,6 +286,9 @@ function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
 function toolText(tc: { name: string; summary: string }): string {
   const vote = tc.summary.match(/^Group vote: (\d+) approve, (\d+) reject$/);
   if (vote) return tr("Group vote: {a} approve, {r} reject", { a: vote[1], r: vote[2] });
+  const backup = tc.summary.match(/^Used (.+) \((.+) was busy\)$/);
+  if (backup) return tr("Used {model} ({primary} was busy)", { model: backup[1], primary: backup[2] });
+  if (["gemini_error", "provider_error"].includes(tc.name)) return tr("AI service notice: {detail}", { detail: tc.summary });
   return tr(tc.summary || tc.name);
 }
 

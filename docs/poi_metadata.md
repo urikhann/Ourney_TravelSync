@@ -91,7 +91,7 @@ schema does not add a free-text field to the web API's preferences table.
 No query is invented from the ten ratings. Skipped/missing tastes produce zero
 similarity; GFAR may still return deterministic tied candidates. This is not
 evidence of relevance. AWM requires feature-mean 1–5 values (default
-threshold 2.5); Method C AWM requests are rejected to prevent cosine-scale vetoes.
+threshold 2.0); Method C AWM requests are rejected to prevent cosine-scale vetoes.
 `avoid_keywords` remain in the captured request; they are not positive query terms
 and do not add a soft-dislike penalty. Exclusion tags enforce hard rules.
 `PlaceAbout` and `ReportedHours` display the available source metadata.
@@ -105,7 +105,7 @@ Raw descriptions and operating text do not become verified solver constraints.
 Legacy `poi_hours` and `poi_exceptions` are keyed by place ID. Normalized imports
 add dataset-scoped schedules with effective dates and preserved split windows.
 See [schedule import](normalized_operating_hours.md) and
-[planning policy](agreed_planning_implementation_20261117.md).
+[planning policy](planning_rules.md).
 
 ## Reproducible verification
 

@@ -13,7 +13,7 @@ class AverageWithoutMisery:
     Thresholds must be validated on the same rating scale as the inputs.
     """
 
-    def __init__(self, misery_threshold: float = 2.5) -> None:
+    def __init__(self, misery_threshold: float = 2.0) -> None:
         if not np.isfinite(misery_threshold):
             raise ValueError("misery_threshold must be finite.")
         

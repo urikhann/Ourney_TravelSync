@@ -34,7 +34,10 @@ export default function Plan() {
   const q = useQuery({ queryKey: ["plans", id], queryFn: () => api.get<PlansView>(`/trips/${id}/itineraries`) });
   const vote = useMutation({
     mutationFn: (planId: number) => api.post<PlansView>(`/itineraries/${planId}/vote`),
-    onSuccess: (v) => qc.setQueryData(["plans", id], v),
+    onSuccess: (v) => {
+      qc.setQueryData(["plans", id], v);
+      void qc.invalidateQueries({ queryKey: ["chat", id] });
+    },
   });
   const placeLock = useMutation({
     mutationFn: ({ planId, itemId, locked, revision }: { planId: number; itemId: string; locked: boolean; revision: number }) =>
@@ -188,7 +191,7 @@ export default function Plan() {
                     )}
                     {it.availability?.available === true && (
                       <span className="badge" style={{ background: "var(--green-50)", color: "var(--green-d)" }}>
-                        <CircleCheck size={12} /> {it.availability.close === "24:00" ? t("Open 24h") : it.availability.close ? t("Open ? closes {time}", { time: it.availability.close }) : t("Open")}
+                        <CircleCheck size={12} /> {it.availability.close === "24:00" ? t("Open 24h") : it.availability.close ? t("Open · closes {time}", { time: it.availability.close }) : t("Open")}
                       </span>
                     )}
                     {/* {it.availability && it.availability.available === null && (
@@ -208,17 +211,19 @@ export default function Plan() {
         <div style={{ height: 14 }} />
         <p className="muted tiny">{t("Run #{id} · data {data} · routes {routes}", { id: selected.stats.optimization_run_id, data: selected.stats.dataset_version, routes: selected.stats.routing_version })}</p>
         <ErrorBox error={vote.error ? message(vote.error) : null} />
-        {selected.stale ? <p className="muted small">{t("Approval is paused until the itinerary is rebuilt for the current group.")}</p> : chosen ? (
+        {chosen?.id === selected.id ? (
           <div className="banner green" style={{ border: "1px solid #BFE8D6" }}>
             <CircleCheck size={20} color="var(--green)" />
             <span><b>{t("Plan {x} chosen", { x: chosen.letter })}</b> · {t("{a} of {n} votes. It's now the trip plan.", { a: chosen.votes, n: v.members })}</span>
           </div>
-        ) : v.my_vote === selected.id ? (
-          <button className="btn ghost" disabled><ThumbsUp size={17} /> {t("You voted for Plan {x}", { x: selected.letter })} · {t("{a}/{n} voted", { a: v.voted, n: v.members })}</button>
         ) : (
-          <button className="btn blue" disabled={vote.isPending} onClick={() => vote.mutate(selected.id)}>
-            <ThumbsUp size={17} /> {t("Vote for Plan {x}", { x: selected.letter })} <span style={{ opacity: 0.7, fontWeight: 500 }}>· {t("{a}/{n} voted", { a: v.voted, n: v.members })}</span>
-          </button>
+          <>
+            <button type="button" className="btn blue" disabled={vote.isPending || selected.stale} onClick={() => vote.mutate(selected.id)}>
+              <ThumbsUp size={17} /> {t("Choose Plan {x}", { x: selected.letter })} <span style={{ opacity: 0.7, fontWeight: 500 }}>· {t("{a}/{n} voted", { a: v.voted, n: v.members })}</span>
+            </button>
+            {selected.stale ? <p className="muted small">{t("Approval is paused until the itinerary is rebuilt for the current group.")}</p>
+              : v.my_vote === selected.id && <p className="muted small">{t("You voted for Plan {x}", { x: selected.letter })}</p>}
+          </>
         )}
       </main>
       <TabBar tripId={id} />

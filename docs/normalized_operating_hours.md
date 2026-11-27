@@ -39,6 +39,5 @@ Retain the output directory, manifest, and source evidence. Collection does not
 automatically import or activate schedules. Rebuild API, mocks, and planning-data
 images after changing the shared reader code.
 
-The local active version after the 21 November enrichment import is
-`busan-enriched-v4-20261121`. Pass its version explicitly when preparing a new
-manual hours batch. Use a fresh output directory to retain prior manifests.
+Read the active version from `/meta/deployment` before preparing a manual hours
+batch. Pass that version explicitly and use a fresh output directory.

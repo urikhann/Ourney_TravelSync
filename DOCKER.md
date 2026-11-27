@@ -1,10 +1,10 @@
-# Reproducible snapshot setup
+# Run TravelSync with Docker
 
 Use [the deployment snapshot guide](docs/deployment_snapshot.md) for fresh setup,
 upgrade, restart, rollback and E5 prewarming. Initial dataset activation is explicit.
 The notes below describe general development services.
 
-# Run TravelSync with Docker
+## Local services
 
 After the explicit snapshot setup linked above, one command starts PostgreSQL, the recommender, the planning-data adapter,
 the OR-Tools optimizer, availability mocks, the chat agent, the API, and the web app.
@@ -24,7 +24,7 @@ metadata and versioned hours. Ordinary starts validate and reuse the installed s
 | recommender | 8002 | group recommendations (GFAR / AWM) — http://localhost:8002/health |
 | optimizer | 8003 (loopback) | real CP-SAT Module H with E2/E3; called internally by the API |
 | planning-data | 8004 (loopback) | operating facts and directed Kakao driving routes |
-| agent | 8005 (loopback) | Gemini tools and rules fallback |
+| agent | 8005 (loopback) | Groq primary, Gemini backup and rules fallback |
 | mocks | 8001 | availability checker and test fixtures |
 | db | 5432 | PostgreSQL (user / password / database: `travelsync`) |
 
@@ -35,8 +35,7 @@ service implementing `POST /snapshot`. Optional authentication uses
 environment. Without a configured source, the app explains that verified planning
 data is missing and preserves existing plans. It never substitutes synthetic or
 zero-time/zero-cost routes. See [adapter setup and contract](docs/optimizer_app_integration.md).
-API startup adds the private `itinerary_optimization_runs` audit table; existing
-tables and columns are unchanged.
+Private `itinerary_optimization_runs` audits retain planning requests and validation results.
 
 ## Everyday commands
 
@@ -89,5 +88,5 @@ startup; that time is separate from image building.
 
 - **"port is already allocated"**: something else uses that port (for example another local server or PostgreSQL on 5432). Stop it, then run the command again.
 - **The web page loads but nothing works**: wait until the api log says `Application startup complete`
-  (the first start imports the place data).
+  after completing the explicit snapshot installation above.
 - **After pulling new code something looks old**: `docker compose up --build`.

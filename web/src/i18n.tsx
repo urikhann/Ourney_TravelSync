@@ -30,6 +30,12 @@ export function t(text: string, vars?: Record<string, string | number>): string 
   return out;
 }
 
+// Only exact, known system messages are translated. User chat and source facts stay intact.
+const SYSTEM_EN = Object.fromEntries(Object.entries(KO).map(([en, ko]) => [ko, en]));
+export function systemText(text: string): string {
+  return current === "ko" ? t(text) : SYSTEM_EN[text] ?? text;
+}
+
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({ lang: current, setLang: () => {} });
 
 /** Wrap the app once. Changing the language re-draws every screen (keyed), so every t() call updates. */

@@ -1,6 +1,6 @@
 Optional evening bars and pubs
 
-In Plan > More options, ?Try to include an evening bar or pub? works like optional
+In Plan > More options, "Try to include an evening bar or pub" works like optional
 breakfast. It defaults off and automatically chooses a suitable venue; users do
 not need to select a specific bar or day. The normal planning submission persists
 this preference as daily_composition.evening_enabled.
@@ -25,10 +25,4 @@ quotas remain in place. Earlier explicit evening locks can still be removed usin
 the timeline lock control; turning off the optional preference does not erase them.
 
 The authenticated /evening-choices endpoint remains available for compatibility;
-the planning form no longer requires manual venue selection. No catalogue import,
-live database change or deployment is part of this UI/planning correction.
-
-Local verification: root suite 493 passed (2 skipped); API suite 210 passed
-(2 skipped); recommender service 18 passed; agent service 55 passed. TypeScript,
-Vite and wheel builds passed. See issues_16_29_31_audit.md for issue coverage and
-validation limits. Live-provider behavior was not exhaustively tested.
+the planning form no longer requires manual venue selection.

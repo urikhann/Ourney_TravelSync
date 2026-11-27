@@ -23,9 +23,9 @@ QUESTIONS = [
         _o("western", "양식", "Western", ["양식", "파스타", "피자", "스테이크"]),
         _o("seafood", "해산물", "Seafood", ["해산물", "해물", "생선", "조개"]),
         _o("meat_bbq", "고기·구이", "Meat & BBQ", ["고기", "구이", "갈비", "삼겹살"]),
-        _o("street_food", "분식", "Street food", ["분식", "떡볶이", "어묵"]),
+        _o("street_food", "길거리 음식", "Street food", ["분식", "떡볶이", "어묵"]),
         _o("dessert", "디저트·베이커리", "Desserts & bakery", ["디저트", "베이커리", "빵", "케이크"]),
-        _o("coffee", "카페", "Coffee", ["카페", "커피"]),
+        _o("coffee", "커피", "Coffee", ["카페", "커피"]),
     ]},
     {"code": "places", "label_ko": "선호하는 여행 장소는?", "label_en": "Where do you like to go?", "options": [
         _o("sea", "바다·해변", "Sea & beaches", ["바다", "해변", "해수욕장", "해안"]),

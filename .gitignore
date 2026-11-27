@@ -70,3 +70,6 @@ dist/
 services/recommender/output/
 web/.vite/
 /.tmp/
+
+# Retired research workspaces may retain private local caches and results.
+/experiments/

@@ -2,37 +2,10 @@
 
 Follow-up: [structured confirmation, lock provenance and planning scopes](conversation_state_and_replanning.md).
 
-Implemented on `improvements`, November 26, 2026. No database migration is required.
 The implementation uses the existing GFAR recommendation snapshot, planning-data
 adapter, E2 checker, E3 validator, private optimization audits and group votes.
 
-## Failure analysis
-
-Confirmed by inspecting the original implementation at
-`89b87ff5422bd33e7f18c1ea297952af708c2751`:
-
-- `services/agent/tools.py:TripData.validate` allowed unknown hours and did not
-  check route connections or a complete modified itinerary. Its output was a
-  suggestion, not evidence of feasibility.
-- `api/app/routes/chat.py:ask_agent` made that suggestion pending immediately.
-- `api/app/proposals.py:apply` only optimized after approval. Its first attempt
-  locked retained stops by date, allowing their times to move across the trip.
-  Its second attempt kept only original locks and the replacement, allowing
-  unrelated stops and dates to change. Both attempts called full generation.
-- The rules fallback recognized rain and walking, but had no replacement intent.
-  A failed provider request could therefore produce the unrelated rain help text.
-- `optimizer/api.py` maps solver `UNKNOWN` without an incumbent to
-  `SEARCH_TIMEOUT`, and `INFEASIBLE` to `NO_FEASIBLE_ITINERARY`. A timeout does
-  not establish infeasibility. The old approval path could encounter either.
-
-The historical November 26 itinerary, provider responses and correlated logs were
-not supplied. The exact cause of failure for 갤러리지팩 or 타이드 is **unconfirmed**.
-Unverified evening hours, travel distance and schedule slack are plausible factors,
-not established diagnoses. The regression suite reproduces the Korean request,
-November 30 date and 19:08 target using explicitly synthetic operational facts.
-It does not invent production opening hours or claim a live historical replay.
-
-## Corrected execution path
+## Execution path
 
 ```text
 Mention / model-originated suggestion
@@ -151,168 +124,16 @@ The agent Docker build now uses repository-root context and copies the shared in
 parser into its standalone image. There are no migrations, automatic imports or
 dataset activations in this change. Legacy pending suggestions are shown as stale.
 
-## Verification and measured results
+## Verification and limits
 
-Deterministic tests use synthetic facts and mocked LLM/routing services; integration
-tests use the real E2/E3 and CP-SAT with disposable SQLite. They do not contact a live
-LLM, routing provider, production database or user chat.
+See [test commands](optimizer_verification.md). Regression coverage includes fixed
+and local repair, same-day solver fallback, stale inputs, concurrent approval,
+rollback, locks, unknown hours and preservation of unaffected dates.
 
-- Local repair/contract/solver focused run: 37 passed (includes the optional deviation
-  objective). The final local repair module alone passed 22 cases; its later run
-  combined with the API extraction smoke test passed 23 cases.
-- Final agent suite: 52 passed.
-- Recommender service suite: 18 passed.
-- Frontend: TypeScript build and Vite production build passed.
-- Root suite: 463 passed, 2 skipped, 1 failed, plus 21 passing subtests in the recorded
-  full run. Its `test_travel_objective_can_be_disabled_but_return_still_must_fit` failure
-  was reproduced from isolated, untouched HEAD files: the test omits the existing
-  `waiting_minutes` phase. No constraint or expectation was weakened to hide it.
-- Full API rerun: **147 passed, 2 skipped** (live-service test and opt-in benchmark).
-  Final replacement/versioning/membership focused run: **22 passed**, including
-  concurrent approval, switching back to the original, started activities and
-  two-day publication preservation. The opt-in paired HTTP benchmark also passed.
-  One earlier full run had an intermittent 409 in the
-  existing adapter-header test; its isolated rerun passed. This is retained as an
-  observation, not attributed to a confirmed solver timeout without evidence.
-
-The following regression IDs are covered (several IDs share parameterized tests):
-
-| IDs | Evidence |
-|---|---|
-| 001, 013, 021 | Shared extraction/resolution; mocked model timeout to relevant rules; ambiguity clarification |
-| 002–007, 025–027 | Fixed repair, endpoint nodes, closed/unknown hours, distance, split intervals, unknown routes |
-| 008–012 | Candidate iteration, local fallback, day-only mandatory solver trials, no draft on failure, UNKNOWN timeout |
-| 014–016, 020 | Budget when enabled, exclusions, locks/started visits and E3 failure |
-| 017–019, 023–024, 028 | Majority approval, stale constraints, repeat/concurrent approval, rejection, commit rollback, changed evidence |
-| 022 | Pure-engine and API publication checks preserve the unaffected day |
-
-The stored [paired HTTP benchmark](localized_repair_http_benchmark.json) loads the
-legacy chat/proposal modules from the recorded HEAD into a separate test app. Five
-paired cases share seed 0, member preferences, sample catalogue, operational/routing
-fixtures and a two-second solver allowance. A single member votes immediately;
-human delay is excluded. Shared underlying services use this checkout. The stored
-[engine microbenchmark](localized_repair_benchmark.json) separately measures twenty
-two-day repair trials and the legacy full-solve strategy. Neither benchmark is a
-production SLA, relevance judgment or user-satisfaction experiment. Preserve raw
-rows, per-member utilities, failures and small-sample limitations when reporting.
-
-Final paired HTTP measurements (5 cases per arm):
-
-| Metric | Legacy | Local repair |
-|---|---:|---:|
-| Median proposal + immediate approval | 1.386 s | 0.143 s |
-| p95, nearest rank | 1.559 s | 0.192 s |
-| Validated before voting | 0/5 | 5/5 |
-| Approved changes applied | 5/5 | 5/5 |
-| Full optimizer calls | 5 | 0 |
-| Median solver execution | 1.079 s | 0 s |
-| Hard-constraint violations after application | 0 | 0 |
-| Unrelated activities with changed times, total | 30 | 0 |
-| Planning adapter calls per case | 1 | 2 |
-| Live external routing API calls | 0 (mocked) | 0 (mocked) |
-| Minimum-member rank relevance proxy | 0.6833 | 0.6250 |
-
-The new path makes an extra evidence refresh at approval. Its relevance proxy is
-lower in these fixtures, despite better schedule preservation and latency. This is
-not evidence of improved recommendation quality or satisfaction. These one-member
-cases cannot establish multi-member fairness; full raw per-member fields remain in
-the JSON. LLM timeout rates are not measured by this benchmark. Failure-preservation
-rates are tested with separate injected-failure regressions, not inferred from these
-successful cases.
-
-The 20-case two-day engine comparison measured median **39.84 ms → 1.44 ms** and
-p95 **45.20 ms → 2.00 ms**. Both arms produced 20/20 E3-valid results and zero
-hard-constraint violations. The baseline moved two unrelated activity start times
-per case; local repair moved none. Both recorded zero solver timeouts. These
-microbenchmarks exclude HTTP, persistence, enrichment and voting latency. Artifact
-metadata records source hashes, seed, fixture hash and baseline revision.
-
-## Files in this implementation
-
-Added:
-
-- `api/app/replacements.py`: shared backend gate, evidence refresh, private draft and exact-schedule publication.
-- `src/ourney_travelsync/replacement_intent.py`: shared conservative intent and occurrence resolution.
-- `src/ourney_travelsync/optimizer/repair.py`: fixed/local reconstruction and same-day request reduction.
-- `tests/test_localized_repair.py`, `api/tests/test_replacement_validation.py`,
-  `services/agent/test_replacement_fallback.py`: deterministic regression coverage.
-- `api/tests/test_replacement_benchmark.py`, `scripts/benchmark_localized_repair.py`:
-  paired HTTP and engine benchmark runners.
-- `docs/localized_itinerary_repair.md`, `docs/localized_repair_benchmark.json`,
-  `docs/localized_repair_http_benchmark.json`: architecture, results and raw evidence.
-
-Updated:
-
-- `api/app/config.py`, `api/app/services.py`: replacement bounds and distinct HTTP timeouts.
-- `api/app/proposals.py`, `api/app/routes/chat.py`, `api/app/routes/itineraries.py`:
-  pre-vote gate, transaction, selected-version consistency, idempotence and preserved versions.
-- `src/ourney_travelsync/optimizer/contracts.py`, `src/ourney_travelsync/optimizer/solver.py`:
-  optional preferred starts and replacement-only deviation objective. Concurrent
-  provisional-hours additions in the contracts file were preserved.
-- `api/tests/test_proposal_approval.py`, `api/tests/test_membership.py`: corrected
-  pre-vote expectations, deterministic fixture clock/seed and deletion coverage.
-- `services/agent/brain.py`, `services/agent/Dockerfile`, `docker-compose.yml`:
-  relevant fallback, accurate hours summaries, timeout logs and shared-parser packaging.
-- `web/src/types.ts`, `web/src/pages/Chat.tsx`, `web/src/i18n.ko.ts`: validated status,
-  actual time changes, approval progress wording and Korean labels.
-- `.env.example`, `.gitignore`, `README.md`, `docs/optimizer_app_integration.md`,
-  `services/agent/README.md`: settings, scratch-output exclusion and architecture links.
-
-Concurrent provisional-schedule/data-import edits observed during execution are
-separate work and were preserved. No commit, push, deployment, production data import
-or activation was performed.
-
-Run the checks and reproduce the benchmarks from an environment with API, optimizer,
-agent and recommender dependencies installed:
-
-```powershell
-.venv/Scripts/python.exe -m pytest tests api/tests -q
-# Run agent separately because its fixture database and import names are service-local.
-Push-Location services/agent
-../../.venv/Scripts/python.exe -m pytest -q
-Pop-Location
-.venv/Scripts/python.exe scripts/benchmark_localized_repair.py --output docs/localized_repair_benchmark.json
-$env:TRAVELSYNC_RUN_REPLACEMENT_BENCHMARK='1'
-.venv/Scripts/python.exe -m pytest api/tests/test_replacement_benchmark.py -q
-Remove-Item Env:TRAVELSYNC_RUN_REPLACEMENT_BENCHMARK
-```
-
-## Manual reproduction and limits
-
-1. Rebuild the services above. Use a test trip with agreed future dates, preferences,
-   availability, start/end points and a published E3-checked itinerary.
-2. If the itinerary actually contains 경성대학교 콘서트홀 on November 30 at 19:08,
-   send `@TravelSync 경성대학교 콘서트홀 가기 싫어 다른 곳으로 치환해줘.`
-   Otherwise use the actual scheduled name; do not insert fabricated operating facts
-   into the active dataset merely to reproduce this example.
-3. Confirm either a validated draft with an exact change summary or a relevant
-   non-votable explanation. Unknown/provisional candidate hours must not yield voting
-   buttons. Failed searches leave the original unchanged.
-4. Approve with the existing majority. Check the published new version and preserved
-   original; inspect logs for the proposal ID and strategy. There must be no solver
-   invocation during approval. Repeat approval and confirm no duplicate version.
-5. Repeat after changing the plan/constraints during voting. Expect STALE and a new
-   proposal requirement. Controlled external-service failures belong in a disposable
-   test environment, not the production database.
-
-The isolated named/time regression is
-`tests/test_localized_repair.py::test_original_korean_hall_request_at_1908_with_labeled_evidence`.
-Candidate search is intentionally limited to the pinned planning pool. Broader catalogue
-retrieval and unknown/unsupported new conditions can require a separate request.
-Same-day repair uses the verified graph already available plus the replacement's two
-new edges; missing alternative edges can limit search completeness. A failure therefore
-means no validated replacement was found within these limits, not proof that none exists.
-The local deterministic repair is a bounded heuristic and can defer feasible cases to
-the solver. PostgreSQL row-lock behavior is implemented but has not been exercised
-against a live PostgreSQL server in this task; concurrency tests use SQLite.
-No live external-service benchmark or historical production replay was performed.
-
-## 시스템 통합 테스트 및 개선 사항
-
-장소 교체 요청은 그룹 투표 전에 운영시간·이동시간·기존 제약조건과 전체 일정을 검증하도록
-개선했다. 기존 일정의 빈 시간에 먼저 대체 장소를 배치하고, 필요한 경우 주변 시간이나 해당
-날짜만 제한적으로 조정한다. 검증된 변경안을 저장하므로 승인 시 전체 일정을 다시 최적화하지
-않으며, 일정 변경·동시 승인·저장 실패 상황에서는 기존 일정과 버전을 보호한다.
-한국어 교체 요청은 LLM 응답 지연 시에도 관련 없는 일반 안내로 대체되지 않도록 처리했다.
-성능 수치는 합성 데이터와 모의 외부 서비스를 사용한 로컬 테스트 결과이며 실제 사용자 만족도나
-운영 서비스의 응답속도를 의미하지 않는다.
+Candidate search is limited to the pinned planning pool. Same-day repair uses the
+available verified graph and the replacement's two new edges. Missing edges and
+bounded search can prevent a feasible replacement from being found. A failed
+search preserves the current itinerary; it does not prove no replacement exists.
+Synthetic regression fixtures and local microbenchmarks do not establish live
+provider performance or user satisfaction. Benchmark runners remain in `scripts/`
+and the opt-in API tests; save generated results under ignored `output/`.
