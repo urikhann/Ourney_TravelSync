@@ -1,5 +1,8 @@
 import pytest
 
+pytest.importorskip("pydantic")
+pytest.importorskip("ortools")
+
 from optimizer_fixtures import prepared, request_data
 from ourney_travelsync.optimizer.solver import solve_prepared
 from ourney_travelsync.optimizer.comfort import day_burden
