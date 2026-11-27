@@ -13,6 +13,7 @@ import httpx
 
 GROQ_MODELS = ("openai/gpt-oss-20b", "qwen/qwen3.8-27b")
 DEFAULT_GROQ_MODEL = GROQ_MODELS[1]
+REQUEST_TIMEOUT_SECONDS = 60
 
 
 class ProviderError(Exception):
@@ -56,7 +57,7 @@ class GeminiProvider:
         self.model, self.think = model, think
         self.client = client if client is not None else genai.Client(
             api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=20_000,
+            http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_SECONDS * 1000,
                                           retry_options=types.HttpRetryOptions(attempts=1)))
 
     def start(self, system, prompt, tools):
@@ -77,9 +78,9 @@ class GeminiProvider:
         if timeout <= 0:
             raise TimeoutError("Model deadline exceeded")
         # Respect the shared remaining turn budget, including time already spent
-        # in primary-provider retries and read tools. Never increase the 20s cap.
+        # in primary-provider retries and read tools, up to the per-request cap.
         bounded = self.config.model_copy(update={"http_options": types.HttpOptions(
-            timeout=max(1, min(20_000, int(timeout*1000))),
+            timeout=max(1, min(REQUEST_TIMEOUT_SECONDS * 1000, int(timeout*1000))),
             retry_options=types.HttpRetryOptions(attempts=1))})
         resp = self.client.models.generate_content(model=self.model, contents=self.contents, config=bounded)
         if any(getattr(candidate.finish_reason, "value", candidate.finish_reason) == "MAX_TOKENS"
@@ -157,7 +158,7 @@ class GroqProvider:
         try:
             response = post("https://api.groq.com/openai/v1/chat/completions",
                             headers={"Authorization": f"Bearer {self.api_key}"},
-                            json=payload, timeout=min(20.0, timeout))
+                            json=payload, timeout=min(REQUEST_TIMEOUT_SECONDS, timeout))
             if response.status_code >= 400:
                 retry_after = response.headers.get("Retry-After", "")
                 raise ProviderError(response.status_code, int(retry_after) if retry_after.isdecimal() else 0)

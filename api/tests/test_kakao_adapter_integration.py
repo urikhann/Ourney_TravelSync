@@ -1,12 +1,14 @@
 """Actual Kakao adapter -> CP-SAT -> E3, with synthetic DB/provider evidence."""
 import importlib.util
+import json
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import pytest
 
-from app import config, services
+from app import config, drive_planning, replacements, services
 from .test_optimizer_integration import ready, generate, configuration, audits
 
 
@@ -33,18 +35,29 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
     real_client = httpx.AsyncClient
 
     calls = []
+    provider_requests = Counter()
     def respond(req):
-        assert req.method == "GET"
-        assert req.url.params["avoid"] == "toll"
         assert req.headers["Authorization"] == "KakaoAK synthetic-key"
-        pair = req.url.params["origin"], req.url.params["destination"]
-        assert pair not in calls
-        calls.append(pair)
-        # A draft that gets faster keeps its order. The repair case makes
-        # one selected leg impossible and keeps the remaining legs short.
-        duration = 86400 if repair_needed and len(calls) == 1 else 60
-        return httpx.Response(200, json={"routes": [dict(result_code=0,
-            summary=dict(duration=duration, distance=500, fare=dict(toll=0)))]})
+        if req.method == "GET":
+            assert req.url.params["avoid"] == "toll"
+            provider_requests["point"] += 1
+            pairs = [(None, (req.url.params["origin"], req.url.params["destination"]))]
+        else:
+            assert req.method == "POST"
+            body = json.loads(req.content)
+            assert body["avoid"] == ["toll"]
+            provider_requests["batch"] += 1
+            point = lambda p: f"{p['x']},{p['y']}"
+            pairs = [(p["key"], (point(body["origin"]), point(p))) for p in body["destinations"]]
+        routes = []
+        for key, pair in pairs:
+            assert pair not in calls
+            calls.append(pair)
+            # Only the first selected leg is impossible in the repair case.
+            duration = 86400 if repair_needed and len(calls) == 1 else 60
+            routes.append(dict(key=key, result_code=0,
+                summary=dict(duration=duration, distance=500, fare=dict(toll=0))))
+        return httpx.Response(200, json={"routes": routes})
 
     class ProviderClient:
         def __init__(self, **kwargs):
@@ -82,12 +95,20 @@ def test_kakao_adapter_to_optimizer_and_e3(monkeypatch, planning_adapter, tmp_pa
         audit = audits(tid)[0]
         rounds = audit.planning_data["routing_rounds"]
         assert len(rounds) in ((2, 3) if repair_needed else (1,))
-        assert rounds[-1]["routing_attempts"] == {"point": len(calls)}
-        assert len(calls) == sum(len(r["requested_legs"]) for r in rounds)
+        assert audit.planning_data["response"]["routing_attempts"] == dict(provider_requests)
+        gap_legs = audit.planning_data.get("gap_filling", {}).get("requested_legs", [])
+        requested_legs = [leg for r in rounds for leg in r["requested_legs"]] + gap_legs
+        context = audit.planning_data["request"]
+        points = {p["poi_id"]: p for p in context["pois"]} | context["points"]
+        coordinates = lambda pid: f"{points[pid]['longitude']},{points[pid]['latitude']}"
+        assert set(calls) == {(coordinates(leg["origin"]), coordinates(leg["destination"]))
+                              for leg in requested_legs}
         if not repair_needed:
             days = result.json()["plans"][0]["days"]
             assert [day["date"] for day in days] == list(dates)
-            assert len(calls) == sum(len(day["items"]) + 1 for day in days)
+            published = list(drive_planning.chosen_edges(replacements.plans(days)))
+            assert set((d.isoformat(), a, b) for d, a, b in published) <= {
+                (leg["date"], leg["origin"], leg["destination"]) for leg in requested_legs}
             for day in days:
                 assert day["return_travel_minutes"] == 1
                 requested = rounds[0]["requested_legs"]

@@ -26,7 +26,7 @@ def clock(monkeypatch):
     monkeypatch.setattr(recommendations, "build_request", seeded)
 
 
-def test_tc008_next_candidate_and_tc025_no_optimizer(planning_adapter, monkeypatch):
+def test_tc008_next_candidate_and_tc025_no_optimizer(compact_planning_adapter, monkeypatch):
     (h,), tid, plan = planned_trip(1)
     _, first, proposal = swap_for(tid, plan)
     def unknown_first(req, response):
@@ -35,7 +35,9 @@ def test_tc008_next_candidate_and_tc025_no_optimizer(planning_adapter, monkeypat
                 for op in p["operations"].values():
                     op["openings"] = {}
         return response
-    planning_adapter.transform = unknown_first
+    # Build a small valid base schedule, then expose alternatives for the local
+    # repair. A fully packed general fixture need not have a fixed-slot swap.
+    compact_planning_adapter.transform = unknown_first
     async def forbidden(*args, **kwargs):
         raise AssertionError("fixed-slot replacement must not optimize")
     monkeypatch.setattr(services, "build_plans", forbidden)

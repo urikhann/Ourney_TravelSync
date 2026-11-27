@@ -50,6 +50,48 @@ def swap(poi="museum", start="10:00"):
             "add": [{"poi_id": poi, "start": start}]}
 
 
+@pytest.mark.parametrize("remaining,expected", [(1.25, 1.25), (45, 45), (120, 60)])
+def test_groq_request_timeout_respects_remaining_budget(remaining, expected):
+    seen = []
+
+    def handle(request):
+        seen.append(request.extensions["timeout"]["read"])
+        return httpx.Response(200, json=response([wire_call("answer", {"reply": "Ready"})]))
+
+    provider = GroqProvider(GROQ_MODELS[1], client=httpx.Client(transport=httpx.MockTransport(handle)))
+    provider.start("System", "Prompt", [])
+    provider._complete(remaining)
+    assert seen == [expected]
+
+
+def test_model_turn_allows_answer_after_old_deadline(fixture_data, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(brain.time, "monotonic", lambda: now[0])
+    budgets = []
+
+    class SlowProvider:
+        model = "synthetic-slow-model"
+
+        def start(self, *args):
+            pass
+
+        def complete(self, timeout):
+            budgets.append(timeout)
+            now[0] += 45
+            if len(budgets) == 1:
+                return Completion([ToolCall("read", "get_plan", {})])
+            return Completion([ToolCall("final", "answer", {"reply": "Ready"})])
+
+        def add_results(self, results):
+            pass
+
+    case = fixture_data["cases"][0]
+    out = brain.model_turn(trial_models.trial_request(case, "en"),
+                           trial_models.TrialData(fixture_data, case), SlowProvider())
+    assert out["reply"] == "Ready"
+    assert budgets == [180, 135]
+
+
 @pytest.mark.parametrize("model", GROQ_MODELS)
 @pytest.mark.parametrize("language", ["en", "ko"])
 def test_groq_tool_roundtrip(fixture_data, model, language):
@@ -140,7 +182,8 @@ def test_step_limit_and_deadline(fixture_data):
     with pytest.raises(ProviderError):
         brain.model_turn(req, data, provider_for([response([wire_call("get_plan", {})])] * brain.MAX_STEPS))
     with pytest.raises(TimeoutError):
-        brain.model_turn(req, data, provider_for([]), started=brain.time.monotonic() - 41)
+        brain.model_turn(req, data, provider_for([]),
+                         started=brain.time.monotonic() - brain.DEADLINE_SECONDS - 1)
 
 
 def test_settings_missing_key_and_explicit_rules(monkeypatch):

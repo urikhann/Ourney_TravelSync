@@ -35,7 +35,7 @@ AVAILABILITY_URL = _env("AVAILABILITY_URL", "http://localhost:8001")
 AGENT_URL = _env("AGENT_URL", "http://localhost:8001")
 SERVICE_TIMEOUT_SECONDS = float(_env("SERVICE_TIMEOUT_SECONDS", "10"))
 # The AI agent calls an LLM several times per answer, so it gets more time than the other services.
-AGENT_TIMEOUT_SECONDS = float(_env("AGENT_TIMEOUT_SECONDS", "60"))
+AGENT_TIMEOUT_SECONDS = float(_env("AGENT_TIMEOUT_SECONDS", "210"))
 
 # Both services resolve the same hash-validated snapshot specification.
 from ourney_travelsync.deployment import SNAPSHOT, snapshot

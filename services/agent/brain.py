@@ -19,8 +19,17 @@ from providers import DEFAULT_GROQ_MODEL, GeminiProvider, GroqProvider, ModelPro
 from tools import TripData
 try:
     from planning_settings_intent import extract_settings
-except ImportError:
-    from ourney_travelsync.planning_settings_intent import extract_settings
+except ModuleNotFoundError:
+    try:
+        from ourney_travelsync.planning_settings_intent import extract_settings
+    except ModuleNotFoundError:  # service-only checkout without the Python package
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[2] / "src/ourney_travelsync/planning_settings_intent.py"
+        spec = importlib.util.spec_from_file_location("planning_settings_intent", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        extract_settings = module.extract_settings
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 # Free-tier models are sometimes "experiencing high demand" (503) or rate-limited (429).
@@ -31,9 +40,9 @@ BUSY_PAUSE_SECONDS = 300            # a busy model is skipped for 5 minutes, so 
 busy_until: dict[str, float] = {}
 log = logging.getLogger("uvicorn.error")
 MAX_STEPS = 6
-DEADLINE_SECONDS = 40  # the backend waits up to 60 s; stop early and use the rules instead
+DEADLINE_SECONDS = 180  # leave headroom within the backend's 210-second wait
 GROQ_RETRIES = 5  # shared across all model requests in a turn
-GROQ_SECONDS_WITH_BACKUP = 25
+GROQ_SECONDS_WITH_BACKUP = 120  # reserve the remaining minute for Gemini
 
 SYSTEM = """You are TravelSync, the assistant inside a group-travel planning app for Busan.
 The group chats; you are only called when someone asks you.

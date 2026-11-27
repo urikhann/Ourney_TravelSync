@@ -38,7 +38,8 @@ def test_gemini_request_respects_remaining_budget():
     provider.contents = []
     provider.complete(1.25)
     provider.complete(60)
-    assert seen == [1250, 20000]
+    provider.complete(120)
+    assert seen == [1250, 60000, 60000]
 
 
 def test_gemini_token_truncated_text_is_not_displayed():

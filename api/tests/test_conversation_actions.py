@@ -214,6 +214,9 @@ def test_legacy_retention_lock_provenance_preserves_explicit_lock(planning_adapt
         raw["configuration"]["locked_items"] = [{**lock, "start_min": lock.get("start_min")} for lock in locks.values()]
         child.input = raw
         agent.pop("draft_id")
+        # Recreate the old keep-all-stops path even if today's fuller schedule
+        # needed same-day optimization to produce the replacement draft.
+        agent["result"] = {**agent["result"], "mode": "keep"}
         msg.agent = agent
         saved = db.get(Itinerary, child.itinerary_id)
         legacy = deepcopy(saved.days)

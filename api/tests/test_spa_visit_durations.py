@@ -1,5 +1,4 @@
 import pytest
-from sqlalchemy import select
 
 from app import services
 from app.db import SessionLocal
@@ -11,9 +10,9 @@ from .test_optimizer_integration import ready, generate, configuration, audits, 
 @pytest.mark.parametrize("name", ["테스트 온천", "테스트 찜질방"])
 @pytest.mark.parametrize("override", [None, 75])
 def test_spa_duration_reaches_catalogue_retrieval_and_validated_plan(compact_planning_adapter, monkeypatch, name, override):
-    h, tid, _ = ready(individual_method="feature_mean")
+    h, tid, rec = ready(individual_method="feature_mean")
     with SessionLocal() as db:
-        place = db.scalar(select(Poi).where(Poi.id == "bmuseum"))
+        place = db.get(Poi, ("bmuseum", rec["dataset_version"]))
         version, old_name, old_duration = place.dataset_version, place.name, place.duration_min
         place.name = name
         db.commit()
@@ -21,7 +20,7 @@ def test_spa_duration_reaches_catalogue_retrieval_and_validated_plan(compact_pla
         options = c.get(f"/trips/{tid}/planning-places", params={"q": name}, headers=h)
         assert options.status_code == 200, options.text
         assert next(p for p in options.json() if p["id"] == "bmuseum")["duration_min"] == 180
-        detail = c.get("/pois/bmuseum", headers=h)
+        detail = c.get("/pois/bmuseum", params={"version": version}, headers=h)
         assert detail.status_code == 200, detail.text
         assert detail.json()["duration_min"] == 180
         captured = []

@@ -39,9 +39,12 @@ Examples: `@ai Set the visit duration for Busan Museum to 90 minutes`,
 `AGENT_PROVIDER` accepts `groq` (default), `gemini`, or `rules`. Groq uses `GROQ_API_KEY` and
 `GROQ_MODEL` (default `qwen/qwen3.8-27b`). The default path allows up to five Groq retries per turn
 for retryable provider errors, reusing tool history and applying backoff. When a Gemini key is
-configured, Groq gets up to 25 seconds of the 40-second model budget. Gemini handles the turn if
+configured, Groq gets up to 120 seconds of the 180-second model budget. Gemini handles the turn if
 Groq is unavailable or cannot finish within its budget. Simple rules answer if both paths fail or
 neither key is configured.
+Each model request can wait up to 60 seconds, bounded by the remaining model budget.
+The API waits up to 210 seconds for the agent (`AGENT_TIMEOUT_SECONDS`), leaving headroom
+for tool execution and final validation. Restart/rebuild both the agent and API after updating.
 Keys belong only in the ignored root `.env`, exported environment, or deployment secret configuration.
 
 For Docker, set these entries in the root `.env`, then rebuild the agent:
@@ -80,8 +83,8 @@ the production tool and validation methods over in-memory synthetic places and f
 The cases cover greetings, rain, walking, locked stops, unknown/closed hours, ambiguity, and no plan.
 
 Each model receives the same system prompt, tool schemas, case context, temperature 0.2, low reasoning
-effort, 2,048 completion-token cap, six-step bound, and 40-second loop budget. HTTP calls use at most
-20-second timeouts; blocking I/O and final validation can extend elapsed time beyond the loop budget.
+effort, 2,048 completion-token cap, six-step bound, and 180-second loop budget. HTTP calls use at most
+60-second timeouts; blocking I/O and final validation can extend elapsed time beyond the loop budget.
 The first model alternates across cases/languages/repeats. `--repeats 3` repeats the paired set;
 `--models MODEL_A MODEL_B` overrides the two candidate IDs if availability changes.
 
