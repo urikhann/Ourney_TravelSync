@@ -17,6 +17,10 @@ from jsonschema import Draft202012Validator
 
 from providers import DEFAULT_GROQ_MODEL, GeminiProvider, GroqProvider, ModelProvider, ProviderError
 from tools import TripData
+try:
+    from planning_settings_intent import extract_settings
+except ImportError:
+    from ourney_travelsync.planning_settings_intent import extract_settings
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 # Free-tier models are sometimes "experiencing high demand" (503) or rate-limited (429).
@@ -36,8 +40,13 @@ The group chats; you are only called when someone asks you.
 Rules:
 - Use the tools to look at the real plan and real places. Never invent places or times.
 - Budget and price optimization are outside product scope. Do not offer cheaper plans or cost comparisons.
-- You may suggest at most ONE change (remove one stop and add one place at the same start time). The group approves it later.
-- Only use poi_id and item_id values returned by the tools. Never change a locked stop.
+- For place replacements, suggest at most ONE swap (remove one stop and add one place at the same start time). The group approves it later.
+- Only use poi_id and item_id values returned by the tools. Never replace or remove a locked stop.
+  Only an explicit settings request may change its visit duration or lock state through the settings tools.
+- For an explicit request to change a visit duration, call set_visit_duration with its real item_id and minutes.
+- For an explicit request to lock or unlock a place, call set_place_lock with its real item_id and desired boolean.
+  These tools request backend confirmation; they do not directly edit schedules or protection.
+  Never use them to remove protection implicitly while doing another task. Completed visits and reservations stay protected.
 - indoor_guess is inferred from the category; say "probably indoor", not "definitely".
 - If opening hours are unknown (available = null), say they should check before going. Never call that "closed".
 - If the request is unclear or impossible, ask one short question instead of guessing.
@@ -70,6 +79,7 @@ Rules:
   - Lunch 11:30-14:30, dinner 17:30-20:30; include a meal when the day overlaps its window by at least 60 minutes.
   - Check known opening hours and closed days; warn about unknown hours.
   - Estimated visit durations: cafes 45 min, meals 60 min, culture 90 min, other activities 60 min.
+    Places whose names contain 찜질방 or 온천 default to 180 minutes. Explicit per-visit overrides take priority.
   - Kakao provides driving times, which are cached for reuse to speed up later planning.
   - Everyone must confirm every trip date first. Automatic weather and accessibility checks are not implemented yet.
   Present these as the planner's general/default rules, not proof of why a particular stop, time or route won.
@@ -79,7 +89,7 @@ Rules:
   Describe the recorded swaps and actual start times. If a day was rebuilt, other stops may
   also have changed. Do not present this summary as a complete before-and-after diff or propose edits.
 - For greetings or small talk, call `answer` right away without other tools.
-- Always finish by calling the `answer` tool."""
+- Finish ordinary turns with `answer`. For a settings request, call the settings tool alone; the backend supplies the confirmation question."""
 
 TOOLS = [
     {"name": "get_plan", "description": "The group's current plan: days and stops with item_id, time, place facts.",
@@ -105,10 +115,22 @@ TOOLS = [
                  "poi_id": {"type": "string"}, "start": {"type": "string"}}}}}}}}},
 ]
 SUMMARY = {"get_plan": "Read the plan", "find_places": "Searched places", "check_hours": "Checked opening hours"}
+SETTING_TOOLS = {"set_visit_duration", "set_place_lock"}
+TOOLS[-1:-1] = [
+    {"name": "set_visit_duration", "description": "Request a visit-duration change for an explicitly named scheduled visit. Backend confirmation, schedule validation and a group vote are required.",
+     "parameters_json_schema": {"type": "object", "required": ["item_id", "duration_min"], "properties": {
+         "item_id": {"type": "string", "description": "Exact item_id from get_plan"},
+         "duration_min": {"type": "integer", "minimum": 1, "maximum": 1440}}}},
+    {"name": "set_place_lock", "description": "Request an explicit owner-authorized lock or unlock. Confirmation is required. Never clear reservations, completed visits, or locks implicitly.",
+     "parameters_json_schema": {"type": "object", "required": ["item_id", "locked"], "properties": {
+         "item_id": {"type": "string", "description": "Exact item_id from get_plan"}, "locked": {"type": "boolean"}}}},
+]
+SUMMARY.update(set_visit_duration="Prepared visit duration change", set_place_lock="Prepared place lock change")
 TOOLS[-1]["parameters_json_schema"]["properties"]["pending_action"] = {
     "type": "object", "required": ["action_type"], "properties": {
-        "action_type": {"type": "string", "enum": ["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all"]},
+        "action_type": {"type": "string", "enum": ["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all", "set_visit_duration", "set_place_lock"]},
         "target_item_id": {"type": "string"}, "target_name": {"type": "string"}, "date": {"type": "string"},
+        "duration_min": {"type": "integer", "minimum": 1, "maximum": 1440}, "locked": {"type": "boolean"},
         "constraints": {"type": "object", "properties": {"category": {"type": "string"}}}}}
 
 
@@ -138,6 +160,23 @@ def strict_tools() -> list[dict]:
 
 
 def run_tool(data: TripData, name: str, args: dict) -> dict:
+    if name in SETTING_TOOLS:
+        item = next((v for d in data.get_plan().get("plan") or [] for v in d["items"] if v["item_id"] == args.get("item_id")), None)
+        if item is None:
+            return {"error": "scheduled_visit_not_found"}
+        if item.get("completed") or item.get("lock_reason") == "confirmed_reservation":
+            return {"error": "place_lock_protected"}
+        action = dict(action_type=name, target_item_id=item["item_id"], constraints={})
+        if name == "set_visit_duration":
+            minutes = args.get("duration_min")
+            if type(minutes) is not int or not 1 <= minutes <= 1440:
+                return {"error": "invalid_visit_duration"}
+            action["duration_min"] = minutes
+        else:
+            if type(args.get("locked")) is not bool:
+                return {"error": "invalid_lock_state"}
+            action["locked"] = args["locked"]
+        return {"pending_action": action, "status": "CONFIRMATION_REQUIRED"}
     if name == "get_plan":
         return data.get_plan()
     if name == "find_places":
@@ -202,6 +241,8 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
         for key, value in (resp.usage or {}).items():
             metrics["usage"][key] = metrics["usage"].get(key, 0) + value
         fcs = resp.calls
+        if any(fc.name in SETTING_TOOLS for fc in fcs) and len(fcs) != 1:
+            raise ProviderError()  # one explicit setting request per confirmation
         if not fcs:  # plain text instead of a tool call
             if strict:
                 raise ProviderError()
@@ -248,6 +289,9 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                 summary = ("Opening hours verified" if out.get("available") is True else
                            "Place closed at requested time" if out.get("available") is False else "Opening hours unknown")
             calls.append({"name": fc.name, "summary": summary})
+            if fc.name in SETTING_TOOLS and out.get("pending_action"):
+                reply = "설정 변경을 확인해 주세요." if reply_korean(req) else "Please confirm this setting change."
+                return {**finish(data, reply, None, calls, True), "pending_action": out["pending_action"]}
             results.append((fc, out))
         provider.add_results(results)
     if strict:
@@ -290,6 +334,10 @@ def rules_turn(req: dict, data: TripData) -> dict:
     ko = reply_korean(req)
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
+    settings = extract_settings(req["message"]["text"])
+    if settings:
+        return {**finish(data, _say(ko, "Please confirm this setting change.", "설정 변경을 확인해 주세요."), None, calls, True),
+                "pending_action": settings}
     if any(question in t for question in ("why this plan", "why were these places picked for our group",
                                           "왜 이 일정", "이 장소들은 왜 우리 그룹에 추천됐나요")):
         overview = _say(ko,

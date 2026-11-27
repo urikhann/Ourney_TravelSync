@@ -20,7 +20,7 @@ from ourney_travelsync.optimizer.contracts import (Candidate, Contract, DailyCom
 from ourney_travelsync.planning_categories import visit_role
 from ourney_travelsync.breakfast_metadata import breakfast_metadata, inferred_breakfast_suitability
 from ourney_travelsync.place_identity import visit_identity
-from ourney_travelsync.visit_durations import default_duration, RULE_VERSION
+from ourney_travelsync.visit_durations import default_duration, named_duration, RULE_VERSION
 
 from . import config
 from .models import DatasetVersion, MemberAvailability, Poi, Preference, RecommendationRun, Trip, TripMember
@@ -233,7 +233,7 @@ def catalogue_request(run, body, db):
     return {**request,
         "poi_snapshot": [dict(place_id=p.id, dataset_version=p.dataset_version, place_name=p.name,
             category_name=p.category, tags=p.tags, latitude=p.lat, longitude=p.lng,
-            enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features)),
+            enriched_metadata=p.enriched_metadata, duration_min=body.duration_overrides.get(p.id, default_duration(p.features, p.name)),
             field_status={**(p.field_status or {}), "duration": "ESTIMATED"}, **p.features) for p in rows],
         "planning_days": [d.model_dump(mode="json") for d in body.days],
         "planning_locks": [l.model_dump(mode="json") for l in body.locked_items],
@@ -271,8 +271,9 @@ def solver_request(run, audit_id, body, prepared, request, response):
     rows = prepared[4]
     stamp = datetime.now(timezone.utc).isoformat()
     enriched = [Candidate.model_validate({**p.model_dump(mode="json"), "duration_min": {
-        "value": body.duration_overrides.get(p.poi_id, default_duration(rows[p.poi_id].features)),
-        "status": "ESTIMATED", "source": "user-duration-override" if p.poi_id in body.duration_overrides else "category-default",
+        "value": body.duration_overrides.get(p.poi_id, default_duration(rows[p.poi_id].features, rows[p.poi_id].name)),
+        "status": "ESTIMATED", "source": "user-duration-override" if p.poi_id in body.duration_overrides else
+            "place-name-default" if named_duration(rows[p.poi_id].name) is not None else "category-default",
         "verified_at": stamp, "rule_version": RULE_VERSION}}) for p in enriched]
     # Reparse merged facts as nested typed objects; never trust model_copy alone.
     payload = dict(schema_version="optimizer-1.0", run_id=f"{run.id}:{audit_id}",

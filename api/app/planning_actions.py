@@ -26,6 +26,9 @@ def failure(reason, ko, *, details=None):
         "optimizer_search_timeout": ("Planning reached its search time limit; infeasibility is not established. The current plan is unchanged.", "일정 검색 시간이 초과됐어요. 불가능하다고 확정된 것은 아니며 기존 일정은 유지됩니다."),
         "optimizer_no_feasible_itinerary": ("No feasible plan was found for the requested scope and hard constraints. The current plan is unchanged.", "요청한 범위와 필수 조건을 만족하는 일정을 찾지 못했어요. 기존 일정은 유지됩니다."),
         "scope_date_required": ("Which date should I change? Please give YYYY-MM-DD.", "변경할 날짜를 YYYY-MM-DD 형식으로 알려 주세요."),
+        "settings_owner_required": ("Only the trip owner can change visit durations or place locks.", "방장만 방문 시간과 장소 잠금을 변경할 수 있어요."),
+        "place_lock_protected": ("Confirmed reservations and visits that have already started cannot be changed with this tool.", "확정 예약이나 이미 시작한 방문은 이 도구로 변경할 수 없어요."),
+        "place_lock_changed": ("Place locks changed after this request. Please request the change again.", "요청 이후 장소 잠금이 바뀌었어요. 변경을 다시 요청해 주세요."),
         "no_pending_action": ("There is no confirmation question associated with this reply. Please state the action or reply to its question.", "이 응답에 연결된 확인 질문이 없어요. 원하는 작업을 말씀하거나 해당 질문에 답해 주세요."),
         "ambiguous_pending_action": ("More than one question is awaiting your answer. Reply to the specific question using its message ID.", "답변을 기다리는 질문이 여러 개예요. 해당 질문의 메시지 ID를 지정해 답해 주세요."),
         "pending_action_expired": ("That confirmation has expired. Please request the action again.", "확인 요청이 만료됐어요. 작업을 다시 요청해 주세요."),
@@ -96,14 +99,16 @@ def strict_new_hours(req, existing):
 
 
 async def scoped_solve(db, trip, message, plan, audit, req, original, action, protected, rows,
-                       *, retained_ids=None, routing_attempts=None):
+                       *, retained_ids=None, routing_attempts=None, duration_overrides=None):
     scope = action["action_type"]
     repair.log.info("planning_action request=%s trip=%s scope=%s stage=start", message.id, trip.id, scope)
-    dates = {action["date"]} if scope in {"replan_day", "remove_poi"} else {d["date"] for d in plan.days}
+    dates = {action["date"]} if scope in {"replan_day", "remove_poi", "set_visit_duration"} else {d["date"] for d in plan.days}
     if None in dates or not dates <= {d["date"] for d in plan.days}:
         raise HTTPException(409, "scope_date_required")
     preserved = {v.poi_id for d in original if d.date.isoformat() not in dates for v in d.items}
     raw = copy.deepcopy(audit.input["configuration"])
+    if duration_overrides:
+        raw["duration_overrides"] = {**raw.get("duration_overrides", {}), **duration_overrides}
     raw["days"] = [d for d in raw["days"] if d["date"] in dates]
     raw["locked_items"] = [l.model_dump(mode="json") for l in req.locked_items if l.date.isoformat() in dates]
     if retained_ids is not None:
@@ -184,6 +189,9 @@ async def scoped_solve(db, trip, message, plan, audit, req, original, action, pr
 async def execute(db, trip, message, plan, audit, action):
     ko = korean(message)
     scope = action["action_type"]
+    if scope in {"set_visit_duration", "set_place_lock"}:
+        from .agent_settings import execute as execute_setting
+        return await execute_setting(db, trip, message, plan, audit, action)
     if scope.startswith("replan_") and trip.created_by != message.author_id:
         return failure("planning_owner_required", ko)
     if planning_intents.unsupported_constraints(action):

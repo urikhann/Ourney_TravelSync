@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from .features import FEATURES
 from .metadata import clean_meta
 from .models import Poi
+from ourney_travelsync.visit_durations import named_duration
 
 
 def place_dict(p: Poi) -> dict:
     return {"id": p.id, "name": p.name, "area": p.area, "kind": p.kind, "category": p.category,
             "features": [f for f in FEATURES if (p.features or {}).get(f)],
-            "indoor": p.indoor, "avg_cost_krw": p.avg_cost_krw, "duration_min": p.duration_min,
+            "indoor": p.indoor, "avg_cost_krw": p.avg_cost_krw, "duration_min": named_duration(p.name) or p.duration_min,
             "image_url": p.image_url or None, "place_url": p.place_url or None, "lat": p.lat, "lng": p.lng,
             "enriched_metadata": clean_meta(p.enriched_metadata),  # also cleans places imported before the fix
             "field_status": p.field_status or {}}

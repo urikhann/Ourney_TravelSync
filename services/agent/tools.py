@@ -26,6 +26,13 @@ def _place(r) -> dict:
             "duration_min": r["duration_min"]}
 
 
+def _visit_duration(item):
+    if item.get("stay_minutes") is not None:
+        return item["stay_minutes"]
+    minute = lambda value: int(value[:2]) * 60 + int(value[3:5])
+    return minute(item["end"]) - minute(item["start"])
+
+
 PLACE_COLS = "id, name, area, kind, category, indoor, walking_level, duration_min"
 
 
@@ -73,7 +80,8 @@ class TripData:
              **getattr(self, "protection", {}).get(f"{d['date']}@{it['start']}", {"locked": it.get("locked", False)}),
              "group_recommendation_reason": self.recommendation_reasons.get(it["poi_id"]),
              "available_when_planned": (it.get("availability") or {}).get("available"),
-             **self.places.get(it["poi_id"], {"poi_id": it["poi_id"], "name": it["poi_id"]})} for it in d["items"]]}
+             **self.places.get(it["poi_id"], {"poi_id": it["poi_id"], "name": it["poi_id"]}),
+             "duration_min": _visit_duration(it), "duration_source": it.get("duration_source")} for it in d["items"]]}
             for d in self.days]}
 
     def find_places(self, kind: str | None = None, indoor: bool | None = None, max_walking: float | None = None,

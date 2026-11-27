@@ -9,7 +9,8 @@ from ourney_travelsync.optimizer.contracts import Attempt, Edge, PlanResponse
 from ourney_travelsync.optimizer.eligibility import check_eligibility
 from ourney_travelsync.optimizer.meals import breakfast_windows, effective_meals
 from ourney_travelsync.optimizer.validation import validate_final
-from ourney_travelsync.optimizer.waiting import gap_retry_request, improves_gap, waiting_gaps
+from ourney_travelsync.optimizer.waiting import (gap_retry_request, improves_gap, fillable_gaps,
+                                               gap_candidate, fits_gap_window)
 from ourney_travelsync.place_identity import candidate_identity
 
 from . import services
@@ -112,7 +113,7 @@ def gap_route_legs(req, result, estimates):
     draft_routes = {**estimates, **evidence}
     draft = req.model_copy(update={"provisional": True, "edges": tuple(draft_routes.values())})
     eligible = {e.poi_id: e for e in check_eligibility(draft)}
-    gaps = sorted(waiting_gaps(req, result.days), key=lambda g: g["unallocated_minutes"], reverse=True)
+    gaps = fillable_gaps(req, result.days)
     candidates = sorted(req.candidates, key=lambda p: (-p.group_utility, -p.mean_score, p.group_rank, p.poi_id))
     for gap in gaps:
         if gap["action"] not in ("fill", "reoptimize"):
@@ -123,7 +124,7 @@ def gap_route_legs(req, result, estimates):
             continue
         legs, shortlisted = [], 0
         for candidate in candidates:
-            if (candidate_identity(candidate) in selected_identities or candidate.visit_category != "activity"
+            if (candidate_identity(candidate) in selected_identities or not gap_candidate(candidate, gap)
                     or day not in eligible[candidate.poi_id].feasible_dates):
                 continue
             keys = ((day, gap["after_poi_id"], candidate.poi_id),
@@ -131,11 +132,13 @@ def gap_route_legs(req, result, estimates):
             routes = [evidence.get(key, estimates.get(key)) for key in keys]
             if any(e is None or not (e.usable or e.draft_usable) for e in routes):
                 continue
-            if max(e.duration_minutes for e in routes) > req.gap_policy.nearby_leg_minutes:
+            if gap.get("kind") != "end_of_day" and max(e.duration_minutes for e in routes) > req.gap_policy.nearby_leg_minutes:
                 continue
             # Draft travel times may overestimate actual roads. Only reject
             # an activity whose stay alone cannot fit before fetching evidence.
             if candidate.duration_min.value > gap["duration_minutes"] + direct.duration_minutes:
+                continue
+            if not fits_gap_window(candidate, eligible[candidate.poi_id], gap, direct.duration_minutes):
                 continue
             legs.extend(key for key in keys if key not in evidence)
             shortlisted += 1
@@ -150,10 +153,12 @@ async def fill_driving_gap(baseline, context, estimates, seconds, audit, db):
     req, response, result, operational = baseline
     if not req.gap_policy.enabled or seconds <= 0 or not validate_final(req, result.days).passed:
         return baseline
-    gaps = [g for g in waiting_gaps(req, result.days) if g["action"] in ("fill", "reoptimize")]
+    gaps = [g for g in fillable_gaps(req, result.days) if g["action"] in ("fill", "reoptimize")]
     if not gaps:
         return baseline
     legs = gap_route_legs(req, result, estimates)
+    if not legs and all(g.get("kind") == "end_of_day" for g in gaps) and gap_retry_request(req, result, seconds) is None:
+        return baseline
     log = {"search_cap_seconds": seconds, "gaps": gaps, "requested_legs": [], "status": "RETAINED"}
     audit.planning_data = {**audit.planning_data, "gap_filling": log}
     db.commit()

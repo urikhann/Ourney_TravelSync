@@ -96,8 +96,10 @@ def persist_draft(db, trip, message, plan, audit, req, days, configuration, befo
 
 def explanation(code, korean):
     messages = {
+        "place_lock_protected": ("Confirmed reservations and visits that have already started cannot be changed with this tool. The plan is unchanged.",
+                                 "확정 예약이나 이미 시작한 방문은 이 도구로 변경할 수 없어요. 기존 일정은 유지됩니다."),
         "ambiguous_target_poi": ("Which scheduled occurrence do you mean? Please give its date and time.", "어느 일정의 장소인가요? 날짜와 시간을 알려 주세요."),
-        "target_poi_not_found": ("Which scheduled place should I replace? Please give its name, date and time.", "바꿀 장소의 이름과 날짜, 시간을 알려 주세요."),
+        "target_poi_not_found": ("Which scheduled place do you mean? Please give its name, date and time.", "어느 방문 일정을 변경할까요? 장소 이름과 날짜, 시간을 알려 주세요."),
         "locked_activity_conflict": ("That activity is locked or already started. The plan is unchanged.", "잠겨 있거나 이미 시작한 일정은 바꿀 수 없어요. 기존 일정은 유지됩니다."),
         "replacement_search_timeout": ("The replacement search reached its time limit; this does not prove no replacement exists. The plan is unchanged.", "대체 장소 검색 시간이 초과됐어요. 대체 장소가 없다는 뜻은 아니며 기존 일정은 유지됩니다."),
         "opening_hours_unknown": ("Required opening hours could not be verified. No change is ready for voting; the plan is unchanged.", "필요한 운영시간을 확인하지 못했어요. 투표할 변경안을 만들지 않았으며 기존 일정은 유지됩니다."),
@@ -362,6 +364,11 @@ async def apply_draft(db, trip, msg):
     # Do not apply a proposal whose target started while members were voting.
     if protected(plan, base, db) - set(meta["protected_ids"]):
         return {"status": "STALE", "reason": "locked_activity_conflict"}
+    if meta.get("action_type") == "set_visit_duration":
+        from .lock_policy import describe
+        target = describe(plan, base, db, current_time()).get(meta.get("target_item_id"))
+        if not target or target["completed"] or target["lock_reason"] == "confirmed_reservation":
+            return {"status": "STALE", "reason": "place_lock_protected"}
     try:
         async with asyncio.timeout(config.REPLACEMENT_TOTAL_SECONDS):
             refreshed, evidence = await refresh(req, draft, {v.poi_id for d in days for v in d.items}, path_edges(days))

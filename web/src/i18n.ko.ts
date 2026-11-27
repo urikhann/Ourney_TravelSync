@@ -1,6 +1,12 @@
 // Korean for every English UI text. Key = the exact English text used in t("…"); {name} placeholders stay as they are.
 // A text missing here simply shows in English, so new screens never break.
 export const KO: Record<string, string> = {
+  "Confirm lock change": "잠금 변경 확인",
+  "Confirm duration change": "방문 시간 변경 확인",
+  "Change visit duration": "방문 시간 변경",
+  "Change place lock": "장소 잠금 변경",
+  "Prepared visit duration change": "방문 시간 변경 요청 준비",
+  "Prepared place lock change": "장소 잠금 변경 요청 준비",
   "Planning reached its search time limit; infeasibility is not established. The current plan is unchanged.": "일정 검색 시간이 초과됐어요. 불가능하다고 확정된 것은 아니며 기존 일정은 유지됩니다.",
   "No feasible plan was found for the requested scope and hard constraints. The current plan is unchanged.": "요청한 범위와 필수 조건을 만족하는 일정을 찾지 못했어요. 기존 일정은 유지됩니다.",
   "Which date should I change? Please give YYYY-MM-DD.": "변경할 날짜를 YYYY-MM-DD 형식으로 알려 주세요.",

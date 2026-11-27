@@ -25,6 +25,16 @@ day must contain a visit. Costs include party size × per-person visits plus
 group fares on every selected real edge. Max-leg and per-day walking limits
 apply. Member exclusions are unioned and availability windows intersected.
 
+Gap filling also checks unused time between the planned return and the day's
+end or shared availability limit. It can append an unused activity or café while
+preserving existing visit times. Driving plans obtain the additional road legs
+before accepting a stop: travel from the last visit, the full new stay, and
+travel to the end location must all fit. Opening hours, breaks, exclusions and
+daily composition still apply. Existing objective priorities are preserved;
+delaying visits alone is not an improvement. If no validated addition fits,
+the existing plan is retained. End-of-day unused time is not reported as
+waiting between visits.
+
 One shared search budget ≤30 seconds covers all stages. Maximize fixed GFAR
 group_utility, then preserve the incumbent utility and maximize minimum member
 relevance (×10,000 rounded), then preserve both and minimize travel minutes.

@@ -6,13 +6,33 @@ so the backend only needs `AGENT_URL=http://localhost:8005`.
 | Piece | File | What it does |
 |---|---|---|
 | HTTP | `main.py` | `POST /agent/turn`, `GET /health` (selected provider, active brain and model) |
-| Brain | `brain.py` | Shared tool loop (max 6 steps, ends with `answer`); rules fallback |
+| Brain | `brain.py` | Shared tool loop (max 6 steps); answers or requests settings confirmation; rules fallback |
 | Providers | `providers.py` | Gemini SDK adapter and Groq Chat Completions adapter |
 | Tools | `tools.py` | read-only: `get_plan`, `find_places`, `check_hours`; `validate` checks every suggestion |
 
 Safety: tools only read. A suggestion is dropped unless the stop exists, is not locked, the place is real and
 not in the plan, and it is not closed at that time. Member identity fields are replaced by "Member 1, 2…".
 User-written chat text and place facts go to the provider handling the turn.
+
+## Visit duration and place locks
+
+The agent also exposes `set_visit_duration(item_id, duration_min)` and
+`set_place_lock(item_id, locked)`. Both use an existing scheduled `item_id` and
+return a confirmation request; the agent service does not write to the database.
+Only the trip owner can confirm these settings changes.
+
+- A duration change keeps all existing places, validates the adjusted schedule,
+  and creates a draft for the normal group vote. Other stops may move within the
+  same day to fit; protected start times and unaffected dates remain fixed.
+  An infeasible change leaves the current plan intact.
+- A lock or unlock reuses the Plan screen's protection controls. Confirmation
+  changes only lock metadata, preserving the schedule and existing plan votes.
+- Confirmed reservations and visits that have started cannot be edited through
+  either tool. Stale or already handled confirmations cannot execute again.
+
+Examples: `@ai Set the visit duration for Busan Museum to 90 minutes`,
+`@ai Lock Busan Museum`, `@ai 부산박물관 방문 시간을 90분으로 바꿔줘`, and
+`@ai 부산박물관 잠금 해제해줘`. Ambiguous names require clarification.
 
 ## Select a provider
 

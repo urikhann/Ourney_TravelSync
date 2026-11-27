@@ -269,7 +269,10 @@ function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
   const confirm = useMutation({
     mutationKey: ["chat-send", tripId],
     mutationFn: (yes: boolean) => api.post(`/trips/${tripId}/chat`, { text: `@TravelSync ${tr(yes ? "Yes" : "No")}`, reply_to: m.id, language: lang() }),
-    onSettled: () => qc.invalidateQueries({ queryKey: ["chat", tripId] }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["plans", tripId] });
+      return qc.invalidateQueries({ queryKey: ["chat", tripId] });
+    },
   });
   if (me.data?.id !== m.agent?.pending_action?.authorized_user_id) return null;
   const respond = (yes: boolean) => {
@@ -277,7 +280,9 @@ function ConfirmationCard({ m, tripId }: { m: ChatMessage; tripId: string }) {
     confirm.mutate(yes);
   };
   return <div className="proposal-actions">
-    <button className="btn sm" disabled={confirm.isPending || activeSends > 0} onClick={() => respond(true)}>{tr("Confirm search or replanning")}</button>
+    <button className="btn sm" disabled={confirm.isPending || activeSends > 0} onClick={() => respond(true)}>{tr(
+      m.agent?.action_type === "set_place_lock" ? "Confirm lock change" :
+      m.agent?.action_type === "set_visit_duration" ? "Confirm duration change" : "Confirm search or replanning")}</button>
     <button className="btn ghost sm" disabled={confirm.isPending || activeSends > 0} onClick={() => respond(false)}>{tr("Cancel")}</button>
     {confirm.error && <span className="tiny proposal-error">{message(confirm.error)}</span>}
   </div>;
@@ -315,6 +320,7 @@ function ProposalCard({ m, proposal: p, tripId }: { m: ChatMessage; proposal: Ag
   });
   const removed = a.removed ?? [];
   const scopeLabels: Record<string, string> = { replace_poi: "Replace an activity", remove_poi: "Remove an activity", add_poi: "Add an activity",
+    set_visit_duration: "Change visit duration", set_place_lock: "Change place lock",
     replan_day: "Replan one date", replan_unlocked: "Replan unlocked activities", replan_all: "Replan the whole trip" };
   const multipleDates = (a.affected_dates?.length ?? 0) > 1;
   return (

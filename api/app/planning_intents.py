@@ -2,9 +2,10 @@
 import re
 
 from ourney_travelsync.replacement_intent import extract_replacement
+from ourney_travelsync.planning_settings_intent import extract_settings
 
 
-SCOPES = {"replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all"}
+SCOPES = {"replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all", "set_visit_duration", "set_place_lock"}
 
 
 def clean(text):
@@ -37,6 +38,9 @@ def unsupported_constraints(action):
 
 def extract(text):
     value = clean(text)
+    settings = extract_settings(text)
+    if settings:
+        return settings
     if re.match(r"^(?:why|what)\b|^왜\s", value, re.I):
         return None
     when = re.search(r"\d{4}-\d{2}-\d{2}", value)

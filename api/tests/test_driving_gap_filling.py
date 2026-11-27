@@ -20,7 +20,7 @@ def driving_gap(monkeypatch, planning_adapter, tmp_path):
     spec = importlib.util.spec_from_file_location("gap_kakao_adapter", path)
     adapter = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(adapter)
-    state = SimpleNamespace(outcome="success", duration=180, requests=[], solves=[], provider_calls=0)
+    state = SimpleNamespace(outcome="success", duration=180, terminal=False, requests=[], solves=[], provider_calls=0)
     stamp = "2026-11-01T00:00:00Z"
 
     def fact(value):
@@ -31,7 +31,8 @@ def driving_gap(monkeypatch, planning_adapter, tmp_path):
         for pid in ids:
             window = dict(start_min=480, end_min=1320)
             if pid == "gwangalli":
-                window = dict(start_min=665, end_min=665 + state.duration)
+                window = (dict(start_min=974, end_min=1080) if state.terminal else
+                          dict(start_min=665, end_min=665 + state.duration))
                 if state.outcome == "opening_conflict":
                     window = dict(start_min=900, end_min=1080)
             records[pid] = dict(poi_id=pid, operations={day.isoformat(): dict(
@@ -120,7 +121,7 @@ def request_plan(state, *, enabled=True, rest=False):
                 daily_composition=dict(min_activities=2, min_activity_categories=2, meal_windows=[]),
                 duration_overrides=dict(bmuseum=60, xsky=30, gwangalli=state.duration),
                 locked_items=[dict(poi_id="bmuseum", date=day, start_min=600),
-                              dict(poi_id="xsky", date=day, start_min=670 + state.duration)])
+                              dict(poi_id="xsky", date=day, start_min=939 if state.terminal else 670 + state.duration)])
     if rest:
         body["days"][0]["breaks"] = [dict(start_min=680, end_min=850)]
     response = generate(headers, trip_id, body)
@@ -140,7 +141,7 @@ def request_plan(state, *, enabled=True, rest=False):
     assert all(edge.status != "ESTIMATED" for edge in req.edges)
     visits = {v["poi_id"]: v for v in plan["days"][0]["items"]}
     assert visits["bmuseum"]["start_min"] == 600
-    assert visits["xsky"]["start_min"] == 670 + state.duration
+    assert visits["xsky"]["start_min"] == (939 if state.terminal else 670 + state.duration)
     assert len(visits) == len(plan["days"][0]["items"])
     assert c.get(f"/trips/{trip_id}/itineraries", headers=headers).json()["plans"][0]["days"] == plan["days"]
     return plan, audit, original
@@ -200,3 +201,46 @@ def test_no_eligible_activity_retains_plan_without_fetching_more_routes(driving_
     assert len(driving_gap.requests) == 2
     assert audit.planning_data["gap_filling"]["status"] == "RETAINED"
     assert len(plan["days"][0]["items"]) == 2
+
+
+@pytest.mark.parametrize("duration,return_time", [(90, "17:49"), (101, "18:00")])
+def test_early_return_fetches_both_new_road_legs_and_fills_until_deadline(driving_gap, duration, return_time):
+    driving_gap.terminal = True
+    driving_gap.duration = duration
+    plan, audit, original = request_plan(driving_gap)
+    baseline = next(result for req, result in driving_gap.solves if not req["provisional"])
+    assert baseline["days"][0]["end_arrival_min"] == 974  # 16:14, with an 18:00 deadline
+    repair = audit.planning_data["gap_filling"]
+    assert repair["status"] == "APPLIED"
+    assert repair["gaps"][0]["kind"] == "end_of_day"
+    assert {(leg["origin"], leg["destination"]) for leg in repair["requested_legs"]} == {
+        ("xsky", "gwangalli"), ("gwangalli", baseline["days"][0]["end_point"])}
+    visits = plan["days"][0]["items"]
+    assert [v["poi_id"] for v in visits] == ["bmuseum", "xsky", "gwangalli"]
+    assert [(v["start_min"], v["departure_min"]) for v in visits[:2]] == [
+        (v["start_min"], v["departure_min"]) for v in original]
+    assert visits[-1]["start_min"] == 974
+    assert visits[-1]["stay_minutes"] == duration
+    assert plan["days"][0]["end_arrival"] == return_time
+    assert audit.response["metrics"]["gap_fill_applied"]
+
+
+@pytest.mark.parametrize("outcome", ["slow", "unknown", "quota", "solver_timeout"])
+def test_early_return_keeps_validated_plan_when_added_stop_cannot_be_verified(driving_gap, outcome):
+    driving_gap.terminal = True
+    driving_gap.duration = 90
+    driving_gap.outcome = outcome
+    plan, audit, original = request_plan(driving_gap)
+    assert audit.planning_data["gap_filling"]["status"] == "RETAINED"
+    assert len(plan["days"][0]["items"]) == 2
+    assert plan["days"][0]["end_arrival"] == "16:14"
+    assert [(v["start_min"], v["departure_min"]) for v in plan["days"][0]["items"]] == [
+        (v["start_min"], v["departure_min"]) for v in original]
+
+
+def test_early_return_rejects_a_visit_that_would_return_one_minute_late(driving_gap):
+    driving_gap.terminal = True
+    driving_gap.duration = 102
+    plan, audit, _ = request_plan(driving_gap)
+    assert audit.planning_data["gap_filling"]["status"] == "RETAINED"
+    assert plan["days"][0]["end_arrival"] == "16:14"

@@ -125,7 +125,7 @@ def planning_places(q: str = Query(default="", max_length=120), trip: Trip = Dep
     query = select(Poi).where(Poi.dataset_version == run.dataset_version)
     if q.strip():
         query = query.where(Poi.name.icontains(q.strip(), autoescape=True))
-    return [{"id": p.id, "name": p.name, "duration_min": default_duration(p.features)}
+    return [{"id": p.id, "name": p.name, "duration_min": default_duration(p.features, p.name)}
             for p in db.scalars(query.order_by(Poi.name, Poi.id).limit(50))]
 
 
@@ -358,56 +358,8 @@ class PlaceLockInput(BaseModel):
 def set_place_lock(itinerary_id: int, body: PlaceLockInput, trip: Trip = Depends(member_trip),
                    user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Edit protection metadata only; the saved schedule and group votes stay intact."""
-    from copy import deepcopy
-    from ..lock_policy import provenance
-    from ..replacements import current_time
-    if trip.created_by != user.id:
-        raise HTTPException(403, "owner_required")
-    # Serialize edits and reject a stale tab instead of overwriting another edit.
-    db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
-    it = db.scalar(select(Itinerary).where(Itinerary.id == itinerary_id,
-                                           Itinerary.trip_id == trip.id).with_for_update())
-    audit = db.scalar(select(OptimizationRun).where(OptimizationRun.itinerary_id == itinerary_id,
-                                                   OptimizationRun.status == "PASSED"))
-    if not it or not audit or it.variant != "optimized":
-        raise HTTPException(404, "plan_not_found")
-    if body.expected_revision != it.stats.get("lock_revision", 0):
-        raise HTTPException(409, "place_lock_changed")
-    now = current_time()
-    protections = protection_description(it, audit, db, now)
-    protection = protections.get(body.item_id)
-    if protection is None:
-        raise HTTPException(404, "plan_item_not_found")
-    if protection["completed"] or protection["lock_reason"] == "confirmed_reservation":
-        raise HTTPException(409, "place_lock_protected")
-    if protection["locked"] == body.locked:
-        return plans_view(trip, user, db)
-    explicit, temporary = provenance(db, audit)
-    days = deepcopy(it.days)
-    target_day, target = next((d, i) for d in days for i in d["items"]
-                              if f"{d['date']}@{i['start']}" == body.item_id)
-    pid = target["poi_id"]
-    if body.locked:
-        explicit[pid] = "explicit_lock"
-    else:
-        explicit.pop(pid, None)
-    temporary.discard(pid)
-    target.update(locked=body.locked, lock_reason="explicit_lock" if body.locked else None)
-    metadata = deepcopy(audit.input)
-    metadata["lock_provenance"] = explicit
-    metadata["temporary_lock_ids"] = sorted(temporary)
-    locks = [l for l in metadata.get("configuration", {}).get("locked_items", []) if l["poi_id"] != pid]
-    if body.locked:
-        locks.append(dict(poi_id=pid, date=target_day["date"], start_min=target["start_min"]))
-    metadata.setdefault("configuration", {})["locked_items"] = locks
-    metadata.setdefault("lock_edits", []).append(dict(item_id=body.item_id, locked=body.locked,
-                                                     user_id=user.id, created_at=now.isoformat()))
-    audit.input = metadata
-    # Changing the protection metadata also changes the plan fingerprint, so pending
-    # confirmations and proposal drafts made under the old protection become stale.
-    it.days = days
-    it.stats = {**it.stats, "lock_revision": body.expected_revision + 1}
-    db.commit()
+    from ..place_locks import set_lock
+    set_lock(db, trip, user.id, itinerary_id, body.item_id, body.locked, body.expected_revision)
     return plans_view(trip, user, db)
 
 

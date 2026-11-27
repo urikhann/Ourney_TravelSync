@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from sqlalchemy import select, update
 
@@ -16,17 +16,31 @@ from fastapi import HTTPException
 
 class PendingOperation(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action_type: Literal["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all"]
+    action_type: Literal["replace_poi", "remove_poi", "add_poi", "replan_day", "replan_unlocked", "replan_all", "set_visit_duration", "set_place_lock"]
     target_item_id: str | None = Field(default=None, max_length=80)
     target_name: str | None = Field(default=None, max_length=200)
     date: str | None = Field(default=None, max_length=10)
     constraints: dict = Field(default_factory=dict)
+    duration_min: int | None = Field(default=None, ge=1, le=1440)
+    locked: bool | None = None
+
+    @model_validator(mode="after")
+    def settings_fields(self):
+        if self.action_type == "set_visit_duration" and self.duration_min is None:
+            raise ValueError("visit duration required")
+        if self.action_type == "set_place_lock" and self.locked is None:
+            raise ValueError("lock state required")
+        if self.action_type != "set_visit_duration" and self.duration_min is not None:
+            raise ValueError("unexpected visit duration")
+        if self.action_type != "set_place_lock" and self.locked is not None:
+            raise ValueError("unexpected lock state")
+        return self
 
 
 def permissions(trip, user_id):
     member = next((m for m in trip.members if m.user_id == user_id), None)
     return dict(user_id=user_id, role=member.role, can_prepare=True,
-                can_replan=trip.created_by == user_id, can_unlock=False) if member else None
+                can_replan=trip.created_by == user_id, can_unlock=trip.created_by == user_id) if member else None
 
 
 def question(db, trip, message, plan, audit, action, reply, reply_localized=None):
@@ -40,17 +54,33 @@ def question(db, trip, message, plan, audit, action, reply, reply_localized=None
         return planning_actions.failure("unsupported_replacement_constraints", korean(message))
     if not plan or not audit:
         return planning_actions.failure("target_poi_not_found", korean(message))
+    settings = action["action_type"] in {"set_visit_duration", "set_place_lock"}
+    if settings and trip.created_by != message.author_id:
+        return planning_actions.failure("settings_owner_required", korean(message))
     if action["action_type"].startswith("replan_") and trip.created_by != message.author_id:
         return planning_actions.failure("planning_owner_required", korean(message))
-    if action["action_type"] in {"replace_poi", "remove_poi"}:
+    if action["action_type"] in {"replace_poi", "remove_poi", "set_visit_duration", "set_place_lock"}:
         from .models import Poi
         rows = db.scalars(select(Poi).where(Poi.dataset_version == audit.optimizer_request["dataset_version"])).all()
         try:
             target = planning_actions.target_for(action, plan, rows)
-        except HTTPException:
-            return planning_actions.failure("target_poi_not_found", korean(message))
-        if target["item"]["poi_id"] in replacements.protected(plan, audit, db):
+        except HTTPException as exc:
+            return planning_actions.failure(str(exc.detail), korean(message))
+        if not settings and target["item"]["poi_id"] in replacements.protected(plan, audit, db):
             return planning_actions.failure("locked_activity_conflict", korean(message))
+        if settings:
+            protection = describe(plan, audit, db, now)[target["item_id"]]
+            if protection["completed"] or protection["lock_reason"] == "confirmed_reservation":
+                return planning_actions.failure("place_lock_protected", korean(message))
+            name = next((p.name for p in rows if p.id == target["item"]["poi_id"]), target["item"]["poi_id"])
+            if action["action_type"] == "set_place_lock":
+                reply_localized = {"en": f"{'Lock' if action['locked'] else 'Unlock'} {name}? Its scheduled times will stay the same.",
+                                   "ko": f"{name}의 잠금을 {'설정' if action['locked'] else '해제'}할까요? 현재 일정 시간은 유지돼요."}
+            else:
+                minutes = action["duration_min"]
+                reply_localized = {"en": f"Set the visit to {name} to {minutes} minutes and prepare a validated schedule change? Applying it requires a group vote.",
+                                   "ko": f"{name} 방문 시간을 {minutes}분으로 설정한 변경안을 검증할까요? 일정에 적용하려면 그룹 투표가 필요해요."}
+            reply = reply_localized["ko" if korean(message) else "en"]
         action = {**action, "target_item_id": target["item_id"], "target_name": None}
     pending = dict(id=uuid4().hex, action_type=action["action_type"], action=action,
         target_itinerary_item_id=action.get("target_item_id"), group_id=trip.id,
@@ -59,6 +89,8 @@ def question(db, trip, message, plan, audit, action, reply, reply_localized=None
         constraints=action.get("constraints", {}), state_hash=fingerprint(state(db, trip.id)),
         created_at=now.isoformat(), expires_at=(now+timedelta(seconds=config.PENDING_ACTION_VALID_SECONDS)).isoformat(),
         status="PENDING", preceding_user_message_id=message.id, question_message_id=None)
+    if settings:
+        pending["lock_revision"] = plan.stats.get("lock_revision", 0)
     if not isinstance(reply, str) or not reply.strip():
         label = {"replace_poi": "a replacement", "remove_poi": "removing that activity", "add_poi": "adding that place",
                  "replan_day": "replanning that date", "replan_unlocked": "replanning unlocked activities", "replan_all": "replanning the whole trip"}[action["action_type"]]
@@ -113,6 +145,7 @@ async def confirm(db, trip, message, reply_to=None):
     if replacements.current_time() >= datetime.fromisoformat(pending["expires_at"]):
         reason = "pending_action_expired"
     elif (not audit or pending["itinerary_version"] != audit.id or pending["itinerary_id"] != plan.id
+          or ("lock_revision" in pending and pending["lock_revision"] != plan.stats.get("lock_revision", 0))
           or pending["itinerary_hash"] != fingerprint(plan.days) or pending["state_hash"] != fingerprint(state(db, trip.id))
           or pending["permissions"] != permissions(trip, message.author_id)):
         reason = "pending_action_stale"
@@ -189,6 +222,8 @@ async def route(db, trip, message, plan, audit, reply_to=None):
         if re.match(r"^(?:yes\b|no\b|네[\s,]|아니요[\s,])", planning_intents.clean(message.text), re.I) and own_questions(db, trip.id, message.author_id):
             return planning_actions.failure("ambiguous_pending_action", korean(message))
         return None
+    if action["action_type"] in {"set_visit_duration", "set_place_lock"}:
+        return question(db, trip, message, plan, audit, action, "")
     if action["action_type"] == "replan_all" and plan and replacements.protected(plan, audit, db):
         info = describe(plan, audit, db, replacements.current_time())
         count = sum(bool(x["protection_reason"]) for x in info.values())
