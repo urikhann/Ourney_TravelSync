@@ -41,6 +41,7 @@ class ChatIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     trigger: Literal["MESSAGE", "MENTION", "QUICK_ACTION"] = "MESSAGE"
     reply_to: int | None = Field(default=None, ge=1)
+    language: Literal["en", "ko"] | None = None
 
     @field_validator("text")
     @classmethod
@@ -79,8 +80,13 @@ async def ask_agent(db: Session, trip: Trip, msg: ChatMessage, *, reply_to=None)
     plan, plan_run = proposals.published_plan(db, trip.id)
     answer = await conversation.route(db, trip, msg, plan, plan_run, reply_to)
     if answer is not None:
+        if answer.get("reason") == "scope_date_required" and plan and plan_run:
+            action = planning_intents.extract(msg.text)
+            if action:
+                answer = conversation.date_question(answer, plan, plan_run, msg, action)
         return attach_proposal(db, plan, plan_run, answer)
     payload = {
+        "reply_language": getattr(msg, "reply_language", None),
         "trip_id": trip.id,
         "itinerary_id": plan.id if plan else None,
         "protection": protection_description(plan, plan_run, db, replacements.current_time()) if plan else {},
@@ -140,6 +146,7 @@ async def post_chat(body: ChatIn, trip: Trip = Depends(member_trip), user: User 
         raise HTTPException(404, "confirmation_question_not_found")
     mine = ChatMessage(trip_id=trip.id, author_id=user.id, kind="user", text=body.text,
                        reply_to=body.reply_to, created_at=datetime.now(timezone.utc))
+    mine.reply_language = body.language
     db.add(mine)
     db.commit()
     created = [mine]

@@ -17,6 +17,7 @@ from ourney_travelsync.geography import haversine_km
 from ourney_travelsync.replacement_intent import extract_replacement, resolve_target
 
 from . import config, services
+from .chat_language import korean
 from .drive_planning import solve_checked
 from .models import Itinerary, OptimizationRun, Poi, ProposalVote, Trip, Vote
 from .optimization import PlanningSnapshot, fingerprint, state, with_visit_identities
@@ -54,10 +55,10 @@ def itinerary_changed(before, after):
 
 
 def unchanged_answer(korean):
+    replies = {"ko": "현재 조건에서 기존 일정과 다른 검증된 변경안을 찾지 못했어요. 장소와 시간은 그대로이며 투표할 변경 사항이 없습니다.",
+               "en": "The planning search did not find a different validated itinerary under the current constraints. The places and schedule stay unchanged, so there is nothing to vote on."}
     return dict(state="SUCCEEDED", reason="no_itinerary_changes", proposal=None, tool_calls=[],
-        language="ko" if korean else "en", reply=(
-            "현재 조건에서 기존 일정과 다른 검증된 변경안을 찾지 못했어요. 장소와 시간은 그대로이며 투표할 변경 사항이 없습니다." if korean else
-            "The planning search did not find a different validated itinerary under the current constraints. The places and schedule stay unchanged, so there is nothing to vote on."))
+        language="ko" if korean else "en", reply=replies["ko" if korean else "en"], reply_localized=replies)
 
 
 def persist_draft(db, trip, message, plan, audit, req, days, configuration, before, meta, evidence):
@@ -162,7 +163,7 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
     suggested = answer.get("proposal")
     if not intent and not suggested:
         return answer
-    ko = any("가" <= c <= "힣" for c in message.text)
+    ko = korean(message)
     started, request_id = time.monotonic(), uuid4().hex
     answer = {**answer, "proposal": None, "language": "ko" if ko else "en"}
     reason, rejections = "no_replacement_candidates", []
@@ -318,10 +319,11 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
                        any(o.poi_id == v.poi_id and (o.start_min, o.departure_min) != (v.start_min, v.departure_min)
                            for original_day in original for o in original_day.items)]
             name = next((p.name for p in rows if p.id == candidate.poi_id), candidate.poi_id)
-            reply = (f"{name} 방문이 가능한 변경안을 검증했어요. " if ko else f"I validated a feasible replacement with {name}. ")
-            reply += (("주변 일정 시간 변경을 확인한 뒤 투표해 주세요." if ko else "Review the changed activity times before voting.") if changes else
-                      ("다른 일정 시간은 유지됩니다. 변경안에 투표해 주세요." if ko else "Other activity times stay unchanged. Please vote on this proposal."))
-            return {**answer, "state": "SUCCEEDED", "reply": reply, "needs_clarification": False,
+            replies = {"en": f"I validated a feasible replacement with {name}. " + (
+                "Review the changed activity times before voting." if changes else "Other activity times stay unchanged. Please vote on this proposal."),
+                "ko": f"{name} 방문이 가능한 변경안을 검증했어요. " + (
+                "주변 일정 시간 변경을 확인한 뒤 투표해 주세요." if changes else "다른 일정 시간은 유지됩니다. 변경안에 투표해 주세요.")}
+            return {**answer, "state": "SUCCEEDED", "reply": replies["ko" if ko else "en"], "reply_localized": replies, "needs_clarification": False,
                     "proposal": {"date": target["date"], "remove_item_ids": [target["item_id"]],
                                  "add": [{"poi_id": candidate.poi_id, "start": f"{visit.start_min//60:02d}:{visit.start_min%60:02d}"}]},
                     "draft_id": draft.id, "validation_status": "PASSED", "repair_strategy": outcome.strategy,
@@ -341,6 +343,7 @@ async def validate_proposal(db, trip, message, plan, audit, answer, *, intent_ov
     if reason == "no_itinerary_changes":
         return unchanged_answer(ko)
     return {**answer, "reply": explanation(reason, ko), "reason": reason,
+            "reply_localized": {"en": explanation(reason, False), "ko": explanation(reason, True)},
             "state": "NEEDS_CLARIFICATION" if reason in ("ambiguous_target_poi", "target_poi_not_found", "unsupported_replacement_constraints") else "FAILED"}
 
 

@@ -15,6 +15,7 @@ from ourney_travelsync.place_identity import candidate_identity
 from . import config, replacements as repair, services, planning_intents
 from .drive_planning import plan_drive, solve_checked
 from .models import OptimizationRun, Poi, RecommendationRun
+from .chat_language import korean
 from .optimization import GenerateInput, fingerprint, solver_request, state, with_visit_identities
 
 
@@ -48,14 +49,15 @@ def failure(reason, ko, *, details=None):
     if text is None and reason.startswith("agent_"):
         text = ("The assistant service failed before returning a planning result. The saved itinerary is unchanged.",
                 "계획 결과를 받기 전에 도우미 서비스에서 오류가 발생했어요. 저장된 일정은 유지됩니다.")
-    reply = text[bool(ko)] if text else repair.explanation(reason, ko)
+    replies = {"en": text[0] if text else repair.explanation(reason, False),
+               "ko": text[1] if text else repair.explanation(reason, True)}
     if any(e.endswith(":CONSECUTIVE_FOOD_DRINK") for e in details or []):
         context = ("Direct removal would put two food/drink stops in a row. This trip requires an activity between them. ",
                    "이 장소만 제거하면 음식·음료 일정이 연속돼요. 이 여행은 그 사이에 활동 일정이 필요합니다. ")
-        reply = context[bool(ko)] + reply
+        replies = {language: context[index] + replies[language] for index, language in enumerate(("en", "ko"))}
     return dict(state="NEEDS_CLARIFICATION" if reason in {"scope_date_required", "no_pending_action", "ambiguous_pending_action",
                 "ambiguous_target_poi", "target_poi_not_found", "unsupported_replacement_constraints", "invalid_pending_action"} else "FAILED",
-        reply=reply, reason=reason,
+        reply=replies["ko" if ko else "en"], reply_localized=replies, reason=reason,
         diagnostic_code=reason, validation_errors=details or [], proposal=None, tool_calls=[], language="ko" if ko else "en")
 
 
@@ -180,7 +182,7 @@ async def scoped_solve(db, trip, message, plan, audit, req, original, action, pr
 
 
 async def execute(db, trip, message, plan, audit, action):
-    ko = any("가" <= c <= "힣" for c in message.text)
+    ko = korean(message)
     scope = action["action_type"]
     if scope.startswith("replan_") and trip.created_by != message.author_id:
         return failure("planning_owner_required", ko)
@@ -296,9 +298,10 @@ async def execute(db, trip, message, plan, audit, action):
                 before_burden = day_burden(req, baseline, preference)
                 after_burden = day_burden(req, proposed, preference)
                 if after_burden >= before_burden:
+                    replies = {"ko": "필수 조건을 지키면서 하루 전체의 부담을 줄이는 변경안을 찾지 못했어요. 기존 일정은 유지됩니다.",
+                               "en": "I could not find a validated improvement for the whole day under the required constraints. The current plan is unchanged."}
                     return dict(state="SUCCEEDED", reason="no_comfort_improvement", proposal=None, tool_calls=[],
-                        reply="필수 조건을 지키면서 하루 전체의 부담을 줄이는 변경안을 찾지 못했어요. 기존 일정은 유지됩니다." if ko else
-                              "I could not find a validated improvement for the whole day under the required constraints. The current plan is unchanged.")
+                        reply=replies["ko" if ko else "en"], reply_localized=replies)
                 preference_evidence = dict(preference=preference, before=before_burden, after=after_burden,
                     basis="Saved indoor metadata; unknown counts as outdoor" if preference == "indoor" else
                           "Estimated visit walking from saved walking levels, plus route walking minutes")
@@ -312,14 +315,15 @@ async def execute(db, trip, message, plan, audit, action):
                 dict(base_plan_hash=base_hash, action_type=scope, strategy=scope, affected_dates=sorted(affected),
                      protected_ids=sorted(protected), comfort=preference_evidence), evidence)
             repair.log.info("planning_action request=%s scope=%s stage=stored draft=%s", message.id, scope, draft.id)
-            reply = ("요청한 범위의 변경안을 검증했어요. 변경 내용을 확인한 뒤 그룹 투표로 승인해 주세요." if ko else
-                     "I validated a draft for the requested scope. Review the changes and approve it through the group vote.")
-            if preference:
-                reply = (("오늘 하루 전체의 야외 활동 예상 시간을 줄인 변경안을 검증했어요. 실내 여부는 저장된 장소 정보에 기반해요. 그룹 투표로 승인해 주세요." if ko else
-                          "I validated a draft reducing outdoor visit time across today's whole plan, based on saved indoor metadata. Review it for the group vote.") if preference == "indoor" else
-                         ("오늘 하루 전체의 걷기 부담을 줄인 변경안을 검증했어요. 장소 내 걷기는 추정치예요. 그룹 투표로 승인해 주세요." if ko else
-                          "I validated a draft reducing walking across today's whole plan. Walking within places is estimated. Review it for the group vote."))
-            return dict(state="SUCCEEDED", reply=reply, proposal=dict(date=min(affected), remove_item_ids=removed, add=added),
+            replies = {"en": "I validated a draft for the requested scope. Review the changes and approve it through the group vote.",
+                       "ko": "요청한 범위의 변경안을 검증했어요. 변경 내용을 확인한 뒤 그룹 투표로 승인해 주세요."}
+            if preference == "indoor":
+                replies = {"en": "I validated a draft reducing outdoor visit time across the selected day, based on saved indoor metadata. Review it for the group vote.",
+                           "ko": "선택한 날짜 전체의 야외 활동 예상 시간을 줄인 변경안을 검증했어요. 실내 여부는 저장된 장소 정보에 기반해요. 그룹 투표로 승인해 주세요."}
+            elif preference == "less_walking":
+                replies = {"en": "I validated a draft reducing walking across the selected day. Walking within places is estimated. Review it for the group vote.",
+                           "ko": "선택한 날짜 전체의 걷기 부담을 줄인 변경안을 검증했어요. 장소 내 걷기는 추정치예요. 그룹 투표로 승인해 주세요."}
+            return dict(state="SUCCEEDED", reply=replies["ko" if ko else "en"], reply_localized=replies, proposal=dict(date=min(affected), remove_item_ids=removed, add=added),
                 action_type=scope, affected_dates=sorted(affected), affected_activities=changes, draft_id=draft.id,
                 validation_status="PASSED", repair_strategy=scope, tool_calls=[], language="ko" if ko else "en")
     except TimeoutError:

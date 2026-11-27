@@ -152,6 +152,8 @@ export type ProposalDetails = {
     days: { date: string; before: ProposalMeasures; after: ProposalMeasures; change: ProposalMeasures }[] } | null;
 };
 export type AgentInfo = {
+  reply_localized?: Partial<Record<"en" | "ko", string>>;
+  date_selection?: { dates: string[]; authorized_user_id: string; status: string };
   proposal_details?: ProposalDetails | null;
   dataset_version?: string | null;
   state: AgentState; reply: string; tool_calls: { name: string; summary: string }[]; proposal: AgentProposal | SavedPlanProposal | null; error?: string;

@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from . import config, planning_actions, planning_intents, proposals, replacements
 from .lock_policy import describe
 from .models import ChatMessage, Trip
+from .chat_language import korean
 from .optimization import fingerprint, state
 from fastapi import HTTPException
 
@@ -22,17 +23,13 @@ class PendingOperation(BaseModel):
     constraints: dict = Field(default_factory=dict)
 
 
-def korean(message):
-    return any("가" <= ch <= "힣" for ch in message.text)
-
-
 def permissions(trip, user_id):
     member = next((m for m in trip.members if m.user_id == user_id), None)
     return dict(user_id=user_id, role=member.role, can_prepare=True,
                 can_replan=trip.created_by == user_id, can_unlock=False) if member else None
 
 
-def question(db, trip, message, plan, audit, action, reply):
+def question(db, trip, message, plan, audit, action, reply, reply_localized=None):
     """The pending envelope is created by the backend, never accepted from a model."""
     now = replacements.current_time()
     try:
@@ -65,9 +62,11 @@ def question(db, trip, message, plan, audit, action, reply):
     if not isinstance(reply, str) or not reply.strip():
         label = {"replace_poi": "a replacement", "remove_poi": "removing that activity", "add_poi": "adding that place",
                  "replan_day": "replanning that date", "replan_unlocked": "replanning unlocked activities", "replan_all": "replanning the whole trip"}[action["action_type"]]
-        reply = ("요청한 작업의 검증된 변경안을 준비할까요? 변경안 적용에는 별도의 그룹 투표가 필요해요." if korean(message) else
-                 f"Shall I prepare a validated draft for {label}? Applying it requires a separate group vote.")
+        reply_localized = {"ko": "요청한 작업의 검증된 변경안을 준비할까요? 변경안 적용에는 별도의 그룹 투표가 필요해요.",
+                           "en": f"Shall I prepare a validated draft for {label}? Applying it requires a separate group vote."}
+        reply = reply_localized["ko" if korean(message) else "en"]
     return dict(state="NEEDS_CLARIFICATION", needs_clarification=True, reply=reply, proposal=None,
+                **({"reply_localized": reply_localized} if reply_localized else {}),
                 tool_calls=[], pending_action=pending, action_type=action["action_type"], language="ko" if korean(message) else "en")
 
 
@@ -126,7 +125,8 @@ async def confirm(db, trip, message, reply_to=None):
     q.agent = {**q.agent, "pending_action": pending}
     db.commit()  # claim once before external work; a second Yes cannot execute it again
     if not positive:
-        return dict(state="SUCCEEDED", reply="취소했어요. 기존 일정은 유지됩니다." if ko else "Cancelled. The current plan is unchanged.",
+        replies = {"ko": "취소했어요. 기존 일정은 유지됩니다.", "en": "Cancelled. The current plan is unchanged."}
+        return dict(state="SUCCEEDED", reply=replies["ko" if ko else "en"], reply_localized=replies,
                     proposal=None, tool_calls=[], reason="pending_action_declined")
     answer = await planning_actions.execute(db, trip, message, plan, audit, pending["action"])
     q.agent = {**q.agent, "pending_action": {**pending, "status": "CONSUMED", "result_reason": answer.get("reason"),
@@ -134,7 +134,52 @@ async def confirm(db, trip, message, reply_to=None):
     return answer
 
 
+def date_question(answer, plan, audit, message, action):
+    return {**answer,
+        "language": "ko" if korean(message) else "en",
+        "reply_localized": {"en": "Which date should I change? Choose a day below.", "ko": "변경할 날짜를 아래에서 선택해 주세요."},
+        "reply": "변경할 날짜를 선택해 주세요." if korean(message) else "Which date should I change? Choose a day below.",
+        "date_selection": dict(dates=sorted({d["date"] for d in plan.days}), action=action,
+            authorized_user_id=message.author_id, itinerary_version=audit.id,
+            itinerary_hash=fingerprint(plan.days), status="PENDING")}
+
+
+async def select_date(db, trip, message, plan, audit, reply_to):
+    import re
+    question = db.scalar(select(ChatMessage).where(ChatMessage.id == reply_to,
+        ChatMessage.trip_id == trip.id, ChatMessage.kind == "agent"))
+    selection = (question.agent or {}).get("date_selection") if question else None
+    if not selection:
+        return None
+    if getattr(message, "reply_language", None) is None:
+        message.reply_language = (question.agent or {}).get("language") or ("ko" if korean(question) else "en")
+    ko = korean(message)
+    if selection["authorized_user_id"] != message.author_id:
+        return planning_actions.failure("no_pending_action", ko)
+    day = planning_intents.clean(message.text)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) or day not in selection["dates"]:
+        return planning_actions.failure("scope_date_required", ko)
+    db.scalar(select(Trip).where(Trip.id == trip.id).with_for_update())
+    if db.bind.dialect.name == "sqlite":
+        db.execute(update(Trip).where(Trip.id == trip.id).values(name=Trip.name))
+    db.refresh(question)
+    selection = question.agent["date_selection"]
+    if selection["status"] != "PENDING":
+        return planning_actions.failure("pending_action_consumed", ko)
+    plan, audit = proposals.published_plan(db, trip.id)
+    if (not plan or not audit or selection["itinerary_version"] != audit.id
+            or selection["itinerary_hash"] != fingerprint(plan.days)):
+        return planning_actions.failure("pending_action_stale", ko)
+    question.agent = {**question.agent, "date_selection": {**selection, "status": "CONSUMED", "date": day}}
+    db.commit()
+    return await planning_actions.execute(db, trip, message, plan, audit, {**selection["action"], "date": day})
+
+
 async def route(db, trip, message, plan, audit, reply_to=None):
+    if reply_to:
+        selected = await select_date(db, trip, message, plan, audit, reply_to)
+        if selected is not None:
+            return selected
     confirmed = await confirm(db, trip, message, reply_to)
     if confirmed is not None:
         return confirmed
@@ -149,7 +194,8 @@ async def route(db, trip, message, plan, audit, reply_to=None):
         count = sum(bool(x["protection_reason"]) for x in info.values())
         if count == len(info):
             return planning_actions.failure("no_unlocked_activities", korean(message))
-        reply = (f"보호된 일정 {count}개가 있어 전체 재계획으로 임의 변경할 수 없어요. 잠금·예약·완료 일정을 유지하고 나머지를 다시 계획할까요? 보호 항목을 바꾸려면 먼저 별도로 잠금·예약 변경 권한을 확인해야 해요." if korean(message) else
-                 f"Full replanning conflicts with {count} protected activities. Shall I replan unlocked activities while preserving locks, reservations and completed visits? Changing protected activities requires a separate explicit authorization through the plan controls.")
-        return question(db, trip, message, plan, audit, dict(action_type="replan_unlocked", constraints=action.get("constraints", {})), reply)
+        replies = {"ko": f"보호된 일정 {count}개가 있어 전체 재계획으로 임의 변경할 수 없어요. 잠금·예약·완료 일정을 유지하고 나머지를 다시 계획할까요? 보호 항목을 바꾸려면 먼저 별도로 잠금·예약 변경 권한을 확인해야 해요.",
+                   "en": f"Full replanning conflicts with {count} protected activities. Shall I replan unlocked activities while preserving locks, reservations and completed visits? Changing protected activities requires a separate explicit authorization through the plan controls."}
+        return question(db, trip, message, plan, audit, dict(action_type="replan_unlocked", constraints=action.get("constraints", {})),
+                        replies["ko" if korean(message) else "en"], replies)
     return await planning_actions.execute(db, trip, message, plan, audit, action)

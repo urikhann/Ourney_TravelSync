@@ -181,7 +181,11 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
     plan = data.get_plan()  # given up front: saves a model round trip on most questions
     prompt = context_text(req) + "\n\nCurrent plan (JSON):\n" + json.dumps(plan, ensure_ascii=False, separators=(",", ":"))
     definitions = strict_tools() if strict else TOOLS
-    provider.start(SYSTEM, prompt, definitions)
+    reply_language = req.get("reply_language")
+    system = SYSTEM
+    if reply_language in ("en", "ko"):
+        system += "\nSelected reply language: " + ("Korean" if reply_language == "ko" else "English") + ". This explicit app setting overrides language detection from the request text."
+    provider.start(system, prompt, definitions)
     calls = []
     started = time.monotonic() if started is None else started
     metrics = metrics if metrics is not None else {}
@@ -226,7 +230,7 @@ def model_turn(req: dict, data: TripData, provider: ModelProvider, started: floa
                         raise ProviderError()
                 reply = args.get("reply", "").strip()
                 if not reply and args.get("proposal"):
-                    ko = any("가" <= ch <= "힣" for ch in req["message"]["text"])
+                    ko = reply_korean(req)
                     reply = ("대체 후보를 찾았어요. 투표 전에 백엔드에서 전체 일정을 검증할게요." if ko else
                              "A replacement candidate is ready for backend schedule validation before voting.")
                 out = finish(data, reply, args.get("proposal"), calls, bool(args.get("needs_clarification")))
@@ -276,9 +280,14 @@ def _say(korean: bool, en: str, ko: str) -> str:
     return ko if korean else en
 
 
+def reply_korean(req: dict) -> bool:
+    language = req.get("reply_language")
+    return language == "ko" if language in ("en", "ko") else any("가" <= ch <= "힣" for ch in req["message"]["text"])
+
+
 def rules_turn(req: dict, data: TripData) -> dict:
     t = req["message"]["text"].lower()
-    ko = any("\uac00" <= ch <= "\ud7a3" for ch in t)  # a Korean message gets a Korean reply
+    ko = reply_korean(req)
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
     if any(question in t for question in ("why this plan", "why were these places picked for our group",

@@ -108,7 +108,7 @@ mean on the declared relevance scale. GFAR gain and existing rank-derived
 `group_utility` remain distinct. No user profile or embedding is averaged before
 scoring. No fairness/satisfaction claim is derived from hybrid values.
 
-Service/CLI AWM comparison requests route to feature mean, threshold 2.5 on 1–5;
+Service/CLI AWM comparison requests route to feature mean, threshold 2.0 on 1–5;
 explicit TF-IDF AWM and thresholds outside [1,5] are rejected. Direct Python and
 captured DB AWM calls reject non-feature scorers instead of silently rerouting.
 Plain average comparisons also use feature mean when hybrid was requested.

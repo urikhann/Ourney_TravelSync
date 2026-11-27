@@ -2,7 +2,7 @@
 //   1. When: tap a start and a return time (or pick another time)
 //   2. Where: search a start place (station, hotel, address, or "my location"); the end is the same place unless changed
 // The same choices apply to every day unless "Same every day" is switched off.
-// Must-visit places, visit durations and travel limits are optional, under "More options".
+// Must-visit places and visit durations are optional, under "More options".
 // The request sent to /itineraries/generate is the same as before (OptimizationInput).
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,7 +65,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const [editing, setEditing] = useState(0);              // which day is shown when days differ
   const [picker, setPicker] = useState<"from" | "to" | null>(null);
 
-  // ---- optional: must-visit places, visit durations, travel limits ----
+  // ---- optional: must-visit places, visit durations ----
   const [breakfast, setBreakfast] = useState(composition.breakfast_enabled || composition.meal_windows.some(w => w.name === "breakfast"));
   const [locks, setLocks] = useState(prior?.locked_items ?? []);
   const [durations, setDurations] = useState<Record<string, number>>(prior?.duration_overrides ?? {});
@@ -74,8 +74,6 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
   const [chosen, setChosen] = useState<{ id: string; name: string; duration_min?: number } | null>(null);
   const [chosenDay, setChosenDay] = useState(dates[0] ?? "");
   const [duration, setDuration] = useState("");
-  const [leg, setLeg] = useState(prior?.max_leg_minutes == null ? "" : String(prior.max_leg_minutes));
-  const [walk, setWalk] = useState(prior?.max_total_walk_minutes == null ? "" : String(prior.max_total_walk_minutes));
   const [evening, setEvening] = useState(composition.evening_enabled ?? false);
   const searchQuery = useQuery({ queryKey: ["planning-places", tripId, search],
     queryFn: () => api.get<{ id: string; name: string; duration_min?: number }[]>(`/trips/${tripId}/planning-places?q=${encodeURIComponent(search)}`),
@@ -109,7 +107,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
     generate.mutate({
       budget_total: 0, transport_mode: "drive",
       gap_policy: prior?.gap_policy,
-      max_leg_minutes: leg === "" ? null : Number(leg), max_total_walk_minutes: walk === "" ? null : Number(walk),
+      max_leg_minutes: null, max_total_walk_minutes: null,
       daily_composition: { ...composition, breakfast_enabled: breakfast, evening_enabled: evening,
         meal_windows: breakfast ? composition.meal_windows : composition.meal_windows.filter(w => w.name !== "breakfast"),
         meal_overrides: breakfast ? composition.meal_overrides : composition.meal_overrides?.filter(w => w.name !== "breakfast") }, duration_overrides: durations,
@@ -163,7 +161,7 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
       </section>
 
       <details className="pf-more">
-        <summary>{t("More options")} <span className="muted tiny">{t("must-visit places, visit time, travel limits")}</span></summary>
+        <summary>{t("More options")} <span className="muted tiny">{t("must-visit places, visit time")}</span></summary>
         <label className="pf-switch" style={{ marginTop: 12 }}>
           <input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
           <span className="track" aria-hidden="true" /> {t("Try to include breakfast")}
@@ -210,10 +208,6 @@ export default function OptimizationForm({ tripId, view }: { tripId: string; vie
               <button type="button" className="chip-x" aria-label={t("Use default")} onClick={() => setDurations(Object.fromEntries(Object.entries(durations).filter(([k]) => k !== id)))}><X size={12} /></button></span>)}
           </div>
         )}
-        <div className="row" style={{ gap: 10, marginTop: 14 }}>
-          <label className="field grow">{t("Max drive per leg (min)")}<input type="number" min="0" max="1440" step="1" value={leg} placeholder={t("No limit")} onChange={(e) => setLeg(e.target.value)} /></label>
-          <label className="field grow">{t("Max walking per day (min)")}<input type="number" min="0" max="1440" step="1" value={walk} placeholder={t("No limit")} onChange={(e) => setWalk(e.target.value)} /></label>
-        </div>
       </details>
 
       {!view.setup.planning_data_configured && <div className="banner amber" role="status">{t("Verified operating and route data are not configured. Recommendations stay available; an itinerary cannot be verified yet.")}</div>}

@@ -134,7 +134,7 @@ order. Candidate output rows use the identity order, making fixed-seed results
 independent of CSV ordering. AWM/GFAR themselves break ties by supplied input order;
 the standard pipeline supplies the seeded order.
 
-AWM comparison mode uses feature mean and vetoes below 2.5, then ranks by mean.
+AWM comparison mode uses feature mean and vetoes below 2.0, then ranks by mean.
 Raw semantic/TF-IDF and hybrid percentiles cannot be used as misery ratings.
 GFAR uses normalized Borda relevance (default depth 20) and greedy coverage gains.
 Its score is selection gain, not mean satisfaction. Compare algorithms using

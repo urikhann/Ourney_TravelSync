@@ -59,7 +59,7 @@ def recommendation_config(a):
         if method == 'tfidf':
             raise ValueError('AWM_REQUIRES_FEATURE_MEAN')
         method = 'feature_mean'
-    threshold = a.misery_threshold if a.misery_threshold is not None else 2.5
+    threshold = a.misery_threshold if a.misery_threshold is not None else 2.0
     GFAR(a.gfar_depth); AverageWithoutMisery(threshold)
     if a.algorithm == 'awm' and not 1 <= threshold <= 5:
         raise ValueError('AWM_THRESHOLD_MUST_BE_BETWEEN_1_AND_5')
