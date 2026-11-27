@@ -26,6 +26,8 @@ def unsupported_constraints(action):
     if not isinstance(constraints, dict) or constraints.get("needs_clarification"):
         return True
     if action["action_type"] != "replace_poi":
+        if action["action_type"] == "replan_day" and set(constraints) == {"day_preference"}:
+            return constraints["day_preference"] not in ("indoor", "less_walking")
         return bool(constraints)
     if set(constraints)-{"category", "replacement_poi_name", "needs_clarification"}:
         return True
@@ -39,6 +41,21 @@ def extract(text):
         return None
     when = re.search(r"\d{4}-\d{2}-\d{2}", value)
     day = when.group() if when else None
+    # Exact shortcut messages (including previously saved versions) have a
+    # deterministic day scope, independent of model availability or chat history.
+    shortcuts = {
+        "it's raining — can we swap outdoor stops for indoor places": "indoor",
+        "it's raining — please replan today's whole day to minimize outdoor activities": "indoor",
+        "we're tired — please make today's plan need less walking": "less_walking",
+        "we're tired — please replan today's whole day to minimize walking": "less_walking",
+        "비가 와요 — 야외 장소를 실내로 바꿀 수 있을까요": "indoor",
+        "비가 와요 — 오늘 하루 전체 일정을 야외 활동이 최소가 되도록 다시 계획해 주세요": "indoor",
+        "너무 피곤해요 — 오늘 일정은 덜 걷게 바꿔 주세요": "less_walking",
+        "너무 피곤해요 — 오늘 하루 전체 일정을 걷기가 최소가 되도록 다시 계획해 주세요": "less_walking",
+    }
+    preference = shortcuts.get(value.casefold())
+    if preference:
+        return dict(action_type="replan_day", date="today", constraints={"day_preference": preference})
     if re.search(r"re[- ]?plan|plan (?:it |everything )?(?:again|from scratch)|다시\s*(?:계획|짜|만들)|재계획|일정.*새로", value, re.I):
         full = bool(re.search(r"\ball\b|\bentire\b|\bwhole\b|from scratch|전체|처음부터", value, re.I))
         scope = "replan_unlocked" if re.search(r"unlocked|flexible|잠기지|잠금.*제외|유동", value, re.I) else "replan_all" if full else "replan_day" if day or re.search(r"\bday\b|해당\s*날짜|하루", value, re.I) else "replan_all"

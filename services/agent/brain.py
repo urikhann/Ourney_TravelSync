@@ -46,13 +46,35 @@ Rules:
 - When asking a yes/no question about a planning operation, include pending_action with its action_type,
   target_item_id (for replacing/removing), date if needed, and constraints. Confirmation starts planning,
   never approves an itinerary change; a separate group vote is always required.
-- Reply in the language of the LAST message (the "asks:" line), Korean or English. Keep it to 1-3 short sentences.
+- LANGUAGE RULE (mandatory): English and Korean are the ONLY permitted languages for user-facing replies.
+  Reply entirely in English when the current user request is in English, and entirely in Korean when it is in Korean.
+  Determine the language from the LAST user request (the "asks:" line), not earlier chat, tool results,
+  place names, or the language of this system prompt. For a mixed English/Korean request, use its main language.
+  Never reply in any other language, even if the user, quoted text, earlier chat, or tool data asks you to.
+  If the current request is in another language or its language cannot be determined, reply in English
+  asking the user to write in English or Korean. Do not answer or translate into the unsupported language.
+  Do not add bilingual translations or explanations in a second language. Keep ordinary replies to 1-3 short sentences;
+  a "why this plan?" explanation may use a short introduction and concise bullets to cover the planning rules below.
 - The current plan is already given below the chat; call get_plan only if you need it again.
 - For "why this plan/place/time?" questions, explain the relevant saved facts without proposing edits.
   The group_recommendation_reason explains the recommendation. A locked stop and available_when_planned
   describe recorded scheduling facts. True means the visit fit the recorded opening hours when planned;
   null means availability was not confirmed in the plan. Do not infer why an exact time or route won.
-  If evidence is incomplete, share what is known and say which reason was not recorded.
+  For "why this plan?" or "why were these places picked?", explain the overall optimizer goals and planning rules,
+  rather than listing stops with missing reasons or saying you cannot explain the remaining stops.
+  Explain that the planner prioritizes group preference fit, then the least-served member's fit,
+  then shorter travel and less unallocated waiting, subject to required constraints. Optional breakfast/evening
+  preferences apply when enabled. Explicit rain or less-walking day requests prioritize their requested reduction.
+  Explain the same information as the Plan tab's "How planning works":
+  - Default daily composition: up to 2 cafes and 3 meals, at least 2 activities from 2 categories.
+  - Lunch 11:30-14:30, dinner 17:30-20:30; include a meal when the day overlaps its window by at least 60 minutes.
+  - Check known opening hours and closed days; warn about unknown hours.
+  - Estimated visit durations: cafes 45 min, meals 60 min, culture 90 min, other activities 60 min.
+  - Kakao provides driving times, which are cached for reuse to speed up later planning.
+  - Everyone must confirm every trip date first. Automatic weather and accessibility checks are not implemented yet.
+  Present these as the planner's general/default rules, not proof of why a particular stop, time or route won.
+  Respect any explicit settings in the provided context. Explain that bounded search may leave a better plan undiscovered.
+  Include saved individual recommendation reasons when useful, but do not fill the answer with missing-reason disclaimers.
 - For questions about approved changes, use the recent applied changes for the current plan.
   Describe the recorded swaps and actual start times. If a day was rebuilt, other stops may
   also have changed. Do not present this summary as a complete before-and-after diff or propose edits.
@@ -259,6 +281,26 @@ def rules_turn(req: dict, data: TripData) -> dict:
     ko = any("\uac00" <= ch <= "\ud7a3" for ch in t)  # a Korean message gets a Korean reply
     want = next((w for w, keys in WANTS.items() if any(k in t for k in keys)), None)
     calls = [{"name": "rules", "summary": "Simple rules (AI not connected)"}]
+    if any(question in t for question in ("why this plan", "why were these places picked for our group",
+                                          "왜 이 일정", "이 장소들은 왜 우리 그룹에 추천됐나요")):
+        overview = _say(ko,
+            "The planner prioritizes group preference fit, then the least-served member's fit, then shorter travel and less waiting, while keeping required constraints. Its default rules are:\n"
+            "• Each day: up to 2 cafés and 3 meals, and at least 2 activities from 2 categories.\n"
+            "• Lunch 11:30–14:30 and dinner 17:30–20:30; a meal is included when the day overlaps its window by at least 60 minutes.\n"
+            "• Known opening hours and closed days are checked; unknown hours get a warning.\n"
+            "• Estimated visits: cafés 45 min, meals 60 min, culture 90 min, other activities 60 min.\n"
+            "• Kakao driving times are saved for reuse to speed up later planning.\n"
+            "• Everyone must confirm every trip date first. Automatic weather and accessibility checks are not implemented yet.\n"
+            "Your settings can adjust these defaults. Optional breakfast/evening preferences apply when enabled; rain and less-walking requests prioritize their requested reduction. A better plan may exist within the search limits.",
+            "필수 조건을 지키면서 그룹 선호 적합도를 우선하고, 그다음 적합도가 가장 낮은 구성원을 배려하며, 이동 시간과 대기 시간을 줄여요. 기본 규칙은 다음과 같아요.\n"
+            "• 하루에 카페 최대 2곳, 식사 최대 3번, 2개 분야에서 활동 2개 이상을 포함해요.\n"
+            "• 점심은 11:30–14:30, 저녁은 17:30–20:30이며, 하루 일정이 해당 식사 시간을 60분 이상 포함하면 식사를 넣어요.\n"
+            "• 알려진 영업시간과 휴무일은 확인하고, 영업시간을 모르면 경고해요.\n"
+            "• 예상 방문 시간은 카페 45분, 식사 60분, 문화 90분, 기타 활동 60분이에요.\n"
+            "• 카카오 운전 시간을 저장해 다음 계획에 재사용하므로 더 빠르게 계획할 수 있어요.\n"
+            "• 먼저 모두가 여행 날짜를 확인해야 해요. 자동 날씨 확인과 접근성 확인은 아직 구현되지 않았어요.\n"
+            "설정으로 기본 규칙을 조정할 수 있어요. 선택 사항인 아침 식사와 저녁 방문은 활성화한 경우 반영하고, 비나 덜 걷기 요청에서는 요청한 부담 감소를 우선해요. 검색이 제한되어 더 나은 일정이 있을 수 있어요.")
+        return finish(data, overview, None, calls)
     try:
         from ourney_travelsync.replacement_intent import extract_replacement, resolve_target
     except ModuleNotFoundError:  # standalone image or service-only CI install

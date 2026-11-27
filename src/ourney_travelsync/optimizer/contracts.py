@@ -144,6 +144,9 @@ class Member(Contract):
 
 class Candidate(Contract):
     poi_id: Annotated[str, Field(min_length=1)]
+    # Snapshot metadata used only by explicit day comfort requests.
+    indoor: bool | None = None
+    walking_level: Unit | None = None
     visit_identity: Annotated[str, Field(min_length=1, max_length=160)] | None = None
     dataset_version: Annotated[str, Field(min_length=1)]
     group_rank: Annotated[int, Field(strict=True, ge=1)]
@@ -238,6 +241,7 @@ class PlanRequest(Contract):
     enforce_opening_hours: bool = True
     allow_unknown_opening_hours: bool = False
     optimize_travel: bool = True
+    day_preference: Literal["indoor", "less_walking"] | None = None
     provisional: bool = False
     max_leg_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
     max_total_walk_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
@@ -323,7 +327,7 @@ class Eligibility(Contract):
 
 
 class Phase(Contract):
-    objective: Literal["group_utility", "breakfast_and_group_utility", "optional_stops_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes"]
+    objective: Literal["group_utility", "breakfast_and_group_utility", "optional_stops_and_group_utility", "minimum_relevance", "travel_minutes", "meal_preference", "haversine_distance_m", "waiting_minutes", "schedule_deviation_minutes", "outdoor_minutes", "walking_burden"]
     solver_status: str
     objective_value: float | None
     best_bound: float | None

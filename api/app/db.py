@@ -13,6 +13,15 @@ class Base(DeclarativeBase):
     pass
 
 
+def ensure_chat_message_text(bind=None):
+    """Widen legacy PostgreSQL storage without changing saved message contents."""
+    with (bind or engine).begin() as conn:
+        if conn.dialect.name == "postgresql":
+            column = next(c for c in inspect(conn).get_columns("chat_messages") if c["name"] == "text")
+            if getattr(column["type"], "length", None) is not None:
+                conn.execute(text("ALTER TABLE chat_messages ALTER COLUMN text TYPE TEXT"))
+
+
 def get_db():
     db = SessionLocal()
     try:

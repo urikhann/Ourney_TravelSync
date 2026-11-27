@@ -29,3 +29,18 @@ def test_new_unsupported_hard_condition_is_not_discarded():
     assert confirmation("네, 진행해주세요.") is True
     assert confirmation("아니요") is False
     assert confirmation("Yes, but change the date") is None
+
+
+@pytest.mark.parametrize("text,preference", [
+    ("It's raining — can we swap outdoor stops for indoor places?", "indoor"),
+    ("It's raining — please replan today's whole day to minimize outdoor activities.", "indoor"),
+    ("We're tired — please make today's plan need less walking.", "less_walking"),
+    ("We're tired — please replan today's whole day to minimize walking.", "less_walking"),
+    ("비가 와요 — 오늘 하루 전체 일정을 야외 활동이 최소가 되도록 다시 계획해 주세요.", "indoor"),
+    ("너무 피곤해요 — 오늘 하루 전체 일정을 걷기가 최소가 되도록 다시 계획해 주세요.", "less_walking"),
+])
+def test_comfort_shortcuts_request_whole_day(text, preference):
+    from app.planning_intents import unsupported_constraints
+    action = extract("@TravelSync " + text)
+    assert action == dict(action_type="replan_day", date="today", constraints={"day_preference": preference})
+    assert not unsupported_constraints(action)

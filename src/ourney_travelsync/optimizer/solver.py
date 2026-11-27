@@ -239,6 +239,16 @@ def solve_prepared(req: PlanRequest, eligibility: tuple[Eligibility, ...]) -> Ra
             deviations.append(active)
         objectives = [(n, e, m, f*.4) for n, e, m, f in objectives]
         objectives.insert(0, ("schedule_deviation_minutes", sum(deviations), False, .6))
+    if req.day_preference:
+        from .comfort import visit_burden
+        burden = sum(y * visit_burden(pois[pid], req.day_preference)
+                     for (_, pid), y in visits.items())
+        if req.day_preference == "less_walking":
+            burden += sum(a * round(e.walk_minutes * 100)
+                          for _, arcs in day_arcs.values() for a, e in arcs.values())
+        objectives = [(n, e, m, f * .5) for n, e, m, f in objectives]
+        objectives.insert(0, ("outdoor_minutes" if req.day_preference == "indoor" else "walking_burden",
+                              burden, False, .5))
     for name, expression, maximize, fraction in objectives:
         if name == "waiting_minutes":
             # Add these variables only for the final phase so they cannot

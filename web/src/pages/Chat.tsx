@@ -5,6 +5,7 @@
 // The screen polls every few seconds; the backend keeps the history (GET/POST /trips/{id}/chat).
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, CloudRain, Footprints, Lightbulb, SendHorizontal, Sparkles, AlertTriangle, X } from "lucide-react";
 import { api, message } from "../api";
@@ -22,8 +23,8 @@ import "./chat.css";
 const AGENT = "TravelSync";
 const MENTION = /^\s*@(travelsync|ai|ts)(\s|$)/i;
 const QUICK = [
-  { Icon: CloudRain, label: "It's raining", text: "It's raining — can we swap outdoor stops for indoor places?" },
-  { Icon: Footprints, label: "Less walking", text: "We're tired — please make today's plan need less walking." },
+  { Icon: CloudRain, label: "It's raining", text: "It's raining — please replan today's whole day to minimize outdoor activities." },
+  { Icon: Footprints, label: "Less walking", text: "We're tired — please replan today's whole day to minimize walking." },
   { Icon: Lightbulb, label: "Why this plan?", text: "Why were these places picked for our group?" },
 ];
 const time = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
@@ -210,7 +211,7 @@ function AgentBubble({ m, tripId }: { m: ChatMessage; tripId: string }) {
       <div className="msg-col">
         <div className="msg-name">{AGENT} <span className="ai-tag">AI</span></div>
         <div className={"bubble" + (failed ? " failed" : "")}>
-          {agentText(m) || tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT })}
+          <div className="agent-markdown"><ReactMarkdown skipHtml>{agentText(m) || tr("{name} can't answer right now. Please try again in a moment.", { name: AGENT })}</ReactMarkdown></div>
           {a?.state === "NEEDS_CLARIFICATION" && <div className="agent-note">{tr("Reply with @ai to answer.")}</div>}
           {failed && a?.error && <div className="agent-note">{tr("Error: {code}", { code: a.error })}</div>}
         </div>

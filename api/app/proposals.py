@@ -103,6 +103,18 @@ def agent_views(db: Session, trip: Trip, rows: list[ChatMessage], user_id: str) 
             continue
         mine = [v for v in votes if v.message_id == m.id]
         status = m.agent.get("proposal_status", PENDING)
+        if status == PENDING:
+            from .replacements import itinerary_changed, plans, unchanged_answer
+            base, draft = audits.get(m.agent.get("plan_run_id")), audits.get(m.agent.get("draft_id"))
+            if (base and draft and draft.input.get("replacement", {}).get("base_run_id") == base.id
+                    and base.response.get("days") and draft.response.get("days")):
+                try:
+                    unchanged = not itinerary_changed(plans(base.response["days"]), plans(draft.response["days"]))
+                except (ValueError, KeyError, TypeError):
+                    unchanged = False
+                if unchanged:
+                    out[m.id] = {**unchanged_answer(m.agent.get("language") == "ko"), "proposal_status": STALE}
+                    continue
         if status == PENDING and (not m.agent.get("draft_id") or m.agent.get("plan_run_id") != (audit.id if audit else None)):
             status = STALE  # the plan changed (or this suggestion predates voting)
         out[m.id] = {**m.agent, "dataset_version": versions.get(m.agent.get("plan_run_id")),

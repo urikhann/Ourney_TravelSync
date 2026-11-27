@@ -32,6 +32,15 @@
   color: var(--purple, #7c3aed); background: var(--purple-50, #f3ecff); }
 .msg.agent .bubble { background: var(--purple-50, #f3ecff); border-color: transparent; }
 .msg.agent .bubble.failed { background: var(--rose-50, #fff1f2); color: var(--rose-d, #be123c); }
+.agent-markdown { white-space: normal; overflow-wrap: anywhere; }
+.agent-markdown p { margin: 0 0 .65em; white-space: pre-wrap; }
+.agent-markdown > :last-child { margin-bottom: 0; }
+.agent-markdown ul, .agent-markdown ol { margin: .5em 0; padding-left: 1.4em; }
+.agent-markdown li { margin: .35em 0; }
+.agent-markdown li p { margin: 0; }
+.agent-markdown h1, .agent-markdown h2, .agent-markdown h3 { font-size: 1em; margin: .7em 0 .35em; }
+.agent-markdown pre { overflow-x: auto; white-space: pre; }
+.agent-markdown a { text-decoration: underline; }
 .agent-note { margin-top: 6px; font-size: 12px; color: var(--muted); }
 .tools { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 2px 0; }
 .tool svg { color: var(--green, #0f9f6e); }

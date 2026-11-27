@@ -10,6 +10,7 @@ import TopBar from "../components/TopBar";
 import TabBar from "../components/TabBar";
 import PlaceSheet from "../components/PlaceSheet";
 import OptimizationForm from "../components/OptimizationForm";
+import PlanningInfo from "../components/PlanningInfo";
 import WaitingPeriod from "../components/WaitingPeriod";
 import DayRouteOverview from "../components/DayRouteOverview";
 import { t } from "../i18n";
@@ -60,7 +61,7 @@ export default function Plan() {
   if (v.plans.length === 0) {
     return (
       <>
-        <TopBar title={t("Itinerary")} back={`/trips/${id}`} />
+        <TopBar title={t("Itinerary")} back={`/trips/${id}`} right={<PlanningInfo view={v} />} />
         <main className="content">
           <div className="empty">
             <div className="ic"><Map size={30} /></div>
@@ -87,7 +88,7 @@ export default function Plan() {
 
   return (
     <>
-      <TopBar title={t("Itinerary")} back={`/trips/${id}`} />
+      <TopBar title={t("Itinerary")} back={`/trips/${id}`} right={<PlanningInfo view={v} />} />
       <main className="content">
         <ErrorBox error={failure} />
         {!!selected.stats.routing_warnings?.length && <div className="banner amber" role="status">{t("The routing allowance or provider quota was reached. This plan uses available saved routes; some alternatives could not be checked.")}</div>}
@@ -159,7 +160,6 @@ export default function Plan() {
                   : "Likely suitable for breakfast. Confirm serving times before visiting.")}</p>}
                 {it.availability?.available !== true && <p className="small" role="status">{t("Opening hours unverified — confirm before visiting.")}</p>}
                 */}
-                {it.duration_estimated && <p className="muted small">{t("Visit duration: {n} min ({src})", { n: it.stay_minutes, src: t(it.duration_source === "user-duration-override" ? "your override" : "category estimate") })}</p>}
                 <div className="tl-item">
                   <div className="tl-time" style={moved ? { color: "var(--amber)" } : undefined}>{it.start}</div>
                   <button type="button" className="tl-dot tl-lock" aria-pressed={it.locked}
